@@ -1,0 +1,2 @@
+# This file ensures the data directory is created in git
+# User credentials will be stored in users.json in this directory
