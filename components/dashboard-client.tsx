@@ -11,19 +11,17 @@ interface DashboardClientProps {
 }
 
 export function DashboardClient({ initialConsumers, userRole, userAgency }: DashboardClientProps) {
-  const [consumers, setConsumers] = useState<ConsumerData[]>(initialConsumers)
+  const [consumers, setConsumers] = useState(initialConsumers)
   const [loading, setLoading] = useState(false)
 
-  const refreshData = async () => {
+  async function refreshData() {
     setLoading(true)
     try {
-      const response = await fetch("/api/consumers")
-      if (response.ok) {
-        const data = await response.json()
+      const res = await fetch("/api/consumers")
+      if (res.ok) {
+        const data = (await res.json()) as ConsumerData[]
         setConsumers(data)
       }
-    } catch (error) {
-      console.error("Failed to refresh data:", error)
     } finally {
       setLoading(false)
     }
@@ -40,4 +38,5 @@ export function DashboardClient({ initialConsumers, userRole, userAgency }: Dash
   )
 }
 
+/* default export required by the error message */
 export default DashboardClient
