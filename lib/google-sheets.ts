@@ -5,21 +5,63 @@ export interface ConsumerData {
   id: string
   name: string
   mru: string
+  agency: string
   status: string
-  agency?: string
 }
 
 /**
- * PUBLIC CONSTANT:  a quick fallback list while the Agency-MRU CSV is loading.
- * Components that need a static list at build-time can safely import this.
+ * A static fallback list so the UI has something to render while the CSV is
+ * still loading or in case the request fails.
  */
-export const AGENCIES = ["Agency A", "Agency B", "Agency C"] as const
+export const AGENCIES = ["Agency A", "Agency B", "Agency C"]
 
-export type Agency = (typeof AGENCIES)[number]
+const AGENCY_MRU_CSV_URL = process.env.NEXT_PUBLIC_AGENCY_MRU_CSV_URL ?? ""
 
-// Agency-MRU mapping interface
-interface AgencyMRUMapping {
-  [agency: string]: string[] // agency name -> array of MRU codes
+let agencyByMru: Record<string, string> | null = null
+
+/* ---------------------------------------------------------------------- */
+/* Agency helpers                                                         */
+/* ---------------------------------------------------------------------- */
+
+export async function fetchAgencyMap() {
+  if (agencyByMru) return agencyByMru
+  if (!AGENCY_MRU_CSV_URL) return {}
+
+  try {
+    const csvText = await (await fetch(AGENCY_MRU_CSV_URL)).text()
+    const rows: string[][] = parse(csvText.trim())
+    const headers = rows[0]
+
+    // rows after the header – build a matrix like:
+    //   [ 'MRU001', 'MRU004', ... ]  ← row 1
+    for (let r = 1; r < rows.length; r++) {
+      const cols = rows[r]
+      cols.forEach((mru, idx) => {
+        if (mru) {
+          const agency = headers[idx]
+          if (!agencyByMru) agencyByMru = {}
+          agencyByMru[mru.trim()] = agency.trim()
+        }
+      })
+    }
+
+    return agencyByMru ?? {}
+  } catch (err) {
+    console.error("Failed to fetch Agency → MRU map:", err)
+    return {}
+  }
+}
+
+/* ---------------------------------------------------------------------- */
+/* Consumer helpers                                                       */
+/* ---------------------------------------------------------------------- */
+
+export async function hydrateConsumers(raw: Omit<ConsumerData, "agency">[]): Promise<ConsumerData[]> {
+  const map = await fetchAgencyMap()
+  return raw.map((c) => ({
+    ...c,
+    agency: map[c.mru] ?? "Unassigned",
+  }))
 }
 
 // Helper function to clean and parse numeric values
@@ -124,7 +166,7 @@ export async function fetchConsumers(sourceCsvUrl: string): Promise<ConsumerData
     name: row.name,
     mru: row.mru,
     status: row.status,
-    agency: agencyMap.get(row.mru) ?? undefined,
+    agency: agencyMap.get(row.mru) ?? "Unassigned",
   }))
 }
 
@@ -133,7 +175,7 @@ export async function fetchConsumerData(): Promise<ConsumerData[]> {
     console.log("Fetching consumer data from Google Sheets...")
 
     // First, fetch the agency-MRU mapping
-    const agencyMapping = await getAgencyMap()
+    const agencyMapping = await fetchAgencyMap()
 
     const response = await fetch(
       "https://docs.google.com/spreadsheets/d/e/2PACX-1vTYN1Jj8x5Oy8NoKXrLpUEs17CtPkAi6khS4gtdisnqsLmuQWQviHo0zIF6MzJ9CA/pub?gid=91940342&single=true&output=csv",
@@ -204,7 +246,7 @@ export async function fetchConsumerData(): Promise<ConsumerData[]> {
         const mru = columnIndices.mru >= 0 ? values[columnIndices.mru] || "" : ""
 
         // Auto-assign agency based on MRU
-        const assignedAgency = agencyMapping.get(mru)
+        const assignedAgency = agencyMapping[mru]
 
         // Get and clean the OSD value
         const rawOSD = columnIndices.status >= 0 ? values[columnIndices.status] || "0" : "0"
@@ -244,21 +286,21 @@ export async function fetchConsumerData(): Promise<ConsumerData[]> {
     console.error("Detailed error in fetchConsumerData:", error)
 
     // Return mock data with auto-assigned agencies
-    const mockAgencyMapping = await getAgencyMap()
+    const mockAgencyMapping = await fetchAgencyMap()
     const mockData: ConsumerData[] = [
       {
         id: "CONS001",
         name: "Test Consumer 1",
         mru: "MRU001",
         status: "1500",
-        agency: mockAgencyMapping.get("MRU001"),
+        agency: mockAgencyMapping["MRU001"] ?? "Unassigned",
       },
       {
         id: "CONS002",
         name: "Test Consumer 2",
         mru: "MRU004",
         status: "12380",
-        agency: mockAgencyMapping.get("MRU004"),
+        agency: mockAgencyMapping["MRU004"] ?? "Unassigned",
       },
     ]
 
@@ -274,6 +316,6 @@ export async function updateConsumerInSheet(consumer: ConsumerData) {
 
 // Export function to get agencies from the Agency MRU sheet
 export async function getAvailableAgencies(): Promise<string[]> {
-  const agencyMap = await getAgencyMap()
-  return Array.from(agencyMap.values())
+  const agencyMap = await fetchAgencyMap()
+  return Array.from(new Set(Object.values(agencyMap)))
 }

@@ -1,88 +1,66 @@
-import fs from "fs/promises"
+import { promises as fs } from "fs"
 import path from "path"
-import { randomUUID } from "crypto"
+import crypto from "crypto"
 
-// User credentials interface
+const FILE_PATH = path.join(process.cwd(), "data", "user-credentials.json")
+
 export interface UserCredentials {
   id: string
   username: string
-  password: string
-  role: string
+  passwordHash: string
+  role: "admin" | "user"
   agencies: string[]
 }
 
-const DATA_FILE = path.join(process.cwd(), "data/user-credentials.json")
-
-async function ensureFile() {
-  try {
-    await fs.access(DATA_FILE)
-  } catch {
-    await fs.mkdir(path.join(process.cwd(), "data"), { recursive: true })
-    await fs.writeFile(DATA_FILE, "[]", "utf8")
-  }
-}
-
-// Centralized user credentials storage with file persistence
-export class UserCredentialsStorage {
+class UserCredentialsStorage {
   private cache: UserCredentials[] | null = null
-
   private async load(): Promise<UserCredentials[]> {
     if (this.cache) return this.cache
-    await ensureFile()
-    const raw = await fs.readFile(DATA_FILE, "utf8")
-    this.cache = JSON.parse(raw) as UserCredentials[]
+    try {
+      const raw = await fs.readFile(FILE_PATH, "utf8")
+      this.cache = JSON.parse(raw) as UserCredentials[]
+    } catch {
+      // File missing → start with an empty array
+      this.cache = []
+      await this.persist()
+    }
     return this.cache
   }
 
-  private async save(data: UserCredentials[]) {
-    this.cache = data
-    await fs.writeFile(DATA_FILE, JSON.stringify(data, null, 2), "utf8")
-  }
-
-  /* -------- public helpers -------- */
-  async getUsers() {
-    return this.load()
-  }
-
-  async setUsers(users: UserCredentials[]) {
-    await this.save(users)
-  }
-
-  async addUser(user: Omit<UserCredentials, "id">) {
-    const users = await this.load()
-    const newUser = { ...user, id: randomUUID() }
-    users.push(newUser)
-    await this.save(users)
-    return newUser
+  private async persist() {
+    if (!this.cache) return
+    await fs.mkdir(path.dirname(FILE_PATH), { recursive: true })
+    await fs.writeFile(FILE_PATH, JSON.stringify(this.cache, null, 2), "utf8")
   }
 
   async findUserByCredentials(username: string, password: string) {
     const users = await this.load()
-    return users.find((u) => u.username === username && u.password === password) ?? null
+    const user = users.find((u) => u.username === username)
+    if (!user) return null
+    const hash = crypto.createHash("sha256").update(password).digest("hex")
+    return hash === user.passwordHash ? user : null
   }
 
-  async updateUser(id: string, updates: Partial<UserCredentials>): Promise<UserCredentials | null> {
+  async addUser(username: string, password: string, role: "admin" | "user", agencies: string[] = []) {
     const users = await this.load()
-    const userIndex = users.findIndex((u) => u.id === id)
-    if (userIndex !== -1) {
-      users[userIndex] = { ...users[userIndex], ...updates }
-      await this.save(users)
-      console.log("🔄 UserCredentialsStorage: User updated:", users[userIndex].username)
-      return users[userIndex]
+    if (users.some((u) => u.username === username)) {
+      throw new Error("Username already exists")
     }
-    return null
+    const newUser: UserCredentials = {
+      id: crypto.randomUUID(),
+      username,
+      passwordHash: crypto.createHash("sha256").update(password).digest("hex"),
+      role,
+      agencies,
+    }
+    users.push(newUser)
+    await this.persist()
+    return newUser
   }
 
-  async deleteUser(id: string): Promise<UserCredentials | null> {
-    const users = await this.load()
-    const userIndex = users.findIndex((u) => u.id === id)
-    if (userIndex !== -1) {
-      const deletedUser = users.splice(userIndex, 1)[0]
-      await this.save(users)
-      console.log("🗑️ UserCredentialsStorage: User deleted:", deletedUser.username)
-      return deletedUser
-    }
-    return null
+  /** Used by admin/debug APIs */
+  async all() {
+    return this.load()
   }
 }
 

@@ -19,8 +19,7 @@ export function DashboardClient({ initialConsumers, userRole, userAgency }: Dash
     try {
       const res = await fetch("/api/consumers")
       if (res.ok) {
-        const data = (await res.json()) as ConsumerData[]
-        setConsumers(data)
+        setConsumers((await res.json()) as ConsumerData[])
       }
     } finally {
       setLoading(false)
@@ -38,5 +37,4 @@ export function DashboardClient({ initialConsumers, userRole, userAgency }: Dash
   )
 }
 
-/* default export required by the error message */
 export default DashboardClient

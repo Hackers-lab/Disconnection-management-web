@@ -1,13 +1,14 @@
-import "server-only"
-
 import { SignJWT, jwtVerify } from "jose"
 import { cookies } from "next/headers"
 import { userCredentialsStorage, type UserCredentials } from "./user-credentials"
 
 /**
  * NOTE:
- * Because this file imports `next/headers`, we mark it `server-only` so the
- * bundler never tries to include it in a client or pages/ bundle.
+ * We purposely do NOT use `import "server-only"` here, because that statement
+ * breaks when the module is pulled into any code under the legacy `pages/`
+ * directory (e.g. pages/api routes).  Instead we rely on developers to only
+ * import the helpers below from Server Components, Route Handlers, or API
+ * routes—exactly how this project already uses them.
  */
 
 const secretKey = process.env.SESSION_SECRET || "change-me"
@@ -21,24 +22,24 @@ export interface SessionPayload {
   expiresAt: Date
 }
 
+/* ---------- helpers ---------------------------------------------------- */
+
 export async function createSession(user: UserCredentials) {
   const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days
-  const payload: SessionPayload = {
+
+  const token = await new SignJWT({
     userId: user.id,
     username: user.username,
     role: user.role,
     agencies: user.agencies,
     expiresAt,
-  }
-
-  const token = await new SignJWT(payload)
+  } satisfies SessionPayload)
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime(expiresAt)
     .sign(encodedKey)
 
-  const store = cookies()
-  store.set("session", token, {
+  cookies().set("session", token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     expires: expiresAt,
@@ -63,7 +64,6 @@ export async function verifySession(): Promise<SessionPayload | null> {
   }
 }
 
-/* Helper used by the login action */
 export async function authenticateUser(username: string, password: string) {
   return userCredentialsStorage.findUserByCredentials(username, password)
 }
