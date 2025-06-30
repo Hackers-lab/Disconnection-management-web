@@ -11,7 +11,7 @@ export async function GET() {
   }
 
   try {
-    const USERS_FILE = path.join(process.cwd(), "data", "users.json")
+    const USERS_FILE = path.join(process.cwd(), "data", "user-credentials.json")
     const dataDir = path.dirname(USERS_FILE)
 
     const debugInfo = {
@@ -40,7 +40,7 @@ export async function GET() {
       debugInfo.fileExists = true
       debugInfo.fileContent = JSON.parse(fileContent)
     } catch (error) {
-      debugInfo.error = `Users file error: ${error}`
+      debugInfo.error = `User credentials file error: ${error}`
     }
 
     return NextResponse.json(debugInfo)

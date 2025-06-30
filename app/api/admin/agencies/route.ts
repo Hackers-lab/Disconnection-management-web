@@ -1,24 +1,9 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { verifySession } from "@/lib/session"
+import { getAvailableAgencies } from "@/lib/google-sheets"
 
 // Mock agency storage - in production, use a database
-const agencies = [
-  { id: "1", name: "JOY GURU", description: "Joy Guru Agency", isActive: true },
-  { id: "2", name: "ST", description: "ST Agency", isActive: true },
-  { id: "3", name: "MATIUR", description: "Matiur Agency", isActive: true },
-  { id: "4", name: "AMS", description: "AMS Agency", isActive: true },
-  { id: "5", name: "SAMAD", description: "Samad Agency", isActive: true },
-  { id: "6", name: "CHANCHAL", description: "Chanchal Agency", isActive: true },
-  { id: "7", name: "ALOKE CHAKRABORTY", description: "Aloke Chakraborty Agency", isActive: true },
-  { id: "8", name: "SA", description: "SA Agency", isActive: true },
-  { id: "9", name: "APOLLO", description: "Apollo Agency", isActive: true },
-  { id: "10", name: "ROXY", description: "Roxy Agency", isActive: true },
-  { id: "11", name: "MALDA", description: "Malda Agency", isActive: true },
-  { id: "12", name: "SUPREME", description: "Supreme Agency", isActive: true },
-  { id: "13", name: "LAIBAH", description: "Laibah Agency", isActive: true },
-  { id: "14", name: "MATIN", description: "Matin Agency", isActive: true },
-  { id: "15", name: "MUKTI", description: "Mukti Agency", isActive: true },
-]
+let agencies: { id: string; name: string; description: string; isActive: boolean }[] = []
 
 // GET - List all agencies
 export async function GET() {
@@ -28,7 +13,21 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
-  return NextResponse.json(agencies)
+  try {
+    agencies = await getAvailableAgencies()
+
+    // Return agencies in the expected format
+    const agencyData = agencies.map((agency, index) => ({
+      id: (index + 1).toString(),
+      name: agency,
+      isActive: true,
+    }))
+
+    return NextResponse.json(agencyData)
+  } catch (error) {
+    console.error("Error fetching agencies:", error)
+    return NextResponse.json({ error: "Failed to fetch agencies" }, { status: 500 })
+  }
 }
 
 // POST - Add new agency
