@@ -1,30 +1,181 @@
-# Web app for consumers
+# Disconnection Management Web App
 
-*Automatically synced with your [v0.dev](https://v0.dev) deployments*
+A Next.js web application for managing consumer disconnection data with real-time sync from Google Sheets.
 
-[![Deployed on Vercel](https://img.shields.io/badge/Deployed%20on-Vercel-black?style=for-the-badge&logo=vercel)](https://vercel.com/pramod-vermas-projects-7cf5f075/v0-web-app-for-consumers)
-[![Built with v0](https://img.shields.io/badge/Built%20with-v0.dev-black?style=for-the-badge)](https://v0.dev/chat/projects/p9vPJm8f5sm)
+## Features
 
-## Overview
+- 📊 **Dashboard** with real-time statistics
+- 👥 **User Management** with role-based access (Admin/Officer)
+- 🏢 **Agency-based filtering** for officers
+- 📱 **Mobile-responsive** design with tab navigation
+- 🔍 **Advanced filtering** and sorting capabilities
+- 📈 **OSD (Outstanding Dues) sorting** - High to Low, Low to High
+- 🔄 **Real-time sync** from Google Sheets
+- 📝 **Consumer data management** with status updates
+- 🖼️ **Image upload** support (with Vercel Blob)
+- 🔐 **Secure authentication** with JWT sessions
 
-This repository will stay in sync with your deployed chats on [v0.dev](https://v0.dev).
-Any changes you make to your deployed app will be automatically pushed to this repository from [v0.dev](https://v0.dev).
+## Quick Start
+
+### Prerequisites
+
+- Node.js 18+ 
+- npm or yarn
+
+### Installation
+
+1. **Clone the repository**
+   \`\`\`bash
+   git clone <your-repo-url>
+   cd disconnection-management-app
+   \`\`\`
+
+2. **Install dependencies**
+   \`\`\`bash
+   npm install
+   \`\`\`
+
+3. **Set up environment variables**
+   \`\`\`bash
+   cp .env.local.example .env.local
+   \`\`\`
+   Edit `.env.local` and add your `SESSION_SECRET`:
+   \`\`\`
+   SESSION_SECRET=your-super-secret-key-change-this-in-production
+   \`\`\`
+
+4. **Run the development server**
+   \`\`\`bash
+   npm run dev
+   \`\`\`
+
+5. **Open your browser**
+   Navigate to [http://localhost:3000](http://localhost:3000)
+
+## Default Login Credentials
+
+### Admin User
+- **Username:** `admin`
+- **Password:** `admin123`
+- **Access:** Full system access, user management
+
+### Agency Officers
+- **JOY GURU:** `joyguru_user1` / `pass123`
+- **ST:** `st_user1` / `pass123`
+- **MATIUR:** `matiur_user1` / `pass123`
+- **AMS:** `ams_user1` / `pass123`
+- **SAMAD:** `samad_user1` / `pass123`
+- **CHANCHAL:** `chanchal_user1` / `pass123`
+- **ALOKE CHAKRABORTY:** `aloke_user1` / `pass123`
+- **SA:** `sa_user1` / `pass123`
+- **APOLLO:** `apollo_user1` / `pass123`
+- **ROXY:** `roxy_user1` / `pass123`
+- **MALDA:** `malda_user1` / `pass123`
+- **SUPREME:** `supreme_user1` / `pass123`
+- **LAIBAH:** `laibah_user1` / `pass123`
+- **MATIN:** `matin_user1` / `pass123`
+- **MUKTI:** `mukti_user1` / `pass123`
+
+## Mobile Features
+
+### Tab Navigation
+- **Dashboard Tab:** Shows statistics and key metrics
+- **Consumers Tab:** Shows consumer tiles with filters
+- **Responsive Design:** Adapts to mobile and desktop screens
+
+### OSD Sorting
+- Click the sort button to cycle through:
+  - **None:** Default order
+  - **High to Low:** Highest outstanding dues first  
+  - **Low to High:** Lowest outstanding dues first
+
+## Data Source
+
+The app fetches consumer data from a public Google Sheets CSV export. The data includes:
+- Consumer details (ID, name, address)
+- Outstanding dues (OSD) information
+- Disconnection status and dates
+- Agency assignments
+- Geographic coordinates
+
+## File Structure
+
+\`\`\`
+├── app/                    # Next.js app directory
+│   ├── api/               # API routes
+│   ├── dashboard/         # Dashboard page
+│   ├── login/            # Login page
+│   └── actions/          # Server actions
+├── components/           # React components
+│   ├── ui/              # shadcn/ui components
+│   └── ...              # Custom components
+├── lib/                 # Utility libraries
+├── data/                # User data storage
+└── public/              # Static assets
+\`\`\`
+
+## Development
+
+### Adding New Users
+1. Login as admin
+2. Click the admin icon in the header
+3. Go to "Manage Users" tab
+4. Add new users with appropriate roles and agencies
+
+### Customizing Agencies
+Edit the `AGENCIES` array in `lib/google-sheets.ts` to add/remove agencies.
+
+### Environment Variables
+- `SESSION_SECRET`: Required for JWT token signing
+- `BLOB_READ_WRITE_TOKEN`: Optional, for image uploads
+- `GOOGLE_APPS_SCRIPT_URL`: Optional, for write-back to Google Sheets
 
 ## Deployment
 
-Your project is live at:
+### Vercel (Recommended)
+1. Push your code to GitHub
+2. Connect your repository to Vercel
+3. Add environment variables in Vercel dashboard
+4. Deploy!
 
-**[https://vercel.com/pramod-vermas-projects-7cf5f075/v0-web-app-for-consumers](https://vercel.com/pramod-vermas-projects-7cf5f075/v0-web-app-for-consumers)**
+### Other Platforms
+The app can be deployed to any platform that supports Next.js:
+- Netlify
+- Railway
+- DigitalOcean App Platform
+- AWS Amplify
 
-## Build your app
+## Troubleshooting
 
-Continue building your app on:
+### User Data Not Persisting
+- Check if `data/` directory exists
+- Verify file permissions
+- Check server logs for storage errors
 
-**[https://v0.dev/chat/projects/p9vPJm8f5sm](https://v0.dev/chat/projects/p9vPJm8f5sm)**
+### Google Sheets Not Loading
+- Verify the CSV URL is accessible
+- Check network connectivity
+- Review console logs for fetch errors
 
-## How It Works
+### Authentication Issues
+- Ensure `SESSION_SECRET` is set
+- Clear browser cookies/localStorage
+- Check if users.json file exists
 
-1. Create and modify your project using [v0.dev](https://v0.dev)
-2. Deploy your chats from the v0 interface
-3. Changes are automatically pushed to this repository
-4. Vercel deploys the latest version from this repository
+## Support
+
+For issues and questions, please check the console logs and verify your environment setup.
+\`\`\`
+
+```plaintext file=".env.local.example"
+# Copy this file to .env.local and fill in your values
+
+# Required: Session secret for JWT tokens (use a long, random string)
+SESSION_SECRET=your-super-secret-key-change-this-in-production
+
+# Optional: Vercel Blob token for image upload functionality
+# Get this from: https://vercel.com/dashboard/stores
+# BLOB_READ_WRITE_TOKEN=your-vercel-blob-token
+
+# Optional: Google Apps Script URL for syncing data back to Google Sheets
+# GOOGLE_APPS_SCRIPT_URL=your-google-apps-script-deployment-url
