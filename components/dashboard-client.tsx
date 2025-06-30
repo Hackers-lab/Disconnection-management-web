@@ -10,7 +10,6 @@ interface DashboardClientProps {
 
 export default function DashboardClient({ role, agencies }: DashboardClientProps) {
   const [showAdminPanel, setShowAdminPanel] = useState(false)
-  const [activeTab, setActiveTab] = useState<"dashboard" | "consumers">("dashboard")
 
   return (
     <DashboardShell
@@ -19,8 +18,6 @@ export default function DashboardClient({ role, agencies }: DashboardClientProps
       showAdminPanel={showAdminPanel}
       openAdmin={() => setShowAdminPanel(true)}
       closeAdmin={() => setShowAdminPanel(false)}
-      activeTab={activeTab}
-      setActiveTab={setActiveTab}
     />
   )
 }

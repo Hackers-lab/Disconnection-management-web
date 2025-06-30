@@ -36,7 +36,6 @@ interface ConsumerListProps {
   onAdminClick: () => void
   showAdminPanel: boolean
   onCloseAdminPanel: () => void
-  activeTab: "dashboard" | "consumers"
 }
 
 const ITEMS_PER_PAGE = 15
@@ -49,7 +48,6 @@ export function ConsumerList({
   onAdminClick,
   showAdminPanel,
   onCloseAdminPanel,
-  activeTab,
 }: ConsumerListProps) {
   const [consumers, setConsumers] = useState<ConsumerData[]>([])
   const [agencies, setAgencies] = useState<string[]>([])
@@ -336,380 +334,374 @@ export function ConsumerList({
 
   return (
     <div className="space-y-6">
-      {/* Dashboard Statistics - Show on desktop always, on mobile only when dashboard tab is active */}
-      <div className={`${activeTab === "consumers" ? "hidden md:block" : ""}`}>
-        <DashboardStats consumers={filteredConsumers} loading={false} />
-      </div>
+      {/* Dashboard Statistics - Always visible */}
+      <DashboardStats consumers={filteredConsumers} loading={false} />
 
-      {/* Consumer Management Section - Show on desktop always, on mobile only when consumers tab is active */}
-      <div className={`${activeTab === "dashboard" ? "hidden md:block" : ""} space-y-6`}>
-        {/* Search and Filter Controls */}
-        <div className="bg-white p-4 rounded-lg shadow-sm border">
-          <div className="flex items-center space-x-4 mb-4">
-            <div className="relative flex-1 max-w-md">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-              <Input
-                placeholder="Search consumers..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10"
-              />
-            </div>
-
-            {/* Sort by OSD Button */}
-            <Button
-              variant="outline"
-              onClick={toggleOSDSort}
-              className="flex items-center space-x-2 bg-transparent"
-              title={`Sort by Outstanding Dues: ${sortByOSD === "none" ? "None" : sortByOSD === "asc" ? "Low to High" : "High to Low"}`}
-            >
-              {getSortIcon()}
-              <span className="hidden sm:inline">Sort OSD</span>
-            </Button>
-
-            {/* Exclude Checkboxes - Hide on small mobile */}
-            <div className="hidden sm:flex items-center space-x-4">
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="excludeDeemedDisconnection"
-                  checked={excludeFilters.excludeDeemedDisconnection}
-                  onCheckedChange={(checked) =>
-                    setExcludeFilters((prev) => ({ ...prev, excludeDeemedDisconnection: !!checked }))
-                  }
-                />
-                <label htmlFor="excludeDeemedDisconnection" className="text-sm text-gray-700">
-                  Exclude Deemed
-                </label>
-              </div>
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="excludeTemporaryDisconnected"
-                  checked={excludeFilters.excludeTemporaryDisconnected}
-                  onCheckedChange={(checked) =>
-                    setExcludeFilters((prev) => ({ ...prev, excludeTemporaryDisconnected: !!checked }))
-                  }
-                />
-                <label htmlFor="excludeTemporaryDisconnected" className="text-sm text-gray-700">
-                  Exclude Temp
-                </label>
-              </div>
-            </div>
-
-            {/* Filter Button for Non-Admin */}
-            {userRole !== "admin" && (
-              <Button
-                variant="outline"
-                onClick={() => setShowFilters(!showFilters)}
-                className="flex items-center space-x-2"
-              >
-                <Filter className="h-4 w-4" />
-                <span className="hidden sm:inline">Filters</span>
-              </Button>
-            )}
-
-            {(Object.values(filters).some((f) => f !== "All Agencies" && f !== "All Status" && f !== "") ||
-              searchTerm ||
-              osdRange[0] !== 0 ||
-              osdRange[1] !== maxOsdValue ||
-              excludeFilters.excludeDeemedDisconnection ||
-              excludeFilters.excludeTemporaryDisconnected ||
-              sortByOSD !== "none") && (
-              <Button variant="ghost" onClick={clearFilters} size="sm">
-                <X className="h-4 w-4 mr-1" />
-                <span className="hidden sm:inline">Clear</span>
-              </Button>
-            )}
+      {/* Search and Filter Controls */}
+      <div className="bg-white p-4 rounded-lg shadow-sm border">
+        <div className="flex items-center space-x-4 mb-4">
+          <div className="relative flex-1 max-w-md">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+            <Input
+              placeholder="Search consumers..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10"
+            />
           </div>
 
-          {/* Mobile Exclude Checkboxes */}
-          <div className="sm:hidden flex flex-col space-y-2 mb-4">
+          {/* Sort by OSD Button */}
+          <Button
+            variant="outline"
+            onClick={toggleOSDSort}
+            className="flex items-center space-x-2 bg-transparent"
+            title={`Sort by Outstanding Dues: ${sortByOSD === "none" ? "None" : sortByOSD === "asc" ? "Low to High" : "High to Low"}`}
+          >
+            {getSortIcon()}
+            <span className="hidden sm:inline">Sort OSD</span>
+          </Button>
+
+          {/* Exclude Checkboxes - Hide on small mobile */}
+          <div className="hidden sm:flex items-center space-x-4">
             <div className="flex items-center space-x-2">
               <Checkbox
-                id="excludeDeemedDisconnection-mobile"
+                id="excludeDeemedDisconnection"
                 checked={excludeFilters.excludeDeemedDisconnection}
                 onCheckedChange={(checked) =>
                   setExcludeFilters((prev) => ({ ...prev, excludeDeemedDisconnection: !!checked }))
                 }
               />
-              <label htmlFor="excludeDeemedDisconnection-mobile" className="text-sm text-gray-700">
-                Exclude Deemed Disconnection
+              <label htmlFor="excludeDeemedDisconnection" className="text-sm text-gray-700">
+                Exclude Deemed
               </label>
             </div>
             <div className="flex items-center space-x-2">
               <Checkbox
-                id="excludeTemporaryDisconnected-mobile"
+                id="excludeTemporaryDisconnected"
                 checked={excludeFilters.excludeTemporaryDisconnected}
                 onCheckedChange={(checked) =>
                   setExcludeFilters((prev) => ({ ...prev, excludeTemporaryDisconnected: !!checked }))
                 }
               />
-              <label htmlFor="excludeTemporaryDisconnected-mobile" className="text-sm text-gray-700">
-                Exclude Temporary Disconnected
+              <label htmlFor="excludeTemporaryDisconnected" className="text-sm text-gray-700">
+                Exclude Temp
               </label>
             </div>
           </div>
 
-          {/* OSD Range Slider - Always Visible */}
-          <div className="mb-4 p-4 bg-gray-50 rounded-lg">
-            <div className="flex items-center justify-between mb-2">
-              <label className="text-sm font-medium text-gray-700">Outstanding Dues Range</label>
-              <span className="text-sm text-gray-600">
-                ₹{osdRange[0].toLocaleString()} - ₹{osdRange[1].toLocaleString()}
-              </span>
-            </div>
-            <Slider
-              value={osdRange}
-              onValueChange={setOsdRange}
-              max={maxOsdValue}
-              min={0}
-              step={100}
-              className="w-full"
-            />
-            <div className="flex justify-between text-xs text-gray-500 mt-1">
-              <span>₹0</span>
-              <span>₹{maxOsdValue.toLocaleString()}</span>
-            </div>
-          </div>
-
-          {/* Conditional Filters - Always visible for admin, toggleable for others */}
-          {showFilters && (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 pt-4 border-t">
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700">Agency</label>
-                <Select
-                  value={filters.agency}
-                  onValueChange={(value) => setFilters((prev) => ({ ...prev, agency: value }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="All Agencies" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="All Agencies">All Agencies</SelectItem>
-                    {agencies.map((agency) => (
-                      <SelectItem key={agency} value={agency}>
-                        {agency}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700">Address</label>
-                <Input
-                  placeholder="Filter by address"
-                  value={filters.address}
-                  onChange={(e) => setFilters((prev) => ({ ...prev, address: e.target.value }))}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700">Name</label>
-                <Input
-                  placeholder="Filter by name"
-                  value={filters.name}
-                  onChange={(e) => setFilters((prev) => ({ ...prev, name: e.target.value }))}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700">Consumer ID</label>
-                <Input
-                  placeholder="Search by ID"
-                  value={filters.consumerId}
-                  onChange={(e) => setFilters((prev) => ({ ...prev, consumerId: e.target.value }))}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700">Status</label>
-                <Select
-                  value={filters.status}
-                  onValueChange={(value) => setFilters((prev) => ({ ...prev, status: value }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="All Status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="All Status">All Status</SelectItem>
-                    <SelectItem value="connected">Connected</SelectItem>
-                    <SelectItem value="disconnected">Disconnected</SelectItem>
-                    <SelectItem value="pending">Pending</SelectItem>
-                    <SelectItem value="Deemed Disconnection">Deemed Disconnection</SelectItem>
-                    <SelectItem value="Temprory Disconnected">Temporary Disconnected</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
+          {/* Filter Button for Non-Admin */}
+          {userRole !== "admin" && (
+            <Button
+              variant="outline"
+              onClick={() => setShowFilters(!showFilters)}
+              className="flex items-center space-x-2"
+            >
+              <Filter className="h-4 w-4" />
+              <span className="hidden sm:inline">Filters</span>
+            </Button>
           )}
 
-          <div className="flex justify-between items-center mt-4 text-sm text-gray-600">
-            <span>
-              Showing {startIndex + 1}-{Math.min(endIndex, sortedConsumers.length)} of {sortedConsumers.length}{" "}
-              consumers
-              {sortByOSD !== "none" && (
-                <span className="ml-2 text-blue-600">
-                  (sorted by OSD: {sortByOSD === "asc" ? "Low to High" : "High to Low"})
-                </span>
-              )}
-            </span>
-            {(Object.values(filters).some((f) => f !== "All Agencies" && f !== "All Status" && f !== "") ||
-              searchTerm ||
-              osdRange[0] !== 0 ||
-              osdRange[1] !== maxOsdValue ||
-              excludeFilters.excludeDeemedDisconnection ||
-              excludeFilters.excludeTemporaryDisconnected ||
-              sortByOSD !== "none") && <span className="text-blue-600">Filters active</span>}
+          {(Object.values(filters).some((f) => f !== "All Agencies" && f !== "All Status" && f !== "") ||
+            searchTerm ||
+            osdRange[0] !== 0 ||
+            osdRange[1] !== maxOsdValue ||
+            excludeFilters.excludeDeemedDisconnection ||
+            excludeFilters.excludeTemporaryDisconnected ||
+            sortByOSD !== "none") && (
+            <Button variant="ghost" onClick={clearFilters} size="sm">
+              <X className="h-4 w-4 mr-1" />
+              <span className="hidden sm:inline">Clear</span>
+            </Button>
+          )}
+        </div>
+
+        {/* Mobile Exclude Checkboxes */}
+        <div className="sm:hidden flex flex-col space-y-2 mb-4">
+          <div className="flex items-center space-x-2">
+            <Checkbox
+              id="excludeDeemedDisconnection-mobile"
+              checked={excludeFilters.excludeDeemedDisconnection}
+              onCheckedChange={(checked) =>
+                setExcludeFilters((prev) => ({ ...prev, excludeDeemedDisconnection: !!checked }))
+              }
+            />
+            <label htmlFor="excludeDeemedDisconnection-mobile" className="text-sm text-gray-700">
+              Exclude Deemed Disconnection
+            </label>
+          </div>
+          <div className="flex items-center space-x-2">
+            <Checkbox
+              id="excludeTemporaryDisconnected-mobile"
+              checked={excludeFilters.excludeTemporaryDisconnected}
+              onCheckedChange={(checked) =>
+                setExcludeFilters((prev) => ({ ...prev, excludeTemporaryDisconnected: !!checked }))
+              }
+            />
+            <label htmlFor="excludeTemporaryDisconnected-mobile" className="text-sm text-gray-700">
+              Exclude Temporary Disconnected
+            </label>
           </div>
         </div>
 
-        {/* Consumer Cards */}
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {paginatedConsumers.map((consumer) => (
-            <Card key={consumer.consumerId} className="hover:shadow-md transition-shadow">
-              <CardHeader className="pb-3">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <CardTitle className="text-lg">{consumer.name}</CardTitle>
-                    <p className="text-sm text-gray-600">{consumer.consumerId}</p>
-                  </div>
-                  <div className="flex flex-col items-end space-y-1">
-                    <Badge className={getStatusColor(consumer.disconStatus)}>{consumer.disconStatus}</Badge>
-                    <Badge variant="outline" className="text-xs">
-                      {consumer.agency}
-                    </Badge>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="flex items-start space-x-2">
-                  <MapPin className="h-4 w-4 text-gray-400 mt-0.5 flex-shrink-0" />
-                  <p className="text-sm text-gray-600">{consumer.address}</p>
-                </div>
-
-                {consumer.mobileNumber && (
-                  <div className="flex items-center space-x-2">
-                    <Phone className="h-4 w-4 text-gray-400" />
-                    <p className="text-sm text-gray-600">{consumer.mobileNumber}</p>
-                  </div>
-                )}
-
-                <div className="flex items-center space-x-2">
-                  <DollarSign className="h-4 w-4 text-gray-400" />
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-red-600">
-                      ₹{Number.parseFloat(consumer.d2NetOS || "0").toLocaleString()}
-                    </p>
-                    <p className="text-xs text-gray-500">Outstanding Dues</p>
-                  </div>
-                </div>
-
-                {consumer.osDuedateRange && (
-                  <div className="flex items-center space-x-2">
-                    <Calendar className="h-4 w-4 text-gray-400" />
-                    <div className="flex-1">
-                      <p className="text-sm text-gray-600">{consumer.osDuedateRange}</p>
-                      <p className="text-xs text-gray-500">Due Date Range</p>
-                    </div>
-                  </div>
-                )}
-
-                <div className="grid grid-cols-2 gap-2 text-xs text-gray-600">
-                  <div>
-                    <span className="font-medium">Class:</span> {consumer.class}
-                  </div>
-                  <div>
-                    <span className="font-medium">Device:</span> {consumer.device}
-                  </div>
-                </div>
-
-                {consumer.disconDate && (
-                  <div className="text-xs text-red-600">
-                    <span className="font-medium">Disconnected:</span> {consumer.disconDate}
-                  </div>
-                )}
-
-                <Button onClick={() => setSelectedConsumer(consumer)} className="w-full mt-4" size="sm">
-                  <Edit className="h-4 w-4 mr-2" />
-                  Update Details
-                </Button>
-              </CardContent>
-            </Card>
-          ))}
+        {/* OSD Range Slider - Always Visible */}
+        <div className="mb-4 p-4 bg-gray-50 rounded-lg">
+          <div className="flex items-center justify-between mb-2">
+            <label className="text-sm font-medium text-gray-700">Outstanding Dues Range</label>
+            <span className="text-sm text-gray-600">
+              ₹{osdRange[0].toLocaleString()} - ₹{osdRange[1].toLocaleString()}
+            </span>
+          </div>
+          <Slider
+            value={osdRange}
+            onValueChange={setOsdRange}
+            max={maxOsdValue}
+            min={0}
+            step={100}
+            className="w-full"
+          />
+          <div className="flex justify-between text-xs text-gray-500 mt-1">
+            <span>₹0</span>
+            <span>₹{maxOsdValue.toLocaleString()}</span>
+          </div>
         </div>
 
-        {/* Pagination */}
-        {totalPages > 1 && (
-          <div className="flex items-center justify-between bg-white p-4 rounded-lg shadow-sm border">
-            <div className="text-sm text-gray-600">
-              Page {currentPage} of {totalPages} ({sortedConsumers.length} total consumers)
-            </div>
-            <div className="flex items-center space-x-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-                disabled={currentPage === 1}
+        {/* Conditional Filters - Always visible for admin, toggleable for others */}
+        {showFilters && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 pt-4 border-t">
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-700">Agency</label>
+              <Select
+                value={filters.agency}
+                onValueChange={(value) => setFilters((prev) => ({ ...prev, agency: value }))}
               >
-                <ChevronLeft className="h-4 w-4" />
-                <span className="hidden sm:inline">Previous</span>
-              </Button>
+                <SelectTrigger>
+                  <SelectValue placeholder="All Agencies" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="All Agencies">All Agencies</SelectItem>
+                  {agencies.map((agency) => (
+                    <SelectItem key={agency} value={agency}>
+                      {agency}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
 
-              <div className="flex items-center space-x-1">
-                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                  let pageNum
-                  if (totalPages <= 5) {
-                    pageNum = i + 1
-                  } else if (currentPage <= 3) {
-                    pageNum = i + 1
-                  } else if (currentPage >= totalPages - 2) {
-                    pageNum = totalPages - 4 + i
-                  } else {
-                    pageNum = currentPage - 2 + i
-                  }
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-700">Address</label>
+              <Input
+                placeholder="Filter by address"
+                value={filters.address}
+                onChange={(e) => setFilters((prev) => ({ ...prev, address: e.target.value }))}
+              />
+            </div>
 
-                  return (
-                    <Button
-                      key={pageNum}
-                      variant={currentPage === pageNum ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => setCurrentPage(pageNum)}
-                      className="w-8 h-8 p-0"
-                    >
-                      {pageNum}
-                    </Button>
-                  )
-                })}
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-700">Name</label>
+              <Input
+                placeholder="Filter by name"
+                value={filters.name}
+                onChange={(e) => setFilters((prev) => ({ ...prev, name: e.target.value }))}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-700">Consumer ID</label>
+              <Input
+                placeholder="Search by ID"
+                value={filters.consumerId}
+                onChange={(e) => setFilters((prev) => ({ ...prev, consumerId: e.target.value }))}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-700">Status</label>
+              <Select
+                value={filters.status}
+                onValueChange={(value) => setFilters((prev) => ({ ...prev, status: value }))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="All Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="All Status">All Status</SelectItem>
+                  <SelectItem value="connected">Connected</SelectItem>
+                  <SelectItem value="disconnected">Disconnected</SelectItem>
+                  <SelectItem value="pending">Pending</SelectItem>
+                  <SelectItem value="Deemed Disconnection">Deemed Disconnection</SelectItem>
+                  <SelectItem value="Temprory Disconnected">Temporary Disconnected</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        )}
+
+        <div className="flex justify-between items-center mt-4 text-sm text-gray-600">
+          <span>
+            Showing {startIndex + 1}-{Math.min(endIndex, sortedConsumers.length)} of {sortedConsumers.length} consumers
+            {sortByOSD !== "none" && (
+              <span className="ml-2 text-blue-600">
+                (sorted by OSD: {sortByOSD === "asc" ? "Low to High" : "High to Low"})
+              </span>
+            )}
+          </span>
+          {(Object.values(filters).some((f) => f !== "All Agencies" && f !== "All Status" && f !== "") ||
+            searchTerm ||
+            osdRange[0] !== 0 ||
+            osdRange[1] !== maxOsdValue ||
+            excludeFilters.excludeDeemedDisconnection ||
+            excludeFilters.excludeTemporaryDisconnected ||
+            sortByOSD !== "none") && <span className="text-blue-600">Filters active</span>}
+        </div>
+      </div>
+
+      {/* Consumer Cards */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        {paginatedConsumers.map((consumer) => (
+          <Card key={consumer.consumerId} className="hover:shadow-md transition-shadow">
+            <CardHeader className="pb-3">
+              <div className="flex items-start justify-between">
+                <div>
+                  <CardTitle className="text-lg">{consumer.name}</CardTitle>
+                  <p className="text-sm text-gray-600">{consumer.consumerId}</p>
+                </div>
+                <div className="flex flex-col items-end space-y-1">
+                  <Badge className={getStatusColor(consumer.disconStatus)}>{consumer.disconStatus}</Badge>
+                  <Badge variant="outline" className="text-xs">
+                    {consumer.agency}
+                  </Badge>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex items-start space-x-2">
+                <MapPin className="h-4 w-4 text-gray-400 mt-0.5 flex-shrink-0" />
+                <p className="text-sm text-gray-600">{consumer.address}</p>
               </div>
 
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
-                disabled={currentPage === totalPages}
-              >
-                <span className="hidden sm:inline">Next</span>
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-        )}
+              {consumer.mobileNumber && (
+                <div className="flex items-center space-x-2">
+                  <Phone className="h-4 w-4 text-gray-400" />
+                  <p className="text-sm text-gray-600">{consumer.mobileNumber}</p>
+                </div>
+              )}
 
-        {sortedConsumers.length === 0 && consumers.length > 0 && (
-          <div className="text-center py-12">
-            <p className="text-gray-500">No consumers found matching your search criteria.</p>
-            <Button variant="outline" onClick={clearFilters} className="mt-4 bg-transparent">
-              Clear all filters
+              <div className="flex items-center space-x-2">
+                <DollarSign className="h-4 w-4 text-gray-400" />
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-red-600">
+                    ₹{Number.parseFloat(consumer.d2NetOS || "0").toLocaleString()}
+                  </p>
+                  <p className="text-xs text-gray-500">Outstanding Dues</p>
+                </div>
+              </div>
+
+              {consumer.osDuedateRange && (
+                <div className="flex items-center space-x-2">
+                  <Calendar className="h-4 w-4 text-gray-400" />
+                  <div className="flex-1">
+                    <p className="text-sm text-gray-600">{consumer.osDuedateRange}</p>
+                    <p className="text-xs text-gray-500">Due Date Range</p>
+                  </div>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-2 text-xs text-gray-600">
+                <div>
+                  <span className="font-medium">Class:</span> {consumer.class}
+                </div>
+                <div>
+                  <span className="font-medium">Device:</span> {consumer.device}
+                </div>
+              </div>
+
+              {consumer.disconDate && (
+                <div className="text-xs text-red-600">
+                  <span className="font-medium">Disconnected:</span> {consumer.disconDate}
+                </div>
+              )}
+
+              <Button onClick={() => setSelectedConsumer(consumer)} className="w-full mt-4" size="sm">
+                <Edit className="h-4 w-4 mr-2" />
+                Update Details
+              </Button>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between bg-white p-4 rounded-lg shadow-sm border">
+          <div className="text-sm text-gray-600">
+            Page {currentPage} of {totalPages} ({sortedConsumers.length} total consumers)
+          </div>
+          <div className="flex items-center space-x-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+              disabled={currentPage === 1}
+            >
+              <ChevronLeft className="h-4 w-4" />
+              <span className="hidden sm:inline">Previous</span>
+            </Button>
+
+            <div className="flex items-center space-x-1">
+              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                let pageNum
+                if (totalPages <= 5) {
+                  pageNum = i + 1
+                } else if (currentPage <= 3) {
+                  pageNum = i + 1
+                } else if (currentPage >= totalPages - 2) {
+                  pageNum = totalPages - 4 + i
+                } else {
+                  pageNum = currentPage - 2 + i
+                }
+
+                return (
+                  <Button
+                    key={pageNum}
+                    variant={currentPage === pageNum ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setCurrentPage(pageNum)}
+                    className="w-8 h-8 p-0"
+                  >
+                    {pageNum}
+                  </Button>
+                )
+              })}
+            </div>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+              disabled={currentPage === totalPages}
+            >
+              <span className="hidden sm:inline">Next</span>
+              <ChevronRight className="h-4 w-4" />
             </Button>
           </div>
-        )}
+        </div>
+      )}
 
-        {consumers.length === 0 && (
-          <div className="text-center py-12">
-            <p className="text-gray-500">No consumer data available.</p>
-          </div>
-        )}
-      </div>
+      {sortedConsumers.length === 0 && consumers.length > 0 && (
+        <div className="text-center py-12">
+          <p className="text-gray-500">No consumers found matching your search criteria.</p>
+          <Button variant="outline" onClick={clearFilters} className="mt-4 bg-transparent">
+            Clear all filters
+          </Button>
+        </div>
+      )}
+
+      {consumers.length === 0 && (
+        <div className="text-center py-12">
+          <p className="text-gray-500">No consumer data available.</p>
+        </div>
+      )}
     </div>
   )
 }
