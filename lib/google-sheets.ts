@@ -1,4 +1,4 @@
-//import "server-only"
+import "server-only"
 import { parse } from "csv-parse/sync"
 
 export interface ConsumerData {

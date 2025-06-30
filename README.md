@@ -167,7 +167,7 @@ The app can be deployed to any platform that supports Next.js:
 For issues and questions, please check the console logs and verify your environment setup.
 \`\`\`
 
-```plaintext file=".env.local.example"
+\`\`\`plaintext file=".env.local.example"
 # Copy this file to .env.local and fill in your values
 
 # Required: Session secret for JWT tokens (use a long, random string)
