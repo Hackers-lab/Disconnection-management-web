@@ -1,40 +1,23 @@
 "use client"
 
 import { useState } from "react"
-import { DashboardShell } from "./dashboard-shell"
-import type { ConsumerData } from "@/lib/google-sheets"
+import { DashboardShell } from "@/components/dashboard-shell"
 
 interface DashboardClientProps {
-  initialConsumers: ConsumerData[]
-  userRole: string
-  userAgency?: string
+  role: string
+  agencies: string[]
 }
 
-export function DashboardClient({ initialConsumers, userRole, userAgency }: DashboardClientProps) {
-  const [consumers, setConsumers] = useState(initialConsumers)
-  const [loading, setLoading] = useState(false)
-
-  async function refreshData() {
-    setLoading(true)
-    try {
-      const res = await fetch("/api/consumers")
-      if (res.ok) {
-        setConsumers((await res.json()) as ConsumerData[])
-      }
-    } finally {
-      setLoading(false)
-    }
-  }
+export default function DashboardClient({ role, agencies }: DashboardClientProps) {
+  const [showAdminPanel, setShowAdminPanel] = useState(false)
 
   return (
     <DashboardShell
-      consumers={consumers}
-      userRole={userRole}
-      userAgency={userAgency}
-      onRefresh={refreshData}
-      loading={loading}
+      role={role}
+      agencies={agencies}
+      showAdminPanel={showAdminPanel}
+      openAdmin={() => setShowAdminPanel(true)}
+      closeAdmin={() => setShowAdminPanel(false)}
     />
   )
 }
-
-export default DashboardClient

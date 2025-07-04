@@ -14,10 +14,7 @@ export async function updateConsumerViaAppsScript(consumer: ConsumerData) {
       console.log("⚠️ Apps Script URL not configured, using mock update")
       // Simulate successful update for testing
       await new Promise((resolve) => setTimeout(resolve, 1000))
-      return {
-        success: true,
-        message: `Consumer updated successfully (mock - Apps Script URL not configured). Agency: ${consumer.agency} (auto-assigned)`,
-      }
+      return { success: true, message: "Consumer updated successfully (mock - Apps Script URL not configured)" }
     }
 
     const payload = {
@@ -26,12 +23,10 @@ export async function updateConsumerViaAppsScript(consumer: ConsumerData) {
       disconDate: consumer.disconDate,
       mobileNumber: consumer.mobileNumber,
       d2NetOS: consumer.d2NetOS,
-      agency: consumer.agency, // Include auto-assigned agency
       notes: consumer.notes || "",
-      lastUpdated: consumer.lastUpdated,
     }
 
-    console.log("📤 Sending payload with auto-assigned agency:", payload)
+    console.log("📤 Sending payload:", payload)
 
     const response = await fetch(APPS_SCRIPT_URL, {
       method: "POST",
@@ -51,10 +46,7 @@ export async function updateConsumerViaAppsScript(consumer: ConsumerData) {
     console.log("📡 Apps Script response:", result)
 
     if (result.success) {
-      return {
-        success: true,
-        message: `Consumer updated successfully in Google Sheets. Agency: ${consumer.agency} (auto-assigned)`,
-      }
+      return { success: true, message: "Consumer updated successfully in Google Sheets" }
     } else {
       throw new Error(result.error || "Update failed")
     }

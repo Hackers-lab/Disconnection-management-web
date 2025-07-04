@@ -1,7 +1,8 @@
-import { NextResponse } from "next/server"
+import { type NextRequest, NextResponse } from "next/server"
 import { verifySession } from "@/lib/session"
-import { userCredentialsStorage } from "@/lib/user-credentials"
+import { userStorage } from "@/lib/user-storage"
 
+// GET - List all users
 export async function GET() {
   const session = await verifySession()
 
@@ -9,17 +10,17 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
-  try {
-    const users = await userCredentialsStorage.getUsers()
-    // Don't send passwords in response
-    const safeUsers = users.map(({ password, ...user }) => user)
-    return NextResponse.json(safeUsers)
-  } catch (error) {
-    return NextResponse.json({ error: "Failed to fetch users" }, { status: 500 })
-  }
+  const users = await userStorage.getUsers()
+  // Return users with masked passwords for security
+  const safeUsers = users.map((user) => ({
+    ...user,
+    password: "••••••••",
+  }))
+  return NextResponse.json(safeUsers)
 }
 
-export async function POST(request: Request) {
+// POST - Add new user
+export async function POST(request: NextRequest) {
   const session = await verifySession()
 
   if (!session || session.role !== "admin") {
@@ -29,26 +30,36 @@ export async function POST(request: Request) {
   try {
     const { username, password, role, agencies } = await request.json()
 
-    if (!username || !password || !role) {
-      return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
+    // Validate input
+    if (!username || !password) {
+      return NextResponse.json({ error: "Username and password are required" }, { status: 400 })
     }
 
-    const newUser = await userCredentialsStorage.addUser({
+    const users = await userStorage.getUsers()
+
+    // Check if username already exists
+    if (users.find((u) => u.username === username)) {
+      return NextResponse.json({ error: "Username already exists" }, { status: 400 })
+    }
+
+    // Create new user
+    const newUser = await userStorage.addUser({
       username,
       password,
-      role,
+      role: role || "officer",
       agencies: agencies || [],
     })
 
-    // Don't send password in response
-    const { password: _, ...safeUser } = newUser
-    return NextResponse.json(safeUser)
+    console.log("✅ User added successfully:", username)
+    return NextResponse.json({ success: true, message: "User added successfully" })
   } catch (error) {
-    return NextResponse.json({ error: "Failed to create user" }, { status: 500 })
+    console.error("Error adding user:", error)
+    return NextResponse.json({ error: "Failed to add user" }, { status: 500 })
   }
 }
 
-export async function PUT(request: Request) {
+// PUT - Update user
+export async function PUT(request: NextRequest) {
   const session = await verifySession()
 
   if (!session || session.role !== "admin") {
@@ -58,31 +69,40 @@ export async function PUT(request: Request) {
   try {
     const { id, username, password, role, agencies } = await request.json()
 
-    if (!id) {
-      return NextResponse.json({ error: "User ID is required" }, { status: 400 })
-    }
+    const users = await userStorage.getUsers()
+    const existingUser = users.find((u) => u.id === id)
 
-    const updates: any = {}
-    if (username) updates.username = username
-    if (password) updates.password = password
-    if (role) updates.role = role
-    if (agencies !== undefined) updates.agencies = agencies
-
-    const updatedUser = await userCredentialsStorage.updateUser(id, updates)
-
-    if (!updatedUser) {
+    if (!existingUser) {
       return NextResponse.json({ error: "User not found" }, { status: 404 })
     }
 
-    // Don't send password in response
-    const { password: _, ...safeUser } = updatedUser
-    return NextResponse.json(safeUser)
+    // Check if new username conflicts with existing users (excluding current user)
+    if (users.find((u) => u.username === username && u.id !== id)) {
+      return NextResponse.json({ error: "Username already exists" }, { status: 400 })
+    }
+
+    // Update user - keep original password if masked password is sent
+    const updatedUser = await userStorage.updateUser(id, {
+      username,
+      password: password === "••••••••" ? existingUser.password : password,
+      role,
+      agencies: agencies || [],
+    })
+
+    if (updatedUser) {
+      console.log("✅ User updated successfully:", username)
+      return NextResponse.json({ success: true, message: "User updated successfully" })
+    } else {
+      return NextResponse.json({ error: "Failed to update user" }, { status: 500 })
+    }
   } catch (error) {
+    console.error("Error updating user:", error)
     return NextResponse.json({ error: "Failed to update user" }, { status: 500 })
   }
 }
 
-export async function DELETE(request: Request) {
+// DELETE - Delete user
+export async function DELETE(request: NextRequest) {
   const session = await verifySession()
 
   if (!session || session.role !== "admin") {
@@ -97,14 +117,28 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: "User ID is required" }, { status: 400 })
     }
 
-    const deletedUser = await userCredentialsStorage.deleteUser(id)
+    const users = await userStorage.getUsers()
+    const userToDelete = users.find((u) => u.id === id)
 
-    if (!deletedUser) {
+    if (!userToDelete) {
       return NextResponse.json({ error: "User not found" }, { status: 404 })
     }
 
-    return NextResponse.json({ message: "User deleted successfully" })
+    // Prevent deleting admin user
+    if (userToDelete.username === "admin") {
+      return NextResponse.json({ error: "Cannot delete admin user" }, { status: 400 })
+    }
+
+    const deletedUser = await userStorage.deleteUser(id)
+
+    if (deletedUser) {
+      console.log("✅ User deleted successfully:", deletedUser.username)
+      return NextResponse.json({ success: true, message: "User deleted successfully" })
+    } else {
+      return NextResponse.json({ error: "Failed to delete user" }, { status: 500 })
+    }
   } catch (error) {
+    console.error("Error deleting user:", error)
     return NextResponse.json({ error: "Failed to delete user" }, { status: 500 })
   }
 }

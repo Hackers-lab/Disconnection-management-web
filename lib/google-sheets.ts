@@ -1,68 +1,44 @@
-import "server-only"
-import { parse } from "csv-parse/sync"
-
 export interface ConsumerData {
-  id: string
-  name: string
+  offCode: string
   mru: string
-  agency: string
-  status: string
+  consumerId: string
+  name: string
+  address: string
+  baseClass: string
+  class: string
+  natureOfConn: string
+  govNonGov: string
+  device: string
+  osDuedateRange: string
+  d2NetOS: string
+  disconStatus: string
+  disconDate: string
+  gisPole: string
+  mobileNumber: string
+  latitude: string
+  longitude: string
+  agency?: string
+  lastUpdated?: string
+  notes?: string
 }
 
-/**
- * A static fallback list so the UI has something to render while the CSV is
- * still loading or in case the request fails.
- */
-export const AGENCIES = ["Agency A", "Agency B", "Agency C"]
-
-const AGENCY_MRU_CSV_URL = process.env.NEXT_PUBLIC_AGENCY_MRU_CSV_URL ?? ""
-
-let agencyByMru: Record<string, string> | null = null
-
-/* ---------------------------------------------------------------------- */
-/* Agency helpers                                                         */
-/* ---------------------------------------------------------------------- */
-
-export async function fetchAgencyMap() {
-  if (agencyByMru) return agencyByMru
-  if (!AGENCY_MRU_CSV_URL) return {}
-
-  try {
-    const csvText = await (await fetch(AGENCY_MRU_CSV_URL)).text()
-    const rows: string[][] = parse(csvText.trim())
-    const headers = rows[0]
-
-    // rows after the header – build a matrix like:
-    //   [ 'MRU001', 'MRU004', ... ]  ← row 1
-    for (let r = 1; r < rows.length; r++) {
-      const cols = rows[r]
-      cols.forEach((mru, idx) => {
-        if (mru) {
-          const agency = headers[idx]
-          if (!agencyByMru) agencyByMru = {}
-          agencyByMru[mru.trim()] = agency.trim()
-        }
-      })
-    }
-
-    return agencyByMru ?? {}
-  } catch (err) {
-    console.error("Failed to fetch Agency → MRU map:", err)
-    return {}
-  }
-}
-
-/* ---------------------------------------------------------------------- */
-/* Consumer helpers                                                       */
-/* ---------------------------------------------------------------------- */
-
-export async function hydrateConsumers(raw: Omit<ConsumerData, "agency">[]): Promise<ConsumerData[]> {
-  const map = await fetchAgencyMap()
-  return raw.map((c) => ({
-    ...c,
-    agency: map[c.mru] ?? "Unassigned",
-  }))
-}
+const AGENCIES = [
+  "JOY GURU",
+  "ST",
+  "MATIUR",
+  "AMS",
+  "SAMAD",
+  "CHANCHAL",
+  "ALOKE CHAKRABORTY",
+  "SA",
+  "APOLLO",
+  "ROXY",
+  "MALDA",
+  "SUPREME",
+  "LAIBAH",
+  "MATIN",
+  "MUKTI",
+]
 
 // Helper function to clean and parse numeric values
 function parseNumericValue(value: string): string {
@@ -123,59 +99,9 @@ function findColumnIndex(headers: string[], searchTerms: string[]): number {
   return -1
 }
 
-async function fetchCsv(url: string) {
-  const res = await fetch(url, { cache: "no-store" })
-  if (!res.ok) throw new Error(`Failed to fetch CSV: ${res.status}`)
-  return res.text()
-}
-
-/**
- * Reads the Agency-MRU mapping sheet (agencies are column headers, MRUs rows).
- * Returns a Map<MRU, Agency>
- */
-export async function getAgencyMap(): Promise<Map<string, string>> {
-  const url = process.env.NEXT_PUBLIC_AGENCY_MRU_CSV_URL
-  if (!url) return new Map()
-
-  const csv = await fetchCsv(url)
-  const rows: string[][] = parse(csv.trim())
-
-  if (rows.length < 1) return new Map()
-
-  const headers = rows[0] as string[]
-  const map = new Map<string, string>()
-
-  for (let r = 1; r < rows.length; r++) {
-    rows[r].forEach((mru, idx) => {
-      if (mru) map.set(mru.trim(), headers[idx])
-    })
-  }
-  return map
-}
-
-/**
- * Example consumer fetch (your real implementation may differ).
- * Auto-assigns `agency` by MRU using the map above.
- */
-export async function fetchConsumers(sourceCsvUrl: string): Promise<ConsumerData[]> {
-  const [csv, agencyMap] = await Promise.all([fetchCsv(sourceCsvUrl), getAgencyMap()])
-  const rows: string[][] = parse(csv.trim(), { columns: true })
-
-  return rows.map((row) => ({
-    id: row.id,
-    name: row.name,
-    mru: row.mru,
-    status: row.status,
-    agency: agencyMap.get(row.mru) ?? "Unassigned",
-  }))
-}
-
 export async function fetchConsumerData(): Promise<ConsumerData[]> {
   try {
     console.log("Fetching consumer data from Google Sheets...")
-
-    // First, fetch the agency-MRU mapping
-    const agencyMapping = await fetchAgencyMap()
 
     const response = await fetch(
       "https://docs.google.com/spreadsheets/d/e/2PACX-1vTYN1Jj8x5Oy8NoKXrLpUEs17CtPkAi6khS4gtdisnqsLmuQWQviHo0zIF6MzJ9CA/pub?gid=91940342&single=true&output=csv",
@@ -210,12 +136,27 @@ export async function fetchConsumerData(): Promise<ConsumerData[]> {
 
     const consumers: ConsumerData[] = []
 
-    // Define column mappings with multiple possible names (removed agency from here)
+    // Define column mappings with multiple possible names
     const columnMappings = {
-      id: ["id", "consumer id", "consumerid", "consumer_id"],
-      name: ["name", "consumer name"],
+      offCode: ["off_code", "offcode", "office code"],
       mru: ["mru"],
-      status: ["status", "discon status", "disconnection status"],
+      consumerId: ["consumer id", "consumerid", "consumer_id"],
+      name: ["name", "consumer name"],
+      address: ["address"],
+      baseClass: ["base class", "baseclass", "base_class"],
+      class: ["class"],
+      natureOfConn: ["nature of conn", "nature of connection", "natureofconn"],
+      govNonGov: ["gov/non-gov", "gov non gov", "government"],
+      device: ["device"],
+      osDuedateRange: ["o/s duedate range", "os duedate range", "due date range"],
+      d2NetOS: ["d2 net o/s", "d2 net os", "net os", "outstanding"],
+      disconStatus: ["discon status", "disconnection status", "status"],
+      disconDate: ["discon date", "disconnection date"],
+      gisPole: ["gis pole", "gispole", "pole"],
+      mobileNumber: ["mobile number", "mobile", "phone"],
+      latitude: ["latitude", "lat"],
+      longitude: ["longitude", "lng", "long"],
+      agency: ["agency"],
     }
 
     // Find column indices
@@ -237,30 +178,40 @@ export async function fetchConsumerData(): Promise<ConsumerData[]> {
         }
 
         // Get consumer ID to validate this is a valid row
-        const consumerId = columnIndices.id >= 0 ? values[columnIndices.id] : ""
+        const consumerId = columnIndices.consumerId >= 0 ? values[columnIndices.consumerId] : ""
         if (!consumerId || consumerId.trim() === "") {
           continue
         }
 
-        // Get MRU for agency assignment
-        const mru = columnIndices.mru >= 0 ? values[columnIndices.mru] || "" : ""
-
-        // Auto-assign agency based on MRU
-        const assignedAgency = agencyMapping[mru]
-
         // Get and clean the OSD value
-        const rawOSD = columnIndices.status >= 0 ? values[columnIndices.status] || "0" : "0"
+        const rawOSD = columnIndices.d2NetOS >= 0 ? values[columnIndices.d2NetOS] || "0" : "0"
         const cleanedOSD = parseNumericValue(rawOSD)
 
-        console.log(`Consumer ${consumerId}: MRU="${mru}" -> Agency="${assignedAgency}", OSD="${cleanedOSD}"`)
+        console.log(`Consumer ${consumerId}: Raw OSD="${rawOSD}" -> Cleaned OSD="${cleanedOSD}"`)
 
         // Create consumer object
         const consumer: ConsumerData = {
-          id: consumerId,
+          offCode: columnIndices.offCode >= 0 ? values[columnIndices.offCode] || "" : "",
+          mru: columnIndices.mru >= 0 ? values[columnIndices.mru] || "" : "",
+          consumerId: consumerId,
           name: columnIndices.name >= 0 ? values[columnIndices.name] || "" : "",
-          mru: mru,
-          status: cleanedOSD, // Use cleaned numeric value
-          agency: assignedAgency, // Auto-assigned based on MRU
+          address: columnIndices.address >= 0 ? values[columnIndices.address] || "" : "",
+          baseClass: columnIndices.baseClass >= 0 ? values[columnIndices.baseClass] || "" : "",
+          class: columnIndices.class >= 0 ? values[columnIndices.class] || "" : "",
+          natureOfConn: columnIndices.natureOfConn >= 0 ? values[columnIndices.natureOfConn] || "" : "",
+          govNonGov: columnIndices.govNonGov >= 0 ? values[columnIndices.govNonGov] || "" : "",
+          device: columnIndices.device >= 0 ? values[columnIndices.device] || "" : "",
+          osDuedateRange: columnIndices.osDuedateRange >= 0 ? values[columnIndices.osDuedateRange] || "" : "",
+          d2NetOS: cleanedOSD, // Use cleaned numeric value
+          disconStatus:
+            columnIndices.disconStatus >= 0 ? values[columnIndices.disconStatus] || "connected" : "connected",
+          disconDate: columnIndices.disconDate >= 0 ? values[columnIndices.disconDate] || "" : "",
+          gisPole: columnIndices.gisPole >= 0 ? values[columnIndices.gisPole] || "" : "",
+          mobileNumber: columnIndices.mobileNumber >= 0 ? values[columnIndices.mobileNumber] || "" : "",
+          latitude: columnIndices.latitude >= 0 ? values[columnIndices.latitude] || "" : "",
+          longitude: columnIndices.longitude >= 0 ? values[columnIndices.longitude] || "" : "",
+          agency: columnIndices.agency >= 0 ? values[columnIndices.agency] || "" : "",
+          lastUpdated: new Date().toISOString().split("T")[0],
         }
 
         consumers.push(consumer)
@@ -271,40 +222,63 @@ export async function fetchConsumerData(): Promise<ConsumerData[]> {
 
     console.log(`Successfully processed ${consumers.length} consumers`)
 
-    // Log agency assignment summary
-    const agencySummary = consumers.reduce(
-      (acc, consumer) => {
-        acc[consumer.agency || "UNASSIGNED"] = (acc[consumer.agency || "UNASSIGNED"] || 0) + 1
-        return acc
-      },
-      {} as { [key: string]: number },
-    )
-    console.log("Agency assignment summary:", agencySummary)
+    // Log some OSD values for debugging
+    const osdSample = consumers.slice(0, 5).map((c) => ({ id: c.consumerId, osd: c.d2NetOS }))
+    console.log("Sample OSD values:", osdSample)
 
     return consumers
   } catch (error) {
     console.error("Detailed error in fetchConsumerData:", error)
 
-    // Return mock data with auto-assigned agencies
-    const mockAgencyMapping = await fetchAgencyMap()
+    // Return mock data with proper OSD values
     const mockData: ConsumerData[] = [
       {
-        id: "CONS001",
-        name: "Test Consumer 1",
+        offCode: "TEST001",
         mru: "MRU001",
-        status: "1500",
-        agency: mockAgencyMapping["MRU001"] ?? "Unassigned",
+        consumerId: "CONS001",
+        name: "Test Consumer 1",
+        address: "123 Test Street, Test City",
+        baseClass: "LT",
+        class: "Domestic",
+        natureOfConn: "Permanent",
+        govNonGov: "Non-Gov",
+        device: "Meter001",
+        osDuedateRange: "Jan-Mar 2024",
+        d2NetOS: "1500", // Clean numeric value
+        disconStatus: "connected",
+        disconDate: "",
+        gisPole: "POLE001",
+        mobileNumber: "9876543210",
+        latitude: "22.5726",
+        longitude: "88.3639",
+        agency: "JOY GURU",
+        lastUpdated: new Date().toISOString().split("T")[0],
       },
       {
-        id: "CONS002",
+        offCode: "TEST002",
+        mru: "MRU002",
+        consumerId: "CONS002",
         name: "Test Consumer 2",
-        mru: "MRU004",
-        status: "12380",
-        agency: mockAgencyMapping["MRU004"] ?? "Unassigned",
+        address: "456 Demo Avenue, Demo Town",
+        baseClass: "LT",
+        class: "Commercial",
+        natureOfConn: "Temporary",
+        govNonGov: "Gov",
+        device: "Meter002",
+        osDuedateRange: "Feb-Apr 2024",
+        d2NetOS: "12380", // Clean numeric value
+        disconStatus: "pending",
+        disconDate: "",
+        gisPole: "POLE002",
+        mobileNumber: "9876543211",
+        latitude: "22.5726",
+        longitude: "88.3639",
+        agency: "ST",
+        lastUpdated: new Date().toISOString().split("T")[0],
       },
     ]
 
-    console.log("Returning mock data with auto-assigned agencies")
+    console.log("Returning mock data due to error")
     return mockData
   }
 }
@@ -312,10 +286,4 @@ export async function fetchConsumerData(): Promise<ConsumerData[]> {
 export async function updateConsumerInSheet(consumer: ConsumerData) {
   console.log("Would update consumer in Google Sheets:", consumer)
   return { success: true, message: "Consumer updated successfully" }
-}
-
-// Export function to get agencies from the Agency MRU sheet
-export async function getAvailableAgencies(): Promise<string[]> {
-  const agencyMap = await fetchAgencyMap()
-  return Array.from(new Set(Object.values(agencyMap)))
 }

@@ -1,31 +1,37 @@
 "use client"
 
-import { DashboardStats } from "./dashboard-stats"
-import { ConsumerList } from "./consumer-list"
-import type { ConsumerData } from "@/lib/google-sheets"
+import { Header } from "@/components/header"
+import { ConsumerList } from "@/components/consumer-list"
 
 interface DashboardShellProps {
-  consumers: ConsumerData[]
-  userRole: string
-  userAgency?: string
-  onRefresh: () => void
-  loading: boolean
+  role: string
+  agencies: string[]
+  showAdminPanel: boolean
+  openAdmin: () => void
+  closeAdmin: () => void
 }
 
-export function DashboardShell({ consumers, userRole, userAgency, onRefresh, loading }: DashboardShellProps) {
+export function DashboardShell({ role, agencies, showAdminPanel, openAdmin, closeAdmin }: DashboardShellProps) {
   return (
-    <div className="space-y-6">
-      {/* Dashboard Stats */}
-      <DashboardStats consumers={consumers} />
+    <>
+      <Header userRole={role} onAdminClick={role === "admin" ? openAdmin : undefined} />
 
-      {/* Consumer List */}
-      <ConsumerList
-        consumers={consumers}
-        userRole={userRole}
-        userAgency={userAgency}
-        onRefresh={onRefresh}
-        loading={loading}
-      />
-    </div>
+      <main className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+        <div className="mb-4">
+          <h1 className="text-xl font-bold text-gray-900">Dashboard</h1>
+          <p className="text-sm text-gray-600">
+            {role === "admin" ? "Manage all consumers across agencies" : `Manage consumers for: ${agencies.join(", ")}`}
+          </p>
+        </div>
+
+        <ConsumerList
+          userRole={role}
+          userAgencies={agencies}
+          onAdminClick={openAdmin}
+          showAdminPanel={showAdminPanel}
+          onCloseAdminPanel={closeAdmin}
+        />
+      </main>
+    </>
   )
 }

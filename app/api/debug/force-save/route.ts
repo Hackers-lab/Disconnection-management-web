@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { verifySession } from "@/lib/session"
-import { userCredentialsStorage } from "@/lib/user-credentials"
+import { userStorage } from "@/lib/user-storage"
 
 export async function POST() {
   const session = await verifySession()
@@ -13,15 +13,15 @@ export async function POST() {
     console.log("🔧 Force save initiated...")
 
     // Force re-initialization
-    const userCount = await userCredentialsStorage.forceInitialize()
+    const userCount = await userStorage.forceInitialize()
     console.log("🔧 Force initialization complete, users:", userCount)
 
     // Get current users
-    const users = await userCredentialsStorage.getUsers()
+    const users = await userStorage.getUsers()
     console.log("🔧 Current users in memory:", users.length)
 
     // Add a test user to verify saving works
-    const testUser = await userCredentialsStorage.addUser({
+    const testUser = await userStorage.addUser({
       username: "force_test_" + Date.now(),
       password: "test123",
       role: "officer",
@@ -30,7 +30,7 @@ export async function POST() {
     console.log("🔧 Test user added:", testUser.username)
 
     // Get updated users
-    const updatedUsers = await userCredentialsStorage.getUsers()
+    const updatedUsers = await userStorage.getUsers()
 
     return NextResponse.json({
       success: true,
