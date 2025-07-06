@@ -101,7 +101,7 @@ function findColumnIndex(headers: string[], searchTerms: string[]): number {
 
 export async function fetchConsumerData(): Promise<ConsumerData[]> {
   try {
-    console.log("Fetching consumer data from Google Sheets...")
+    //console.log("Fetching consumer data from Google Sheets...")
 
     const response = await fetch(
       "https://docs.google.com/spreadsheets/d/e/2PACX-1vTYN1Jj8x5Oy8NoKXrLpUEs17CtPkAi6khS4gtdisnqsLmuQWQviHo0zIF6MzJ9CA/pub?gid=91940342&single=true&output=csv",
@@ -118,21 +118,21 @@ export async function fetchConsumerData(): Promise<ConsumerData[]> {
     }
 
     const csvText = await response.text()
-    console.log("CSV data received, length:", csvText.length)
+    //console.log("CSV data received, length:", csvText.length)
 
     if (!csvText || csvText.trim().length === 0) {
       throw new Error("Empty CSV data received")
     }
 
     const lines = csvText.split("\n").filter((line) => line.trim().length > 0)
-    console.log("Number of lines:", lines.length)
+    //console.log("Number of lines:", lines.length)
 
     if (lines.length < 2) {
       throw new Error("CSV must have at least header and one data row")
     }
 
     const headers = parseCSVLine(lines[0])
-    console.log("Headers found:", headers.length, headers.slice(0, 10))
+    //console.log("Headers found:", headers.length, headers.slice(0, 10))
 
     const consumers: ConsumerData[] = []
 
@@ -187,7 +187,7 @@ export async function fetchConsumerData(): Promise<ConsumerData[]> {
         const rawOSD = columnIndices.d2NetOS >= 0 ? values[columnIndices.d2NetOS] || "0" : "0"
         const cleanedOSD = parseNumericValue(rawOSD)
 
-        console.log(`Consumer ${consumerId}: Raw OSD="${rawOSD}" -> Cleaned OSD="${cleanedOSD}"`)
+        //console.log(`Consumer ${consumerId}: Raw OSD="${rawOSD}" -> Cleaned OSD="${cleanedOSD}"`)
 
         // Create consumer object
         const consumer: ConsumerData = {
@@ -220,11 +220,11 @@ export async function fetchConsumerData(): Promise<ConsumerData[]> {
       }
     }
 
-    console.log(`Successfully processed ${consumers.length} consumers`)
+    //console.log(`Successfully processed ${consumers.length} consumers`)
 
     // Log some OSD values for debugging
     const osdSample = consumers.slice(0, 5).map((c) => ({ id: c.consumerId, osd: c.d2NetOS }))
-    console.log("Sample OSD values:", osdSample)
+    //console.log("Sample OSD values:", osdSample)
 
     return consumers
   } catch (error) {
@@ -262,7 +262,7 @@ export async function fetchConsumerData(): Promise<ConsumerData[]> {
         address: "456 Demo Avenue, Demo Town",
         baseClass: "LT",
         class: "Commercial",
-        natureOfConn: "Temporary",
+        natureOfConn: "Temprory",
         govNonGov: "Gov",
         device: "Meter002",
         osDuedateRange: "Feb-Apr 2024",
@@ -278,7 +278,7 @@ export async function fetchConsumerData(): Promise<ConsumerData[]> {
       },
     ]
 
-    console.log("Returning mock data due to error")
+    //console.log("Returning mock data due to error")
     return mockData
   }
 }

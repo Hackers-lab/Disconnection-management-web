@@ -15,7 +15,7 @@ interface Stats {
   disconnected: number
   pending: number
   deemedDisconnection: number
-  temporaryDisconnected: number
+  temproryDisconnected: number
   totalOutstanding: number
 }
 
@@ -27,7 +27,7 @@ export function DashboardStats({ consumers, loading = false }: DashboardStatsPro
     disconnected: 0,
     pending: 0,
     deemedDisconnection: 0,
-    temporaryDisconnected: 0,
+    temproryDisconnected: 0,
     totalOutstanding: 0,
   }
 
@@ -44,15 +44,14 @@ export function DashboardStats({ consumers, loading = false }: DashboardStatsPro
       case "disconnected":
         stats.disconnected++
         break
-      case "pending":
+      case "Move Out Consumer":
         stats.pending++
         break
       case "deemed disconnection":
         stats.deemedDisconnection++
         break
-      case "temporary disconnected":
       case "temprory disconnected":
-        stats.temporaryDisconnected++
+        stats.disconnected++
         break
     }
   })
@@ -95,7 +94,7 @@ export function DashboardStats({ consumers, loading = false }: DashboardStatsPro
       bgColor: "bg-red-50",
     },
     {
-      title: "Pending",
+      title: "Move Out Consumer",
       value: stats.pending.toLocaleString(),
       icon: Clock,
       color: "text-yellow-600",

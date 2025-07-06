@@ -43,7 +43,7 @@ export async function GET() {
           address: "456 Sample Avenue, Sample Town",
           baseClass: "LT",
           class: "Commercial",
-          natureOfConn: "Temporary",
+          natureOfConn: "Temprory",
           govNonGov: "Gov",
           device: "Meter002",
           osDuedateRange: "Feb-Apr 2024",

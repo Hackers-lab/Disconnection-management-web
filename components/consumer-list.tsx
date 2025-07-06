@@ -69,7 +69,7 @@ export function ConsumerList({
   })
   const [excludeFilters, setExcludeFilters] = useState({
     excludeDeemedDisconnection: false,
-    excludeTemporaryDisconnected: false,
+    excludeTemproryDisconnected: false,
   })
 
   useEffect(() => {
@@ -175,8 +175,8 @@ export function ConsumerList({
     const excludeDeemedDisconnection =
       !excludeFilters.excludeDeemedDisconnection || consumer.disconStatus.toLowerCase() !== "deemed disconnection"
 
-    const excludeTemporaryDisconnected =
-      !excludeFilters.excludeTemporaryDisconnected || !consumer.disconStatus.toLowerCase().includes("temporary")
+    const excludeTemproryDisconnected =
+      !excludeFilters.excludeTemproryDisconnected || !consumer.disconStatus.toLowerCase().includes("temprory")
 
     return (
       matchesSearch &&
@@ -187,7 +187,7 @@ export function ConsumerList({
       matchesStatus &&
       matchesOsdRange &&
       excludeDeemedDisconnection &&
-      excludeTemporaryDisconnected
+      excludeTemproryDisconnected
     )
   })
 
@@ -224,7 +224,7 @@ export function ConsumerList({
         return "bg-yellow-100 text-yellow-800"
       case "deemed disconnection":
         return "bg-orange-100 text-orange-800"
-      case "temporary disconnected":
+      case "temprory disconnected":
       case "temprory disconnected":
         return "bg-purple-100 text-purple-800"
       default:
@@ -257,7 +257,7 @@ export function ConsumerList({
     setOsdRange([0, maxOsdValue])
     setExcludeFilters({
       excludeDeemedDisconnection: false,
-      excludeTemporaryDisconnected: false,
+      excludeTemproryDisconnected: false,
     })
     setSortByOSD("none")
     setCurrentPage(1)
@@ -377,13 +377,13 @@ export function ConsumerList({
             </div>
             <div className="flex items-center space-x-2">
               <Checkbox
-                id="excludeTemporaryDisconnected"
-                checked={excludeFilters.excludeTemporaryDisconnected}
+                id="excludeTemproryDisconnected"
+                checked={excludeFilters.excludeTemproryDisconnected}
                 onCheckedChange={(checked) =>
-                  setExcludeFilters((prev) => ({ ...prev, excludeTemporaryDisconnected: !!checked }))
+                  setExcludeFilters((prev) => ({ ...prev, excludeTemproryDisconnected: !!checked }))
                 }
               />
-              <label htmlFor="excludeTemporaryDisconnected" className="text-sm text-gray-700">
+              <label htmlFor="excludeTemproryDisconnected" className="text-sm text-gray-700">
                 Exclude Temp
               </label>
             </div>
@@ -406,7 +406,7 @@ export function ConsumerList({
             osdRange[0] !== 0 ||
             osdRange[1] !== maxOsdValue ||
             excludeFilters.excludeDeemedDisconnection ||
-            excludeFilters.excludeTemporaryDisconnected ||
+            excludeFilters.excludeTemproryDisconnected ||
             sortByOSD !== "none") && (
             <Button variant="ghost" onClick={clearFilters} size="sm">
               <X className="h-4 w-4 mr-1" />
@@ -431,14 +431,14 @@ export function ConsumerList({
           </div>
           <div className="flex items-center space-x-2">
             <Checkbox
-              id="excludeTemporaryDisconnected-mobile"
-              checked={excludeFilters.excludeTemporaryDisconnected}
+              id="excludeTemproryDisconnected-mobile"
+              checked={excludeFilters.excludeTemproryDisconnected}
               onCheckedChange={(checked) =>
-                setExcludeFilters((prev) => ({ ...prev, excludeTemporaryDisconnected: !!checked }))
+                setExcludeFilters((prev) => ({ ...prev, excludeTemproryDisconnected: !!checked }))
               }
             />
-            <label htmlFor="excludeTemporaryDisconnected-mobile" className="text-sm text-gray-700">
-              Exclude Temporary Disconnected
+            <label htmlFor="excludeTemproryDisconnected-mobile" className="text-sm text-gray-700">
+              Exclude Temprory Disconnected
             </label>
           </div>
         </div>
@@ -530,7 +530,7 @@ export function ConsumerList({
                   <SelectItem value="disconnected">Disconnected</SelectItem>
                   <SelectItem value="pending">Pending</SelectItem>
                   <SelectItem value="Deemed Disconnection">Deemed Disconnection</SelectItem>
-                  <SelectItem value="Temprory Disconnected">Temporary Disconnected</SelectItem>
+                  <SelectItem value="Temprory Disconnected">Temprory Disconnected</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -551,7 +551,7 @@ export function ConsumerList({
             osdRange[0] !== 0 ||
             osdRange[1] !== maxOsdValue ||
             excludeFilters.excludeDeemedDisconnection ||
-            excludeFilters.excludeTemporaryDisconnected ||
+            excludeFilters.excludeTemproryDisconnected ||
             sortByOSD !== "none") && <span className="text-blue-600">Filters active</span>}
         </div>
       </div>
