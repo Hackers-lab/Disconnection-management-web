@@ -104,7 +104,7 @@ export async function fetchConsumerData(): Promise<ConsumerData[]> {
     //console.log("Fetching consumer data from Google Sheets...")
 
     const response = await fetch(
-      "https://docs.google.com/spreadsheets/d/e/2PACX-1vTYN1Jj8x5Oy8NoKXrLpUEs17CtPkAi6khS4gtdisnqsLmuQWQviHo0zIF6MzJ9CA/pub?gid=91940342&single=true&output=csv",
+      "https://docs.google.com/spreadsheets/d/e/2PACX-1vTUdnZVO_1jP6rtHen6zsTM4ff3YEo_xPe41HvMq_q3yOtwuaoTNz4AEOtuabLbmw2BzYnJh8fCIF2Y/pub?output=csv",
       {
         cache: "no-store",
         headers: {
