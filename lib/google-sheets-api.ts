@@ -60,7 +60,8 @@ export async function updateConsumerInGoogleSheet(consumer: ConsumerData) {
       "Discon Date": consumer.disconDate,
       "Mobile Number": consumer.mobileNumber,
       "D2 Net O/S": consumer.d2NetOS,
-      Notes: consumer.notes || "",
+      "Notes": consumer.notes || "",
+      "Agency": consumer.agency,
     }
 
     Object.entries(columnUpdates).forEach(([columnName, value]) => {

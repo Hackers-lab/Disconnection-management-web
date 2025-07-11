@@ -22,9 +22,10 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
   const [formData, setFormData] = useState({
     ...consumer,
     notes: consumer.notes || "",
+    agency: consumer.agency || "",
     image: null as File | null,
     imageUrl: "",
-  })
+  })  
   const [cameraActive, setCameraActive] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [saving, setSaving] = useState(false)
@@ -162,7 +163,7 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
               <CardTitle>Consumer Information</CardTitle>
             </CardHeader>
             <CardContent>
-              <form onSubmit={handleSubmit} className="space-y-6">
+              <form onSubmit={handleSubmit} className="space-y-1">
                 {/* Consumer Information - Read Only */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
@@ -311,9 +312,9 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
                             {uploading ? "Uploading..." : formData.image ? formData.image.name : "Choose Image"}
                           </Button>
                         </div>
-                        <Button type="button" variant="outline" onClick={handleCameraCapture} disabled={uploading}>
+                        {/* <Button type="button" variant="outline" onClick={handleCameraCapture} disabled={uploading}>
                           <Camera className="h-4 w-4" />
-                        </Button>
+                        </Button> */}
                       </div>
 
                       {cameraActive && (

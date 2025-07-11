@@ -24,6 +24,7 @@ export async function updateConsumerViaAppsScript(consumer: ConsumerData) {
       mobileNumber: consumer.mobileNumber,
       d2NetOS: consumer.d2NetOS,
       notes: consumer.notes || "",
+      agency: consumer.agency,
     }
 
     console.log("📤 Sending payload:", payload)
@@ -43,7 +44,7 @@ export async function updateConsumerViaAppsScript(consumer: ConsumerData) {
     }
 
     const result = await response.json()
-    console.log("📡 Apps Script response:", result)
+    console.log("📡 Apps Script response new:", result)
 
     if (result.success) {
       return { success: true, message: "Consumer updated successfully in Google Sheets" }

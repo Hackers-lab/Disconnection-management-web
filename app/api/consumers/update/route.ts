@@ -16,6 +16,8 @@ export async function POST(request: NextRequest) {
 
     const result = await updateConsumerViaAppsScript(consumer)
     console.log("📤 Update result:", result)
+    console.log("📡 Apps Script raw response:", result);
+
 
     if (result.success) {
       return NextResponse.json(result, { status: 200 })
