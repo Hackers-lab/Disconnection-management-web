@@ -318,7 +318,15 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
 
                       {cameraActive && (
                         <div className="mt-4 space-y-2">
-                          <video ref={videoRef} className="w-full max-w-sm rounded border" autoPlay playsInline />
+                          <div className="relative w-full max-w-sm h-64 bg-black rounded">
+                            <video
+                              ref={videoRef}
+                              className="absolute inset-0 w-full h-full object-cover rounded"
+                              autoPlay
+                              playsInline
+                            />
+                          </div>
+
                           <Button
                             type="button"
                             onClick={async () => {
