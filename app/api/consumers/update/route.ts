@@ -7,16 +7,16 @@ export async function POST(request: NextRequest) {
     console.log("🔄 API /consumers/update called")
 
     const consumer: ConsumerData = await request.json()
-    console.log("📥 Received consumer data:", {
-      consumerId: consumer.consumerId,
-      name: consumer.name,
-      disconStatus: consumer.disconStatus,
-      agency: consumer.agency,
-    })
+    // console.log("📥 Received consumer data:", {
+    //   consumerId: consumer.consumerId,
+    //   name: consumer.name,
+    //   disconStatus: consumer.disconStatus,
+    //   agency: consumer.agency,
+    // })
 
     const result = await updateConsumerViaAppsScript(consumer)
-    console.log("📤 Update result:", result)
-    console.log("📡 Apps Script raw response:", result);
+    // console.log("📤 Update result:", result)
+    // console.log("📡 Apps Script raw response:", result);
 
 
     if (result.success) {
