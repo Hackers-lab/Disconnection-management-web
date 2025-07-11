@@ -90,7 +90,7 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
       }
     } catch (error) {
       console.error("Error updating consumer:", error)
-      alert("Failed to update consumer. Please try again.")
+      
     } finally {
       setSaving(false)
     }

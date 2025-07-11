@@ -21,6 +21,7 @@ export async function POST(request: NextRequest) {
 
     if (result.success) {
       return NextResponse.json(result, { status: 200 })
+      alert("Disconnection status updated.")
     } else {
       return NextResponse.json(result, { status: 500 })
     }

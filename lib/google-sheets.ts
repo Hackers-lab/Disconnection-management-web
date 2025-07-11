@@ -165,7 +165,7 @@ export async function fetchConsumerData(): Promise<ConsumerData[]> {
       columnIndices[key] = findColumnIndex(headers, searchTerms)
     })
 
-    console.log("Column indices:", columnIndices)
+    // console.log("Column indices:", columnIndices)
 
     // Process data rows
     for (let i = 1; i < lines.length; i++) {

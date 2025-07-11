@@ -7,8 +7,8 @@ const APPS_SCRIPT_URL = process.env.GOOGLE_APPS_SCRIPT_URL || "https://script.go
 
 export async function updateConsumerViaAppsScript(consumer: ConsumerData) {
   try {
-    console.log("🔄 Updating consumer via Apps Script:", consumer.consumerId)
-    console.log("📡 Apps Script URL:", APPS_SCRIPT_URL ? "Configured" : "Not configured")
+    // console.log("🔄 Updating consumer via Apps Script:", consumer.consumerId)
+    // console.log("📡 Apps Script URL:", APPS_SCRIPT_URL ? "Configured" : "Not configured")
 
     if (!APPS_SCRIPT_URL) {
       console.log("⚠️ Apps Script URL not configured, using mock update")
@@ -27,7 +27,7 @@ export async function updateConsumerViaAppsScript(consumer: ConsumerData) {
       agency: consumer.agency,
     }
 
-    console.log("📤 Sending payload:", payload)
+    // console.log("📤 Sending payload:", payload)
 
     const response = await fetch(APPS_SCRIPT_URL, {
       method: "POST",
@@ -37,14 +37,14 @@ export async function updateConsumerViaAppsScript(consumer: ConsumerData) {
       body: JSON.stringify(payload),
     })
 
-    console.log("📡 Apps Script response status:", response.status)
+    // console.log("📡 Apps Script response status:", response.status)
 
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`)
     }
 
     const result = await response.json()
-    console.log("📡 Apps Script response new:", result)
+    // console.log("📡 Apps Script response new:", result)
 
     if (result.success) {
       return { success: true, message: "Consumer updated successfully in Google Sheets" }
