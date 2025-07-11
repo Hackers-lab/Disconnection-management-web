@@ -58,7 +58,7 @@ export function ConsumerList({
   const [currentPage, setCurrentPage] = useState(1)
   const [osdRange, setOsdRange] = useState([0, 50000])
   const [maxOsdValue, setMaxOsdValue] = useState(50000)
-  const [showFilters, setShowFilters] = useState(userRole === "admin")
+  const [showFilters, setShowFilters] = useState(userRole === "test")
   const [sortByOSD, setSortByOSD] = useState<SortOrder>("none")
   const [filters, setFilters] = useState({
     agency: "All Agencies",
@@ -390,7 +390,7 @@ export function ConsumerList({
           </div>
 
           {/* Filter Button for Non-Admin */}
-          {userRole !== "admin" && (
+          {userRole !== "test" && (
             <Button
               variant="outline"
               onClick={() => setShowFilters(!showFilters)}
