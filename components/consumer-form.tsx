@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useState } from "react"
+import { useState, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -25,6 +25,8 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
     image: null as File | null,
     imageUrl: "",
   })
+  const [cameraActive, setCameraActive] = useState(false);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
 
@@ -101,24 +103,43 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
     }
   }
 
+  // const handleCameraCapture = async () => {
+  //   try {
+  //     const stream = await navigator.mediaDevices.getUserMedia({
+  //       video: { facingMode: "environment" },
+  //     })
+
+  //     const video = document.createElement("video")
+  //     video.srcObject = stream
+  //     video.play()
+
+  //     alert("Camera functionality would open here. In a real app, this would capture and upload the image.")
+
+  //     stream.getTracks().forEach((track) => track.stop())
+  //   } catch (error) {
+  //     console.error("Camera access failed:", error)
+  //     alert("Camera access denied or not available")
+  //   }
+  // }
+
   const handleCameraCapture = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "environment" },
-      })
+        video: { facingMode: "environment" }, // Use back camera on phones
+      });
 
-      const video = document.createElement("video")
-      video.srcObject = stream
-      video.play()
-
-      alert("Camera functionality would open here. In a real app, this would capture and upload the image.")
-
-      stream.getTracks().forEach((track) => track.stop())
+      const videoElement = videoRef.current;
+      if (videoElement) {
+        videoElement.srcObject = stream;
+        videoElement.play();
+        setCameraActive(true);
+      }
     } catch (error) {
-      console.error("Camera access failed:", error)
-      alert("Camera access denied or not available")
+      console.error("Camera access failed:", error);
+      alert("Camera access denied or not available");
     }
-  }
+  };
+
 
   return (
     <div className="max-w-4xl mx-auto">
@@ -294,6 +315,39 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
                           <Camera className="h-4 w-4" />
                         </Button>
                       </div>
+
+                      {cameraActive && (
+                        <div className="mt-4 space-y-2">
+                          <video ref={videoRef} className="w-full max-w-sm rounded border" autoPlay playsInline />
+                          <Button
+                            type="button"
+                            onClick={async () => {
+                              const video = videoRef.current;
+                              if (video) {
+                                const canvas = document.createElement("canvas");
+                                canvas.width = video.videoWidth;
+                                canvas.height = video.videoHeight;
+                                canvas.getContext("2d")?.drawImage(video, 0, 0);
+
+                                canvas.toBlob((blob) => {
+                                  if (blob) {
+                                    const file = new File([blob], "camera-capture.jpg", { type: "image/jpeg" });
+                                    setFormData((prev) => ({ ...prev, image: file }));
+                                    handleImageUpload(file);
+                                  }
+                                }, "image/jpeg");
+
+                                const tracks = (video.srcObject as MediaStream)?.getTracks();
+                                tracks?.forEach((track) => track.stop());
+                                setCameraActive(false);
+                              }
+                            }}
+                          >
+                            Capture
+                          </Button>
+                        </div>
+                      )}
+
                       {formData.imageUrl && (
                         <div className="mt-2">
                           <img
