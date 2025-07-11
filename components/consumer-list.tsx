@@ -624,7 +624,7 @@ export function ConsumerList({
 
               <Button onClick={() => setSelectedConsumer(consumer)} className="w-full mt-4" size="sm">
                 <Edit className="h-4 w-4 mr-2" />
-                Update Details
+                Enter Disconnection
               </Button>
             </CardContent>
           </Card>
