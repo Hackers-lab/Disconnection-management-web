@@ -23,19 +23,15 @@ export interface ConsumerData {
 }
 
 const AGENCIES = [
-  "JOY GURU",
-  "ST",
-  "MATIUR",
+  "ESAR",
+  "MANSUR",
+  "MR",
   "AMS",
-  "SAMAD",
-  "CHANCHAL",
-  "ALOKE CHAKRABORTY",
+  "MH",
+  "NMC",
+  "SIGMA",
   "SA",
-  "APOLLO",
-  "ROXY",
-  "MALDA",
   "SUPREME",
-  "LAIBAH",
   "MATIN",
   "MUKTI",
 ]

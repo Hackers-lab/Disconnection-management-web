@@ -18,21 +18,17 @@ class UserStorage {
   // Default users (fallback)
   private readonly defaultUsers = [
     { id: "1", username: "admin", password: "admin123", role: "admin", agencies: [] },
-    { id: "2", username: "joyguru_user1", password: "pass123", role: "officer", agencies: ["JOY GURU"] },
-    { id: "3", username: "st_user1", password: "pass123", role: "officer", agencies: ["ST"] },
-    { id: "4", username: "matiur_user1", password: "pass123", role: "officer", agencies: ["MATIUR"] },
-    { id: "5", username: "ams_user1", password: "pass123", role: "officer", agencies: ["AMS"] },
-    { id: "6", username: "samad_user1", password: "pass123", role: "officer", agencies: ["SAMAD"] },
-    { id: "7", username: "chanchal_user1", password: "pass123", role: "officer", agencies: ["CHANCHAL"] },
-    { id: "8", username: "aloke_user1", password: "pass123", role: "officer", agencies: ["ALOKE CHAKRABORTY"] },
-    { id: "9", username: "sa_user1", password: "pass123", role: "officer", agencies: ["SA"] },
-    { id: "10", username: "apollo_user1", password: "pass123", role: "officer", agencies: ["APOLLO"] },
-    { id: "11", username: "roxy_user1", password: "pass123", role: "officer", agencies: ["ROXY"] },
-    { id: "12", username: "malda_user1", password: "pass123", role: "officer", agencies: ["MALDA"] },
-    { id: "13", username: "supreme_user1", password: "pass123", role: "officer", agencies: ["SUPREME"] },
-    { id: "14", username: "laibah_user1", password: "pass123", role: "officer", agencies: ["LAIBAH"] },
-    { id: "15", username: "matin_user1", password: "pass123", role: "officer", agencies: ["MATIN"] },
-    { id: "16", username: "mukti_user1", password: "pass123", role: "officer", agencies: ["MUKTI"] },
+    { id: "2", username: "esar_chanchal", password: "esar@123", role: "officer", agencies: ["ESAR"] },
+    { id: "3", username: "mansur_chanchal", password: "mansur@123", role: "officer", agencies: ["MANSUR"] },
+    { id: "4", username: "mr_chanchal", password: "mr@123", role: "officer", agencies: ["MR"] },
+    { id: "5", username: "ams_chanchal", password: "ams@123", role: "officer", agencies: ["AMS"] },
+    { id: "6", username: "mh_chanchal", password: "mh@123", role: "officer", agencies: ["MH"] },
+    { id: "7", username: "nmc_chanchal", password: "nmc@123", role: "officer", agencies: ["NMC"] },
+    { id: "8", username: "sigma_chanchal", password: "sigma@123", role: "officer", agencies: ["SIGMA"] },
+    { id: "9", username: "sa_chanchal", password: "sa@123", role: "officer", agencies: ["SA"] },
+    { id: "10", username: "supreme_chanchal", password: "supreme@123", role: "officer", agencies: ["SUPREME"] },
+    { id: "11", username: "matin_chanchal", password: "matin@123", role: "officer", agencies: ["MATIN"] },
+    { id: "12", username: "mukti_chanchal", password: "mukti@123", role: "officer", agencies: ["MUKTI"] },
   ]
 
   public static getInstance(): UserStorage {

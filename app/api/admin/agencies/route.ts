@@ -3,21 +3,17 @@ import { verifySession } from "@/lib/session"
 
 // Mock agency storage - in production, use a database
 const agencies = [
-  { id: "1", name: "JOY GURU", description: "Joy Guru Agency", isActive: true },
-  { id: "2", name: "ST", description: "ST Agency", isActive: true },
-  { id: "3", name: "MATIUR", description: "Matiur Agency", isActive: true },
+  { id: "1", name: "ESAR", description: "ESAR Agency", isActive: true },
+  { id: "2", name: "MANSUR", description: "MANSUR Agency", isActive: true },
+  { id: "3", name: "MR", description: "MR Agency", isActive: true },
   { id: "4", name: "AMS", description: "AMS Agency", isActive: true },
-  { id: "5", name: "SAMAD", description: "Samad Agency", isActive: true },
-  { id: "6", name: "CHANCHAL", description: "Chanchal Agency", isActive: true },
-  { id: "7", name: "ALOKE CHAKRABORTY", description: "Aloke Chakraborty Agency", isActive: true },
+  { id: "5", name: "MH", description: "MH Agency", isActive: true },
+  { id: "6", name: "NMC", description: "NMC Agency", isActive: true },
+  { id: "7", name: "SIGMA", description: "SIGMA Agency", isActive: true },
   { id: "8", name: "SA", description: "SA Agency", isActive: true },
-  { id: "9", name: "APOLLO", description: "Apollo Agency", isActive: true },
-  { id: "10", name: "ROXY", description: "Roxy Agency", isActive: true },
-  { id: "11", name: "MALDA", description: "Malda Agency", isActive: true },
-  { id: "12", name: "SUPREME", description: "Supreme Agency", isActive: true },
-  { id: "13", name: "LAIBAH", description: "Laibah Agency", isActive: true },
-  { id: "14", name: "MATIN", description: "Matin Agency", isActive: true },
-  { id: "15", name: "MUKTI", description: "Mukti Agency", isActive: true },
+  { id: "9", name: "SUPREME", description: "Supreme Agency", isActive: true },
+  { id: "10", name: "MATIN", description: "Matin Agency", isActive: true },
+  { id: "11", name: "MUKTI", description: "Mukti Agency", isActive: true },
 ]
 
 // GET - List all agencies

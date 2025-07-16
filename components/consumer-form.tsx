@@ -237,11 +237,40 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
                         </Button>
                         <Button
                           type="button"
+                          variant={formData.disconStatus === "bill dispute" ? "default" : "outline"}
+                          className={`flex-1 ${
+                            formData.disconStatus === "bill dispute"
+                              ? "bg-yellow-600 hover:bg-yellow-700 text-white"
+                              : "border-yellow-600 text-yellow-600 hover:bg-yellow-50"
+                          }`}
+                          onClick={() => handleStatusUpdate("bill dispute")}
+                        >
+                          <Clock className="h-4 w-4 mr-2" />
+                          BILL DISPUTE
+                        </Button>
+
+                      </div>
+                      <div className="flex space-x-4">
+                                                <Button
+                          type="button"
+                          variant={formData.disconStatus === "office team" ? "default" : "outline"}
+                          className={`flex-1 ${
+                            formData.disconStatus === "office team"
+                              ? "bg-purple-600 hover:bg-purple-700 text-white"
+                              : "border-purple-600 text-purple-600 hover:bg-purple-50"
+                          }`}
+                          onClick={() => handleStatusUpdate("office team")}
+                        >
+                          <Clock className="h-4 w-4 mr-2" />
+                          OFFICE TEAM
+                        </Button>
+                        <Button
+                          type="button"
                           variant={formData.disconStatus === "pending" ? "default" : "outline"}
                           className={`flex-1 ${
                             formData.disconStatus === "pending"
-                              ? "bg-yellow-600 hover:bg-yellow-700 text-white"
-                              : "border-yellow-600 text-yellow-600 hover:bg-yellow-50"
+                              ? "bg-orange-600 hover:bg-orange-700 text-white"
+                              : "border-orange-600 text-orange-600 hover:bg-orange-50"
                           }`}
                           onClick={() => handleStatusUpdate("pending")}
                         >
