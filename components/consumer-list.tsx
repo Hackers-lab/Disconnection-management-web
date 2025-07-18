@@ -582,7 +582,7 @@ export function ConsumerList({
               {consumer.mobileNumber && (
                 <a href={`tel:${consumer.mobileNumber}`} className="flex items-center space-x-2 hover:underline">
                   <Phone className="h-4 w-4 text-gray-400" />
-                  <p className="text-sm text-gray-600">{consumer.mobileNumber}</p>
+                  <p className="text-sm text-blue-600">{consumer.mobileNumber}</p>
                 </a>
               )}
               {/*{consumer.mobileNumber && (
