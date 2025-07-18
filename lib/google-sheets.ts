@@ -156,7 +156,7 @@ export async function fetchConsumerData(): Promise<ConsumerData[]> {
       longitude: ["longitude", "lng", "long"],
       agency: ["agency"],
       reading: ["reading"],
-      imageId: ["image"],
+      imageUrl: ["image"],
 
     }
 
