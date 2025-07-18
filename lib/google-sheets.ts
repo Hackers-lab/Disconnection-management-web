@@ -21,7 +21,7 @@ export interface ConsumerData {
   lastUpdated?: string
   notes?: string
   reading?: string
-  imageId?: string
+  imageUrl?: string
 }
 
 const AGENCIES = [

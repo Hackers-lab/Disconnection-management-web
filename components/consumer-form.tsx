@@ -25,7 +25,7 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
     agency: consumer.agency || "",
     image: null as File | null,
     reading: consumer.reading || "",
-    imageUrl: "", // Use imageId as the identifier for the uploaded image
+    imageUrl: consumer.imageUrl, // Use imageId as the identifier for the uploaded image
   })  
   const [cameraActive, setCameraActive] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -75,7 +75,7 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
       agency: formData.agency, // Allow agency update for admin
       notes: formData.notes,
       reading: formData.reading,
-      imageId: formData.imageUrl, // Use imageUrl as imageId
+      imageUrl: formData.imageUrl, // Use imageUrl as imageId
       lastUpdated: new Date().toISOString().split("T")[0],
     }
 

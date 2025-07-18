@@ -27,7 +27,7 @@ export async function updateConsumerViaAppsScript(consumer: ConsumerData) {
       notes: consumer.notes || "",
       reading: consumer.reading || "",
       agency: consumer.agency,
-      image: consumer.imageId || "", // Assuming imageId is the identifier for the uploaded image
+      image: consumer.imageUrl || "", // Assuming imageId is the identifier for the uploaded image
     }
 
     console.log("📤 Sending payload:", payload)
