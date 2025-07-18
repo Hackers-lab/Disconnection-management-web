@@ -1,5 +1,6 @@
 "use server"
 
+import { read } from "fs"
 import type { ConsumerData } from "./google-sheets"
 
 // Replace with your Google Apps Script Web App URL
@@ -24,10 +25,12 @@ export async function updateConsumerViaAppsScript(consumer: ConsumerData) {
       mobileNumber: consumer.mobileNumber,
       d2NetOS: consumer.d2NetOS,
       notes: consumer.notes || "",
+      reading: consumer.reading || "",
       agency: consumer.agency,
+      image: consumer.imageId || "", // Assuming imageId is the identifier for the uploaded image
     }
 
-    // console.log("📤 Sending payload:", payload)
+    console.log("📤 Sending payload:", payload)
 
     const response = await fetch(APPS_SCRIPT_URL, {
       method: "POST",

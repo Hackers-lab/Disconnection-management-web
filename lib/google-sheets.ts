@@ -20,6 +20,8 @@ export interface ConsumerData {
   agency?: string
   lastUpdated?: string
   notes?: string
+  reading?: string
+  imageId?: string
 }
 
 const AGENCIES = [
@@ -153,6 +155,9 @@ export async function fetchConsumerData(): Promise<ConsumerData[]> {
       latitude: ["latitude", "lat"],
       longitude: ["longitude", "lng", "long"],
       agency: ["agency"],
+      reading: ["reading"],
+      imageId: ["image"],
+
     }
 
     // Find column indices

@@ -61,7 +61,9 @@ export async function updateConsumerInGoogleSheet(consumer: ConsumerData) {
       "Mobile Number": consumer.mobileNumber,
       "D2 Net O/S": consumer.d2NetOS,
       "Notes": consumer.notes || "",
+      "Reading": consumer.reading || "",
       "Agency": consumer.agency,
+      "Image": consumer.imageId || "", // Assuming imageId is the identifier for the uploaded image
     }
 
     Object.entries(columnUpdates).forEach(([columnName, value]) => {
