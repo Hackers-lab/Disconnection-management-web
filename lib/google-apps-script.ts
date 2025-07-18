@@ -40,14 +40,14 @@ export async function updateConsumerViaAppsScript(consumer: ConsumerData) {
       body: JSON.stringify(payload),
     })
 
-    // console.log("📡 Apps Script response status:", response.status)
+    console.log("📡 Apps Script response status:", response.status)
 
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`)
     }
 
     const result = await response.json()
-    // console.log("📡 Apps Script response new:", result)
+    console.log("📡 Apps Script response new:", result)
 
     if (result.success) {
       return { success: true, message: "Consumer updated successfully in Google Sheets" }
