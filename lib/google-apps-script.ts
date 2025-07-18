@@ -4,7 +4,7 @@ import { read } from "fs"
 import type { ConsumerData } from "./google-sheets"
 
 // Replace with your Google Apps Script Web App URL
-const APPS_SCRIPT_URL = process.env.GOOGLE_APPS_SCRIPT_URL || "https://script.google.com/macros/s/AKfycbwxhNyJUEzDzzrHxHz-uL0ZipR6S4URE_QIRvbTWUZyDPTWOiIVNWcysrIiJA9rEU_m/exec"
+const APPS_SCRIPT_URL = process.env.GOOGLE_APPS_SCRIPT_URL || "https://script.google.com/macros/s/AKfycbzkKVGD3z6BOSfMGg4hD8iWywM9R-C7RmBVJcfgyZOgMMkUfobzsq1IWWNT4UuLJT-w/exec"
 
 export async function updateConsumerViaAppsScript(consumer: ConsumerData) {
   try {
