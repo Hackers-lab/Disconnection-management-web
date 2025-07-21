@@ -2,7 +2,7 @@
 
 import { Button } from "@/components/ui/button"
 import { logout } from "@/app/actions/auth"
-import { Power, User, Settings } from "lucide-react"
+import { Power, User, Settings, Download } from "lucide-react"
 
 interface HeaderProps {
   userRole: string
@@ -10,6 +10,16 @@ interface HeaderProps {
 }
 
 export function Header({ userRole, onAdminClick }: HeaderProps) {
+  const handleDownload = () => {
+    const url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTUdnZVO_1jP6rtHen6zsTM4ff3YEo_xPe41HvMq_q3yOtwuaoTNz4AEOtuabLbmw2BzYnJh8fCIF2Y/pub?output=csv";
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', 'disconnection_data.csv');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
     <header className="bg-white shadow">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -23,10 +33,22 @@ export function Header({ userRole, onAdminClick }: HeaderProps) {
               <User className="h-4 w-4" />
               <span className="capitalize">{userRole}</span>
             </div>
-            {userRole === "admin" && onAdminClick && (
-              <Button variant="ghost" size="sm" onClick={onAdminClick} title="Admin Panel">
-                <Settings className="h-4 w-4" />
-              </Button>
+            {userRole === "admin" && (
+              <>
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={handleDownload}
+                  title="Download Data"
+                >
+                  <Download className="h-4 w-4" />
+                </Button>
+                {onAdminClick && (
+                  <Button variant="ghost" size="sm" onClick={onAdminClick} title="Admin Panel">
+                    <Settings className="h-4 w-4" />
+                  </Button>
+                )}
+              </>
             )}
             <form action={logout}>
               <Button variant="outline" size="sm" type="submit">
