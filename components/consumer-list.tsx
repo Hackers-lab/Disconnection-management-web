@@ -14,7 +14,7 @@ import {
   MapPin,
   Phone,
   Calendar,
-  DollarSign,
+  IndianRupee, 
   Filter,
   X,
   AlertCircle,
@@ -38,7 +38,7 @@ interface ConsumerListProps {
   onCloseAdminPanel: () => void
 }
 
-const ITEMS_PER_PAGE = 15
+const ITEMS_PER_PAGE = 16
 
 type SortOrder = "none" | "asc" | "desc"
 
@@ -528,9 +528,9 @@ export function ConsumerList({
                   <SelectItem value="All Status">All Status</SelectItem>
                   <SelectItem value="connected">Connected</SelectItem>
                   <SelectItem value="disconnected">Disconnected</SelectItem>
+                  <SelectItem value="office team">Office Team</SelectItem>
+                  <SelectItem value="bill dispute">Bill Dispute</SelectItem>
                   <SelectItem value="pending">Pending</SelectItem>
-                  <SelectItem value="Deemed Disconnection">Deemed Disconnection</SelectItem>
-                  <SelectItem value="Temprory Disconnected">Temprory Disconnected</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -593,7 +593,7 @@ export function ConsumerList({
               )}*/}
 
               <div className="flex items-center space-x-2">
-                <DollarSign className="h-4 w-4 text-gray-400" />
+                <IndianRupee className="h-4 w-4 text-gray-400" />
                 <div className="flex-1">
                   <p className="text-sm font-medium text-red-600">
                     ₹{Number.parseFloat(consumer.d2NetOS || "0").toLocaleString()}
