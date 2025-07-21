@@ -14,6 +14,7 @@ const agencies = [
   { id: "9", name: "SUPREME", description: "Supreme Agency", isActive: true },
   { id: "10", name: "MATIN", description: "Matin Agency", isActive: true },
   { id: "11", name: "MUKTI", description: "Mukti Agency", isActive: true },
+  { id: "12", name: "KUSHIDA", description: "Kushida Agency", isActive: true },
 ]
 
 // GET - List all agencies

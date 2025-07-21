@@ -124,7 +124,7 @@ export function ConsumerList({
           filteredData = data.filter((consumer) => {
             const consumerAgency = (consumer.agency || "").toUpperCase()
             const userAgenciesUpper = userAgencies.map((a) => a.toUpperCase())
-            return userAgenciesUpper.includes(consumerAgency) && consumer.disconStatus !== "disconnected"
+            return userAgenciesUpper.includes(consumerAgency) && consumer.disconStatus !== "&"
           })
         }
 
@@ -239,7 +239,7 @@ export function ConsumerList({
         .filter(
           (consumer) =>
             // Remove disconnected consumers from agency users' view
-            userRole === "admin" || consumer.disconStatus !== "disconnected",
+            userRole === "admin" || consumer.disconStatus !== "&",
         ),
     )
     setSelectedConsumer(null)
@@ -627,8 +627,20 @@ export function ConsumerList({
                 </div>
               )}
 
-              <Button onClick={() => setSelectedConsumer(consumer)} className="w-full mt-4" size="sm">
-                <Edit className="h-4 w-4 mr-2" />
+              <Button onClick={() => setSelectedConsumer(consumer)} 
+              className={`w-full mt-4 ${
+                  (consumer.disconStatus.toLowerCase() === "disconnected" && userRole !== "admin") 
+                    ? "bg-gray-100 text-gray-500 hover:bg-gray-100 cursor-not-allowed" 
+                    : ""
+                }`}
+                size="sm"
+                disabled={consumer.disconStatus.toLowerCase() === "disconnected" && userRole !== "admin"}
+              >
+                <Edit className={`h-4 w-4 mr-2 ${
+                    (consumer.disconStatus.toLowerCase() === "disconnected" && userRole !== "admin") 
+                      ? "text-gray-400" 
+                      : ""
+                  }`} />
                 Enter Disconnection
               </Button>
             </CardContent>

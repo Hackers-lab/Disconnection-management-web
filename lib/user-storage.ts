@@ -29,6 +29,7 @@ class UserStorage {
     { id: "10", username: "supreme_chanchal", password: "supreme@123", role: "officer", agencies: ["SUPREME"] },
     { id: "11", username: "matin_chanchal", password: "matin@123", role: "officer", agencies: ["MATIN"] },
     { id: "12", username: "mukti_chanchal", password: "mukti@123", role: "officer", agencies: ["MUKTI"] },
+    { id: "13", username: "test_kushida", password: "test@123", role: "officer", agencies: ["KUSHIDA"] },
   ]
 
   public static getInstance(): UserStorage {
