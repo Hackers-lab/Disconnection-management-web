@@ -90,7 +90,7 @@ export function DashboardStats({ consumers, loading = false }: DashboardStatsPro
     stats.totalOutstanding += outstanding
 
     switch (status) {
-      case "paid":
+      case "connected":
         stats.connected++
         agencyReport[agency].paid++
         agencyReport[agency].paidAmount += outstanding
