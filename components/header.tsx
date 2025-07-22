@@ -26,7 +26,7 @@ export function Header({ userRole, onAdminClick }: HeaderProps) {
         <div className="flex justify-between items-center py-4">
           <div className="flex items-center space-x-2">
             <Power className="h-6 w-6 text-blue-600" />
-            <span className="text-xl font-semibold text-gray-900">Disconnection Management</span>
+            <span className="text-xl font-semibold text-gray-900">Report</span>
           </div>
           <div className="flex items-center space-x-4">
             <div className="flex items-center space-x-2 text-sm text-gray-600">
