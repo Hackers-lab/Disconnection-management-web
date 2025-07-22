@@ -92,6 +92,8 @@ export function DashboardStats({ consumers, loading = false }: DashboardStatsPro
     switch (status) {
       case "connected":
         stats.connected++
+        break
+      case "paid":
         agencyReport[agency].paid++
         agencyReport[agency].paidAmount += outstanding
         break
