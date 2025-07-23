@@ -65,7 +65,7 @@ export function ConsumerList({
     address: "",
     name: "",
     consumerId: "",
-    status: "All Status",
+    status: userRole === "admin" ? "All Status" : "connected",
   })
   const [excludeFilters, setExcludeFilters] = useState({
     excludeDeemedDisconnection: false,

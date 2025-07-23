@@ -92,6 +92,8 @@ export function DashboardStats({ consumers, loading = false }: DashboardStatsPro
     switch (status) {
       case "connected":
         stats.connected++
+        agencyReport[agency].notAttended++
+        agencyReport[agency].notAttendedAmount += outstanding
         break
       case "paid":
         agencyReport[agency].paid++
@@ -239,7 +241,7 @@ export function DashboardStats({ consumers, loading = false }: DashboardStatsPro
                 <TableRow className="border-b h-1">
                   <TableHead className="w-[100px] border-r" rowSpan={2}>Agency</TableHead>
                   <TableHead className="text-center border-r px-0.1" colSpan={2}>Total</TableHead>
-                  <TableHead classname="text-center border-r px-0.1" colSpan={2}>Disconnected</TableHead>
+                  <TableHead className="text-center border-r px-0.1" colSpan={2}>Disconnected</TableHead>
                   <TableHead className="text-center border-r px-0.1" colSpan={2}>Paid</TableHead>
                   <TableHead className="text-center border-r px-0.1" colSpan={2}>Office Team</TableHead>
                   <TableHead className="text-center border-r px-0.1" colSpan={2}>Bill Dispute</TableHead>
