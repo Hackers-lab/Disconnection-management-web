@@ -148,6 +148,8 @@ export function ConsumerList({
       consumer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       consumer.consumerId.toLowerCase().includes(searchTerm.toLowerCase()) ||
       consumer.address.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      consumer.device.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      consumer.mobileNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (consumer.agency || "").toLowerCase().includes(searchTerm.toLowerCase())
 
     // Agency filter (case-insensitive)
@@ -362,7 +364,7 @@ export function ConsumerList({
           </Button>
 
           {/* Exclude Checkboxes - Hide on small mobile */}
-          <div className="hidden sm:flex items-center space-x-4">
+          {/* <div className="hidden sm:flex items-center space-x-4">
             <div className="flex items-center space-x-2">
               <Checkbox
                 id="excludeDeemedDisconnection"
@@ -387,7 +389,7 @@ export function ConsumerList({
                 Exclude Temp
               </label>
             </div>
-          </div>
+          </div> */}
 
           {/* Filter Button for Non-Admin */}
           {userRole !== "test" && (
@@ -416,7 +418,7 @@ export function ConsumerList({
         </div>
 
         {/* Mobile Exclude Checkboxes */}
-        <div className="sm:hidden flex flex-col space-y-2 mb-4">
+        {/* <div className="sm:hidden flex flex-col space-y-2 mb-4">
           <div className="flex items-center space-x-2">
             <Checkbox
               id="excludeDeemedDisconnection-mobile"
@@ -441,7 +443,7 @@ export function ConsumerList({
               Exclude Temprory Disconnected
             </label>
           </div>
-        </div>
+        </div> */}
 
         {/* OSD Range Slider - Always Visible */}
         <div className="mb-4 p-4 bg-gray-50 rounded-lg">
@@ -531,6 +533,8 @@ export function ConsumerList({
                   <SelectItem value="office team">Office Team</SelectItem>
                   <SelectItem value="bill dispute">Bill Dispute</SelectItem>
                   <SelectItem value="pending">Pending</SelectItem>
+                  <SelectItem value="PAID">Paid</SelectItem>
+                  <SelectItem value="agency paid">Agency Paid</SelectItem>
                 </SelectContent>
               </Select>
             </div>

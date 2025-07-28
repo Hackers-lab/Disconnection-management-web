@@ -269,16 +269,16 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
                         </Button>
                         <Button
                           type="button"
-                          variant={formData.disconStatus === "pending" ? "default" : "outline"}
+                          variant={formData.disconStatus === "agency paid" ? "default" : "outline"}
                           className={`flex-1 ${
-                            formData.disconStatus === "pending"
+                            formData.disconStatus === "agency paid"
                               ? "bg-orange-600 hover:bg-orange-700 text-white"
                               : "border-orange-600 text-orange-600 hover:bg-orange-50"
                           }`}
-                          onClick={() => handleStatusUpdate("pending")}
+                          onClick={() => handleStatusUpdate("agency paid")}
                         >
                           <Clock className="h-4 w-4 mr-2" />
-                          PENDING
+                          PAID
                         </Button>
                       </div>
                       <p className="text-sm text-gray-600">

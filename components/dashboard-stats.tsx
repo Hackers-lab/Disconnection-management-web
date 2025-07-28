@@ -26,6 +26,7 @@ interface Stats {
   billDispute: number
   officeTeam: number
   totalOutstanding: number
+  paid: number
 }
 
 interface AgencyReport {
@@ -57,6 +58,7 @@ export function DashboardStats({ consumers, loading = false }: DashboardStatsPro
     billDispute: 0,
     officeTeam: 0,
     totalOutstanding: 0,
+    paid: 0,
   }
 
   const agencyReport: Record<string, AgencyReport> = {}
@@ -95,7 +97,9 @@ export function DashboardStats({ consumers, loading = false }: DashboardStatsPro
         agencyReport[agency].notAttended++
         agencyReport[agency].notAttendedAmount += outstanding
         break
+      case "agency paid":
       case "paid":
+        stats.paid++
         agencyReport[agency].paid++
         agencyReport[agency].paidAmount += outstanding
         break
@@ -182,6 +186,13 @@ export function DashboardStats({ consumers, loading = false }: DashboardStatsPro
       bgColor: "bg-red-50",
     },
     {
+      title: "Paid",
+      value: stats.paid.toLocaleString(),
+      icon: CheckCircle,
+      color: "text-red-600",
+      bgColor: "bg-red-50",
+    },
+    {
       title: "Office Team",
       value: stats.pending.toLocaleString(),
       icon: Clock,
@@ -216,7 +227,7 @@ export function DashboardStats({ consumers, loading = false }: DashboardStatsPro
 
       {isSliderOpen && (
         <div className="space-y-6">
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3 mb-4">
             {statCards.map((stat, index) => (
               <Card key={index} className="hover:shadow-md transition-shadow">
                 <CardContent className="p-3">
