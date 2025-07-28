@@ -175,8 +175,8 @@ export function DashboardStats({ consumers, loading = false }: DashboardStatsPro
       title: "Connected",
       value: stats.connected.toLocaleString(),
       icon: CheckCircle,
-      color: "text-green-600",
-      bgColor: "bg-green-50",
+      color: "text-red-600",
+      bgColor: "bg-red-50",
     },
     {
       title: "Disconnected",
@@ -189,8 +189,8 @@ export function DashboardStats({ consumers, loading = false }: DashboardStatsPro
       title: "Paid",
       value: stats.paid.toLocaleString(),
       icon: CheckCircle,
-      color: "text-red-600",
-      bgColor: "bg-red-50",
+      color: "text-green-600",
+      bgColor: "bg-green-50",
     },
     {
       title: "Office Team",

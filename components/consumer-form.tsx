@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
 import { ArrowLeft, Upload, Camera, MapPin, Power, Clock } from "lucide-react"
+import imageCompression from "browser-image-compression";
 import type { ConsumerData } from "@/lib/google-sheets"
 
 interface ConsumerFormProps {
@@ -99,12 +100,35 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
     }
   }
 
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    if (file) {
-      setFormData((prev) => ({ ...prev, image: file }))
-      handleImageUpload(file)
-    }
+    // if (file) {
+    //   setFormData((prev) => ({ ...prev, image: file }))
+    //   handleImageUpload(file)
+    // }
+    if (!file) return;
+
+      try {
+        // Compression options (adjust as needed)
+        const options = {
+          maxSizeMB: 0.1,       // Target 100KB
+          maxWidthOrHeight: 800, // Reduce dimensions
+          useWebWorker: true,   // Faster compression
+        };
+
+        // Compress the image
+        const compressedFile = await imageCompression(file, options);
+        
+        // Update state and upload
+        setFormData((prev) => ({ ...prev, image: compressedFile }));
+        await handleImageUpload(compressedFile);
+
+      } catch (error) {
+        console.error("Compression failed:", error);
+        alert("Failed to compress image. Uploading original.");
+        setFormData((prev) => ({ ...prev, image: file }));
+        await handleImageUpload(file);
+      }
   }
 
   // const handleCameraCapture = async () => {
