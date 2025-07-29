@@ -29,7 +29,12 @@ class UserStorage {
     { id: "10", username: "supreme_chanchal", password: "supreme@123", role: "officer", agencies: ["SUPREME"] },
     { id: "11", username: "matin_chanchal", password: "matin@123", role: "officer", agencies: ["MATIN"] },
     { id: "12", username: "mukti_chanchal", password: "mukti@123", role: "officer", agencies: ["MUKTI"] },
-    { id: "13", username: "test_kushida", password: "test@123", role: "officer", agencies: ["KUSHIDA"] },
+    { id: "13", username: "sm_chanchal", password: "sm@123", role: "officer", agencies: ["sm"] },
+    { id: "14", username: "je_chanchal", password: "je@123", role: "officer", agencies: ["je"] },
+    { id: "15", username: "oe_hasib", password: "hasib@123", role: "officer", agencies: ["hasib"] },
+    { id: "16", username: "oe_sajid", password: "sajid@123", role: "officer", agencies: ["sajid"] },
+    { id: "17", username: "oe_abhik", password: "abhik@123", role: "officer", agencies: ["abhik"] },
+    { id: "18", username: "tsh_bapi", password: "bapi@123", role: "officer", agencies: ["bapi"] },
   ]
 
   public static getInstance(): UserStorage {

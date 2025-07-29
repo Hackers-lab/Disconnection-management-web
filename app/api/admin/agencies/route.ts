@@ -15,6 +15,12 @@ const agencies = [
   { id: "10", name: "MATIN", description: "Matin Agency", isActive: true },
   { id: "11", name: "MUKTI", description: "Mukti Agency", isActive: true },
   { id: "12", name: "KUSHIDA", description: "Kushida Agency", isActive: true },
+  { id: "13", name: "SM", description: "Station Manager", isActive: true },
+  { id: "14", name: "JE", description: "Juniour Engg.", isActive: true },
+  { id: "15", name: "HASIB", description: "Office Executive", isActive: true },
+  { id: "16", name: "SAJID", description: "Office Executive", isActive: true },
+  { id: "17", name: "ABHIK", description: "Office Executive", isActive: true },
+  { id: "18", name: "BAPI", description: "TSH", isActive: true },
 ]
 
 // GET - List all agencies
