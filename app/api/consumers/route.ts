@@ -2,12 +2,12 @@ import { NextResponse } from "next/server"
 import { fetchConsumerData } from "@/lib/google-sheets"
 
 export async function GET() {
-  console.log("🚀 API /consumers called")
+  //console.log("🚀 API /consumers called")
 
   try {
-    console.log("📡 Starting fetchConsumerData...")
+    //console.log("📡 Starting fetchConsumerData...")
     const data = await fetchConsumerData()
-    console.log(`✅ API: Successfully fetched ${data.length} consumers`)
+    //console.log(`✅ API: Successfully fetched ${data.length} consumers`)
 
     // Add some sample data to ensure the API works
     if (data.length === 0) {

@@ -4,7 +4,7 @@ import type { ConsumerData } from "@/lib/google-sheets"
 
 export async function POST(request: NextRequest) {
   try {
-    console.log("🔄 API /consumers/update called")
+    //console.log("🔄 API /consumers/update called")
 
     const consumer: ConsumerData = await request.json()
     // console.log("📥 Received consumer data:", {

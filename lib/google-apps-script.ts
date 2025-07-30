@@ -12,7 +12,7 @@ export async function updateConsumerViaAppsScript(consumer: ConsumerData) {
     // console.log("📡 Apps Script URL:", APPS_SCRIPT_URL ? "Configured" : "Not configured")
 
     if (!APPS_SCRIPT_URL) {
-      console.log("⚠️ Apps Script URL not configured, using mock update")
+      //console.log("⚠️ Apps Script URL not configured, using mock update")
       // Simulate successful update for testing
       await new Promise((resolve) => setTimeout(resolve, 1000))
       return { success: true, message: "Consumer updated successfully (mock - Apps Script URL not configured)" }
@@ -30,7 +30,7 @@ export async function updateConsumerViaAppsScript(consumer: ConsumerData) {
       image: consumer.imageUrl || "", // Assuming imageId is the identifier for the uploaded image
     }
 
-    console.log("📤 Sending payload:", payload)
+    //console.log("📤 Sending payload:", payload)
 
     const response = await fetch(APPS_SCRIPT_URL, {
       method: "POST",
@@ -47,7 +47,7 @@ export async function updateConsumerViaAppsScript(consumer: ConsumerData) {
     }
 
     const result = await response.json()
-    console.log("📡 Apps Script response new:", result)
+    //console.log("📡 Apps Script response new:", result)
 
     if (result.success) {
       return { success: true, message: "Consumer updated successfully in Google Sheets" }

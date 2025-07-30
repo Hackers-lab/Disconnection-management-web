@@ -21,6 +21,7 @@ const agencies = [
   { id: "16", name: "SAJID", description: "Office Executive", isActive: true },
   { id: "17", name: "ABHIK", description: "Office Executive", isActive: true },
   { id: "18", name: "BAPI", description: "TSH", isActive: true },
+  { id: "19", name: "SPOT", description: "SUPERVISOR", isActive: true },
 ]
 
 // GET - List all agencies

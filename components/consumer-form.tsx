@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
-import { ArrowLeft, Upload, Camera, MapPin, Power, Clock } from "lucide-react"
+import { ArrowLeft, Upload, Camera, MapPin, Power, Clock, CircleX, Check } from "lucide-react"
 import imageCompression from "browser-image-compression";
 import type { ConsumerData } from "@/lib/google-sheets"
 
@@ -278,7 +278,7 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
 
                       </div>
                       <div className="flex space-x-4">
-                                                <Button
+                        <Button
                           type="button"
                           variant={formData.disconStatus === "office team" ? "default" : "outline"}
                           className={`flex-1 ${
@@ -296,13 +296,28 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
                           variant={formData.disconStatus === "agency paid" ? "default" : "outline"}
                           className={`flex-1 ${
                             formData.disconStatus === "agency paid"
-                              ? "bg-orange-600 hover:bg-orange-700 text-white"
-                              : "border-orange-600 text-orange-600 hover:bg-orange-50"
+                              ? "bg-green-600 hover:bg-green-700 text-white"
+                              : "border-green-600 text-green-600 hover:bg-green-50"
                           }`}
                           onClick={() => handleStatusUpdate("agency paid")}
                         >
-                          <Clock className="h-4 w-4 mr-2" />
+                          <Check className="h-4 w-4 mr-2" />
                           PAID
+                        </Button>
+                      </div>
+                      <div className="flex space-x-4">
+                        <Button
+                          type="button"
+                          variant={formData.disconStatus === "not found" ? "default" : "outline"}
+                          className={`flex-1 ${
+                            formData.disconStatus === "not found"
+                              ? "bg-red-600 hover:bg-red-700 text-white"
+                              : "border-red-600 text-red-600 hover:bg-red-50"
+                          }`}
+                          onClick={() => handleStatusUpdate("not found")}
+                        >
+                          <CircleX className="h-4 w-4 mr-2" />
+                          NOT FOUND
                         </Button>
                       </div>
                       <p className="text-sm text-gray-600">

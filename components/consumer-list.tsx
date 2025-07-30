@@ -78,7 +78,7 @@ export function ConsumerList({
       setError(null)
 
       try {
-        console.log("🔄 Starting to fetch consumers...")
+        //console.log("🔄 Starting to fetch consumers...")
 
         // Load consumers
         const consumersResponse = await fetch("/api/consumers", {

@@ -35,6 +35,7 @@ class UserStorage {
     { id: "16", username: "oe_sajid", password: "sajid@123", role: "officer", agencies: ["SAJID"] },
     { id: "17", username: "oe_abhik", password: "abhik@123", role: "officer", agencies: ["ABHIK"] },
     { id: "18", username: "tsh_bapi", password: "bapi@123", role: "officer", agencies: ["BAPI"] },
+    { id: "19", username: "spotbill_admin", password: "spot@123", role: "officer", agencies: ["SPOT"] },
   ]
 
   public static getInstance(): UserStorage {
@@ -46,22 +47,22 @@ class UserStorage {
 
   private async ensureDataDirectory() {
     const dataDir = path.dirname(this.USERS_FILE)
-    console.log("📁 Ensuring data directory exists:", dataDir)
+    //console.log("📁 Ensuring data directory exists:", dataDir)
 
     try {
       await fs.access(dataDir)
-      console.log("📁 Data directory already exists")
+      //console.log("📁 Data directory already exists")
     } catch {
-      console.log("📁 Creating data directory...")
+      //console.log("📁 Creating data directory...")
       await fs.mkdir(dataDir, { recursive: true })
-      console.log("📁 Created data directory:", dataDir)
+      //console.log("📁 Created data directory:", dataDir)
     }
   }
 
   private async loadUsersFromFile() {
     try {
       await this.ensureDataDirectory()
-      console.log("📂 Attempting to read users file:", this.USERS_FILE)
+      //console.log("📂 Attempting to read users file:", this.USERS_FILE)
 
       const data = await fs.readFile(this.USERS_FILE, "utf8")
       const loadedUsers = JSON.parse(data)
@@ -69,25 +70,25 @@ class UserStorage {
       // Validate loaded data
       if (Array.isArray(loadedUsers) && loadedUsers.length > 0) {
         this.users = loadedUsers
-        console.log("📂 Successfully loaded users from file:", this.users.length)
+        //console.log("📂 Successfully loaded users from file:", this.users.length)
         return true
       } else {
-        console.log("📂 File exists but contains invalid data")
+        //console.log("📂 File exists but contains invalid data")
       }
     } catch (error) {
-      console.log("📂 Could not load users file:", error.message)
+      //console.log("📂 Could not load users file:", error.message)
     }
 
     // Use default users if file doesn't exist or is invalid
-    console.log("📂 Using default users and creating file...")
+    //console.log("📂 Using default users and creating file...")
     this.users = [...this.defaultUsers]
 
     // Force create the file
     const saveResult = await this.saveUsersToFile()
     if (saveResult) {
-      console.log("📂 Successfully initialized with default users:", this.users.length)
+      //console.log("📂 Successfully initialized with default users:", this.users.length)
     } else {
-      console.error("📂 Failed to create initial users file!")
+      //console.error("📂 Failed to create initial users file!")
     }
 
     return false
@@ -98,8 +99,8 @@ class UserStorage {
       await this.ensureDataDirectory()
 
       const dataToSave = JSON.stringify(this.users, null, 2)
-      console.log("💾 Attempting to save users to:", this.USERS_FILE)
-      console.log("💾 Data size:", dataToSave.length, "characters")
+      //console.log("💾 Attempting to save users to:", this.USERS_FILE)
+      //console.log("💾 Data size:", dataToSave.length, "characters")
 
       await fs.writeFile(this.USERS_FILE, dataToSave, "utf8")
 
@@ -108,8 +109,8 @@ class UserStorage {
       const verifiedData = JSON.parse(verification)
 
       if (verifiedData.length === this.users.length) {
-        console.log("✅ Users successfully saved and verified:", this.users.length)
-        console.log("✅ File location:", this.USERS_FILE)
+        //console.log("✅ Users successfully saved and verified:", this.users.length)
+        //console.log("✅ File location:", this.USERS_FILE)
         return true
       } else {
         console.error("❌ File verification failed - user count mismatch")
@@ -125,10 +126,10 @@ class UserStorage {
 
   private async initialize() {
     if (!this.initialized) {
-      console.log("🚀 Initializing UserStorage...")
+      //console.log("🚀 Initializing UserStorage...")
       await this.loadUsersFromFile()
       this.initialized = true
-      console.log("🚀 UserStorage initialization complete")
+      //console.log("🚀 UserStorage initialization complete")
     }
   }
 
@@ -141,17 +142,17 @@ class UserStorage {
     await this.initialize()
     this.users = [...newUsers] // Create a new array
     const saved = await this.saveUsersToFile()
-    console.log("🔄 UserStorage: Users updated, count:", this.users.length, "Saved:", saved)
+    //console.log("🔄 UserStorage: Users updated, count:", this.users.length, "Saved:", saved)
   }
 
   public async findUserByCredentials(username: string, password: string) {
     await this.initialize()
-    console.log("🔍 UserStorage: Looking for user:", username)
-    console.log("🔍 UserStorage: Total users in memory:", this.users.length)
-    console.log(
-      "🔍 UserStorage: Available usernames:",
-      this.users.map((u) => u.username),
-    )
+    //console.log("🔍 UserStorage: Looking for user:", username)
+    //console.log("🔍 UserStorage: Total users in memory:", this.users.length)
+    // console.log(
+    //   "🔍 UserStorage: Available usernames:",
+    //   this.users.map((u) => u.username),
+    // )
 
     const user = this.users.find((u) => u.username === username && u.password === password)
     console.log("✅ UserStorage: User found:", !!user)

@@ -43,6 +43,7 @@ const AGENCIES = [
   "SAJID",
   "ABHIK",
   "BAPI",
+  "SPOT",
 ]
 
 // Helper function to clean and parse numeric values
