@@ -79,6 +79,7 @@ export function ConsumerList({
     name: "",
     consumerId: "",
     status: userRole === "admin" ? "All Status" : "connected",
+    baseClass: "All Classes",
   })
   const [excludeFilters, setExcludeFilters] = useState({
     excludeDeemedDisconnection: false,
@@ -169,7 +170,12 @@ export function ConsumerList({
       consumer.device.toLowerCase().includes(searchTerm.toLowerCase()) ||
       consumer.mobileNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (consumer.agency || "").toLowerCase().includes(searchTerm.toLowerCase())
+    
 
+    // Base class filter
+    const matchesBaseClass = 
+      filters.baseClass === "All Classes" || 
+      (consumer.class || "").toUpperCase() === filters.baseClass.toUpperCase()
     // Agency filter (case-insensitive)
     const matchesAgency =
       filters.agency === "All Agencies" || (consumer.agency || "").toUpperCase() === filters.agency.toUpperCase()
@@ -202,6 +208,7 @@ export function ConsumerList({
       matchesSearch &&
       matchesAgency &&
       matchesAddress &&
+      matchesBaseClass &&
       matchesName &&
       matchesConsumerId &&
       matchesStatus &&
@@ -273,6 +280,7 @@ export function ConsumerList({
       name: "",
       consumerId: "",
       status: "All Status",
+      baseClass: "All Classes",
     })
     setSearchTerm("")
     setOsdRange([0, maxOsdValue])
@@ -424,43 +432,6 @@ export function ConsumerList({
                   </div>
                 </div>
 
-                {/* <Calendar
-                  mode="range"
-                  selected={{
-                    from: dateFilter.from || undefined,
-                    to: dateFilter.to || undefined,
-                  }}
-                  onSelect={(range) => {
-                    setDateFilter({
-                      from: range?.from || null,
-                      to: range?.to || null,
-                      isActive: !!range?.from || !!range?.to,
-                    });
-                  }}
-                  numberOfMonths={1}
-                  className="rounded-md border p-2 mt-1"
-                  classNames={{
-                    months: "flex justify-center flex-col space-y-2",
-                    month: "space-y-1",
-                    caption: "flex justify-center items-center",
-                    caption_label: "text-xs font-semibold",
-                    nav: "flex items-center justify-between w-full px-1",
-                    nav_button: "h-6 w-6 p-0 rounded hover:bg-muted text-xs",
-                    table: "w-full border-collapse",
-                    head_row: "flex justify-between text-muted-foreground text-[10px]",
-                    head_cell: "w-8 text-center",
-                    row: "flex justify-between",
-                    cell: "h-7 w-7 text-center text-xs p-0 relative [&:has([aria-selected])]:bg-accent rounded-sm",
-                    day: "h-7 w-7 p-0 font-normal aria-selected:opacity-100",
-                    day_selected: "bg-blue-500 text-white rounded hover:bg-blue-600",
-                    day_range_start: "rounded-l-full bg-blue-500 text-white",
-                    day_range_end: "rounded-r-full bg-blue-500 text-white",
-                    day_outside: "opacity-30 text-gray-400",
-                    day_disabled: "opacity-30 text-gray-400",
-                    day_hidden: "invisible",
-                  }}
-                /> */}
-
                 <div className="flex justify-end pt-1">
                   <Button
                     variant="ghost"
@@ -474,6 +445,29 @@ export function ConsumerList({
               </div>
             </PopoverContent>
           </Popover>
+
+          <div className="space-y-2">
+            {/* <label className="text-sm font-medium text-gray-700">Base Class</label> */}
+            <Select
+              value={filters.baseClass}
+              onValueChange={(value) => setFilters((prev) => ({ ...prev, baseClass: value }))}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="All Classes" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="All Classes">All Classes</SelectItem>
+                <SelectItem value="A">STW</SelectItem>
+                <SelectItem value="I">IND</SelectItem>
+                <SelectItem value="C">COM</SelectItem>
+                <SelectItem value="D">DOM</SelectItem>
+                <SelectItem value="S">S</SelectItem>
+                <SelectItem value="H">H</SelectItem>
+                <SelectItem value="W">W</SelectItem>
+                {/* Add more classes as needed */}
+              </SelectContent>
+            </Select>
+          </div>
 
           {/* Sort by OSD Button */}
           <Button
@@ -526,7 +520,7 @@ export function ConsumerList({
             </Button>
           )}
 
-          {(Object.values(filters).some((f) => f !== "All Agencies" && f !== "All Status" && f !== "") ||
+          {(Object.values(filters).some((f) => f !== "All Agencies" && f !== "All Status" && f !== "All Classes" && f !== "") ||
             searchTerm ||
             osdRange[0] !== 0 ||
             osdRange[1] !== maxOsdValue ||
