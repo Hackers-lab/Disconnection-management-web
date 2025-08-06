@@ -8,12 +8,16 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Slider } from "@/components/ui/slider"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Calendar as CalendarIcon } from "lucide-react"
+import { Calendar } from "@/components/ui/calendar"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Label } from "@/components/ui/label"
+import { format } from "date-fns"
 import {
   Search,
   Edit,
   MapPin,
   Phone,
-  Calendar,
   IndianRupee, 
   Filter,
   X,
@@ -60,6 +64,15 @@ export function ConsumerList({
   const [maxOsdValue, setMaxOsdValue] = useState(50000)
   const [showFilters, setShowFilters] = useState(userRole === "test")
   const [sortByOSD, setSortByOSD] = useState<SortOrder>("none")
+  const [dateFilter, setDateFilter] = useState<{
+    from: Date | null
+    to: Date | null
+    isActive: boolean
+  }>({
+    from: null,
+    to: null,
+    isActive: false
+  })
   const [filters, setFilters] = useState({
     agency: "All Agencies",
     address: "",
@@ -143,6 +156,11 @@ export function ConsumerList({
   // Advanced filtering logic
   const filteredConsumers = consumers.filter((consumer) => {
     // Basic search term filter
+    // Date range filter
+    const matchesDateRange = !dateFilter.isActive || 
+      (consumer.disconDate && 
+        (!dateFilter.from || new Date(consumer.disconDate) >= dateFilter.from) && 
+        (!dateFilter.to || new Date(consumer.disconDate) <= dateFilter.to))
     const matchesSearch =
       !searchTerm ||
       consumer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -188,6 +206,7 @@ export function ConsumerList({
       matchesConsumerId &&
       matchesStatus &&
       matchesOsdRange &&
+      matchesDateRange &&
       excludeDeemedDisconnection &&
       excludeTemproryDisconnected
     )
@@ -262,6 +281,11 @@ export function ConsumerList({
       excludeTemproryDisconnected: false,
     })
     setSortByOSD("none")
+    setDateFilter({
+      from: null,
+      to: null,
+      isActive: false
+    })
     setCurrentPage(1)
   }
 
@@ -351,6 +375,105 @@ export function ConsumerList({
               className="pl-10"
             />
           </div>
+          {/* Date Filter Button */}
+          {/* Compact Date Filter Button */}
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                className={`flex items-center space-x-2 bg-transparent ${dateFilter.isActive ? "bg-blue-50 border-blue-300" : ""}`}
+              >
+                <CalendarIcon className="h-4 w-4" />
+                <span className="hidden sm:inline">Dates</span>
+              </Button>
+            </PopoverTrigger>
+
+            <PopoverContent className="w-[300px] p-2 rounded-lg shadow-md">
+              <div className="space-y-4 text-xs">
+                <div className="flex gap-2">
+                  <div className="space-y-1 flex-1">
+                    <label className="text-[10px] text-gray-600 font-medium">From</label>
+                    <Input
+                      type="date"
+                      value={dateFilter.from?.toISOString().split('T')[0] || ''}
+                      onChange={(e) =>
+                        setDateFilter((prev) => ({
+                          ...prev,
+                          from: e.target.value ? new Date(e.target.value) : null,
+                          isActive: true,
+                        }))
+                      }
+                      className="h-7 text-xs px-2 w-full"
+                    />
+                  </div>
+                  <div className="space-y-1 flex-1">
+                    <label className="text-[10px] text-gray-600 font-medium">To</label>
+                    <Input
+                      type="date"
+                      value={dateFilter.to?.toISOString().split('T')[0] || ''}
+                      onChange={(e) =>
+                        setDateFilter((prev) => ({
+                          ...prev,
+                          to: e.target.value ? new Date(e.target.value) : null,
+                          isActive: true,
+                        }))
+                      }
+                      className="h-7 text-xs px-2 w-full"
+                    />
+                  </div>
+                </div>
+
+                {/* <Calendar
+                  mode="range"
+                  selected={{
+                    from: dateFilter.from || undefined,
+                    to: dateFilter.to || undefined,
+                  }}
+                  onSelect={(range) => {
+                    setDateFilter({
+                      from: range?.from || null,
+                      to: range?.to || null,
+                      isActive: !!range?.from || !!range?.to,
+                    });
+                  }}
+                  numberOfMonths={1}
+                  className="rounded-md border p-2 mt-1"
+                  classNames={{
+                    months: "flex justify-center flex-col space-y-2",
+                    month: "space-y-1",
+                    caption: "flex justify-center items-center",
+                    caption_label: "text-xs font-semibold",
+                    nav: "flex items-center justify-between w-full px-1",
+                    nav_button: "h-6 w-6 p-0 rounded hover:bg-muted text-xs",
+                    table: "w-full border-collapse",
+                    head_row: "flex justify-between text-muted-foreground text-[10px]",
+                    head_cell: "w-8 text-center",
+                    row: "flex justify-between",
+                    cell: "h-7 w-7 text-center text-xs p-0 relative [&:has([aria-selected])]:bg-accent rounded-sm",
+                    day: "h-7 w-7 p-0 font-normal aria-selected:opacity-100",
+                    day_selected: "bg-blue-500 text-white rounded hover:bg-blue-600",
+                    day_range_start: "rounded-l-full bg-blue-500 text-white",
+                    day_range_end: "rounded-r-full bg-blue-500 text-white",
+                    day_outside: "opacity-30 text-gray-400",
+                    day_disabled: "opacity-30 text-gray-400",
+                    day_hidden: "invisible",
+                  }}
+                /> */}
+
+                <div className="flex justify-end pt-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 text-[11px]"
+                    onClick={() => setDateFilter({ from: null, to: null, isActive: false })}
+                  >
+                    Clear
+                  </Button>
+                </div>
+              </div>
+            </PopoverContent>
+          </Popover>
 
           {/* Sort by OSD Button */}
           <Button
@@ -409,6 +532,7 @@ export function ConsumerList({
             osdRange[1] !== maxOsdValue ||
             excludeFilters.excludeDeemedDisconnection ||
             excludeFilters.excludeTemproryDisconnected ||
+            dateFilter.isActive ||
             sortByOSD !== "none") && (
             <Button variant="ghost" onClick={clearFilters} size="sm">
               <X className="h-4 w-4 mr-1" />
@@ -549,11 +673,18 @@ export function ConsumerList({
                 (sorted by OSD: {sortByOSD === "asc" ? "Low to High" : "High to Low"})
               </span>
             )}
+            {dateFilter.isActive && (
+              <span className="ml-2 text-blue-600">
+                (date range: {dateFilter.from ? format(dateFilter.from, 'MMM dd, yyyy') : ''} 
+                {dateFilter.to ? ` to ${format(dateFilter.to, 'MMM dd, yyyy')}` : ''})
+              </span>
+            )}
           </span>
           {(Object.values(filters).some((f) => f !== "All Agencies" && f !== "All Status" && f !== "") ||
             searchTerm ||
             osdRange[0] !== 0 ||
             osdRange[1] !== maxOsdValue ||
+            dateFilter.isActive ||
             excludeFilters.excludeDeemedDisconnection ||
             excludeFilters.excludeTemproryDisconnected ||
             sortByOSD !== "none") && <span className="text-blue-600">Filters active</span>}
@@ -608,7 +739,7 @@ export function ConsumerList({
 
               {consumer.osDuedateRange && (
                 <div className="flex items-center space-x-2">
-                  <Calendar className="h-4 w-4 text-gray-400" />
+                  <CalendarIcon className="h-4 w-4 text-gray-400" />
                   <div className="flex-1">
                     <p className="text-sm text-gray-600">{consumer.osDuedateRange}</p>
                     <p className="text-xs text-gray-500">Due Date Range</p>
