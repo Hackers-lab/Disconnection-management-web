@@ -373,8 +373,10 @@ export function ConsumerList({
 
       {/* Search and Filter Controls */}
       <div className="bg-white p-4 rounded-lg shadow-sm border">
-        <div className="flex items-center space-x-4 mb-4">
-          <div className="relative flex-1 max-w-md">
+        {/* Responsive filter/search row */}
+        <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-4 mb-4">
+          {/* Search field */}
+          <div className="relative flex-1 max-w-md w-full">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
             <Input
               placeholder="Search consumers..."
@@ -383,185 +385,131 @@ export function ConsumerList({
               className="pl-10"
             />
           </div>
-          {/* Date Filter Button */}
-          {/* Compact Date Filter Button */}
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button
-                variant="outline"
-                size="sm"
-                className={`flex items-center space-x-2 bg-transparent ${dateFilter.isActive ? "bg-blue-50 border-blue-300" : ""}`}
+
+          {/* Filter/sort controls */}
+          <div className="flex flex-wrap gap-2 items-center mt-2 md:mt-0">
+            {/* Date Filter Button */}
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className={`flex items-center space-x-2 bg-transparent ${dateFilter.isActive ? "bg-blue-50 border-blue-300" : ""}`}
+                >
+                  <CalendarIcon className="h-4 w-4" />
+                  <span className="hidden sm:inline">Dates</span>
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[300px] p-2 rounded-lg shadow-md">
+                <div className="space-y-4 text-xs">
+                  <div className="flex gap-2">
+                    <div className="space-y-1 flex-1">
+                      <label className="text-[10px] text-gray-600 font-medium">From</label>
+                      <Input
+                        type="date"
+                        value={dateFilter.from?.toISOString().split('T')[0] || ''}
+                        onChange={(e) =>
+                          setDateFilter((prev) => ({
+                            ...prev,
+                            from: e.target.value ? new Date(e.target.value) : null,
+                            isActive: true,
+                          }))
+                        }
+                        className="h-7 text-xs px-2 w-full"
+                      />
+                    </div>
+                    <div className="space-y-1 flex-1">
+                      <label className="text-[10px] text-gray-600 font-medium">To</label>
+                      <Input
+                        type="date"
+                        value={dateFilter.to?.toISOString().split('T')[0] || ''}
+                        onChange={(e) =>
+                          setDateFilter((prev) => ({
+                            ...prev,
+                            to: e.target.value ? new Date(e.target.value) : null,
+                            isActive: true,
+                          }))
+                        }
+                        className="h-7 text-xs px-2 w-full"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end pt-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 px-2 text-[11px]"
+                      onClick={() => setDateFilter({ from: null, to: null, isActive: false })}
+                    >
+                      Clear
+                    </Button>
+                  </div>
+                </div>
+              </PopoverContent>
+            </Popover>
+
+            {/* Base Class Filter */}
+            <div>
+              <Select
+                value={filters.baseClass}
+                onValueChange={(value) => setFilters((prev) => ({ ...prev, baseClass: value }))}
               >
-                <CalendarIcon className="h-4 w-4" />
-                <span className="hidden sm:inline">Dates</span>
-              </Button>
-            </PopoverTrigger>
-
-            <PopoverContent className="w-[300px] p-2 rounded-lg shadow-md">
-              <div className="space-y-4 text-xs">
-                <div className="flex gap-2">
-                  <div className="space-y-1 flex-1">
-                    <label className="text-[10px] text-gray-600 font-medium">From</label>
-                    <Input
-                      type="date"
-                      value={dateFilter.from?.toISOString().split('T')[0] || ''}
-                      onChange={(e) =>
-                        setDateFilter((prev) => ({
-                          ...prev,
-                          from: e.target.value ? new Date(e.target.value) : null,
-                          isActive: true,
-                        }))
-                      }
-                      className="h-7 text-xs px-2 w-full"
-                    />
-                  </div>
-                  <div className="space-y-1 flex-1">
-                    <label className="text-[10px] text-gray-600 font-medium">To</label>
-                    <Input
-                      type="date"
-                      value={dateFilter.to?.toISOString().split('T')[0] || ''}
-                      onChange={(e) =>
-                        setDateFilter((prev) => ({
-                          ...prev,
-                          to: e.target.value ? new Date(e.target.value) : null,
-                          isActive: true,
-                        }))
-                      }
-                      className="h-7 text-xs px-2 w-full"
-                    />
-                  </div>
-                </div>
-
-                <div className="flex justify-end pt-1">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 px-2 text-[11px]"
-                    onClick={() => setDateFilter({ from: null, to: null, isActive: false })}
-                  >
-                    Clear
-                  </Button>
-                </div>
-              </div>
-            </PopoverContent>
-          </Popover>
-
-          <div className="space-y-2">
-            {/* <label className="text-sm font-medium text-gray-700">Base Class</label> */}
-            <Select
-              value={filters.baseClass}
-              onValueChange={(value) => setFilters((prev) => ({ ...prev, baseClass: value }))}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="All Classes" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="All Classes">All Classes</SelectItem>
-                <SelectItem value="A">STW</SelectItem>
-                <SelectItem value="I">IND</SelectItem>
-                <SelectItem value="C">COM</SelectItem>
-                <SelectItem value="D">DOM</SelectItem>
-                <SelectItem value="S">S</SelectItem>
-                <SelectItem value="H">H</SelectItem>
-                <SelectItem value="W">W</SelectItem>
-                {/* Add more classes as needed */}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Sort by OSD Button */}
-          <Button
-            variant="outline"
-            onClick={toggleOSDSort}
-            className="flex items-center space-x-2 bg-transparent"
-            title={`Sort by Outstanding Dues: ${sortByOSD === "none" ? "None" : sortByOSD === "asc" ? "Low to High" : "High to Low"}`}
-          >
-            {getSortIcon()}
-            <span className="hidden sm:inline">Sort OSD</span>
-          </Button>
-
-          {/* Exclude Checkboxes - Hide on small mobile */}
-          {/* <div className="hidden sm:flex items-center space-x-4">
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id="excludeDeemedDisconnection"
-                checked={excludeFilters.excludeDeemedDisconnection}
-                onCheckedChange={(checked) =>
-                  setExcludeFilters((prev) => ({ ...prev, excludeDeemedDisconnection: !!checked }))
-                }
-              />
-              <label htmlFor="excludeDeemedDisconnection" className="text-sm text-gray-700">
-                Exclude Deemed
-              </label>
+                <SelectTrigger>
+                  <SelectValue placeholder="All Classes" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="All Classes">All Classes</SelectItem>
+                  <SelectItem value="A">STW</SelectItem>
+                  <SelectItem value="I">IND</SelectItem>
+                  <SelectItem value="C">COM</SelectItem>
+                  <SelectItem value="D">DOM</SelectItem>
+                  <SelectItem value="S">S</SelectItem>
+                  <SelectItem value="H">H</SelectItem>
+                  <SelectItem value="W">W</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id="excludeTemproryDisconnected"
-                checked={excludeFilters.excludeTemproryDisconnected}
-                onCheckedChange={(checked) =>
-                  setExcludeFilters((prev) => ({ ...prev, excludeTemproryDisconnected: !!checked }))
-                }
-              />
-              <label htmlFor="excludeTemproryDisconnected" className="text-sm text-gray-700">
-                Exclude Temp
-              </label>
-            </div>
-          </div> */}
 
-          {/* Filter Button for Non-Admin */}
-          {userRole !== "test" && (
+            {/* Sort by OSD Button */}
             <Button
               variant="outline"
-              onClick={() => setShowFilters(!showFilters)}
-              className="flex items-center space-x-2"
+              onClick={toggleOSDSort}
+              className="flex items-center space-x-2 bg-transparent"
+              title={`Sort by Outstanding Dues: ${sortByOSD === "none" ? "None" : sortByOSD === "asc" ? "Low to High" : "High to Low"}`}
             >
-              <Filter className="h-4 w-4" />
-              <span className="hidden sm:inline">Filters</span>
+              {getSortIcon()}
+              <span className="hidden sm:inline">Sort OSD</span>
             </Button>
-          )}
 
-          {(Object.values(filters).some((f) => f !== "All Agencies" && f !== "All Status" && f !== "All Classes" && f !== "") ||
-            searchTerm ||
-            osdRange[0] !== 0 ||
-            osdRange[1] !== maxOsdValue ||
-            excludeFilters.excludeDeemedDisconnection ||
-            excludeFilters.excludeTemproryDisconnected ||
-            dateFilter.isActive ||
-            sortByOSD !== "none") && (
-            <Button variant="ghost" onClick={clearFilters} size="sm">
-              <X className="h-4 w-4 mr-1" />
-              <span className="hidden sm:inline">Clear</span>
-            </Button>
-          )}
+            {/* Filter Button for Non-Admin */}
+            {userRole !== "test" && (
+              <Button
+                variant="outline"
+                onClick={() => setShowFilters(!showFilters)}
+                className="flex items-center space-x-2"
+              >
+                <Filter className="h-4 w-4" />
+                <span className="hidden sm:inline">Filters</span>
+              </Button>
+            )}
+
+            {/* Clear Filters Button */}
+            {(Object.values(filters).some((f) => f !== "All Agencies" && f !== "All Status" && f !== "All Classes" && f !== "") ||
+              searchTerm ||
+              osdRange[0] !== 0 ||
+              osdRange[1] !== maxOsdValue ||
+              excludeFilters.excludeDeemedDisconnection ||
+              excludeFilters.excludeTemproryDisconnected ||
+              dateFilter.isActive ||
+              sortByOSD !== "none") && (
+              <Button variant="ghost" onClick={clearFilters} size="sm">
+                <X className="h-4 w-4 mr-1" />
+                <span className="hidden sm:inline">Clear</span>
+              </Button>
+            )}
+          </div>
         </div>
-
-        {/* Mobile Exclude Checkboxes */}
-        {/* <div className="sm:hidden flex flex-col space-y-2 mb-4">
-          <div className="flex items-center space-x-2">
-            <Checkbox
-              id="excludeDeemedDisconnection-mobile"
-              checked={excludeFilters.excludeDeemedDisconnection}
-              onCheckedChange={(checked) =>
-                setExcludeFilters((prev) => ({ ...prev, excludeDeemedDisconnection: !!checked }))
-              }
-            />
-            <label htmlFor="excludeDeemedDisconnection-mobile" className="text-sm text-gray-700">
-              Exclude Deemed Disconnection
-            </label>
-          </div>
-          <div className="flex items-center space-x-2">
-            <Checkbox
-              id="excludeTemproryDisconnected-mobile"
-              checked={excludeFilters.excludeTemproryDisconnected}
-              onCheckedChange={(checked) =>
-                setExcludeFilters((prev) => ({ ...prev, excludeTemproryDisconnected: !!checked }))
-              }
-            />
-            <label htmlFor="excludeTemproryDisconnected-mobile" className="text-sm text-gray-700">
-              Exclude Temprory Disconnected
-            </label>
-          </div>
-        </div> */}
 
         {/* OSD Range Slider - Always Visible */}
         <div className="mb-4 p-4 bg-gray-50 rounded-lg">
