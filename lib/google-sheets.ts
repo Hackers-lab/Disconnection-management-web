@@ -107,10 +107,11 @@ function findColumnIndex(headers: string[], searchTerms: string[]): number {
 
 export async function fetchConsumerData(): Promise<ConsumerData[]> {
   try {
-    //console.log("Fetching consumer data from Google Sheets...")
+    const csvUrl = process.env.GOOGLE_SHEETS_CSV_URL
+    if (!csvUrl) throw new Error("GOOGLE_SHEETS_CSV_URL env variable not set")
 
     const response = await fetch(
-      "https://docs.google.com/spreadsheets/d/e/2PACX-1vTUdnZVO_1jP6rtHen6zsTM4ff3YEo_xPe41HvMq_q3yOtwuaoTNz4AEOtuabLbmw2BzYnJh8fCIF2Y/pub?output=csv",
+      csvUrl,
       {
         cache: "no-store",
         headers: {

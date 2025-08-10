@@ -153,6 +153,7 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
 
       if (response.ok) {
         await loadUsers()
+        setEditingUser(null) // <-- Add this line
         setMessage({ type: "success", text: "User deleted successfully" })
       } else {
         throw new Error("Failed to delete user")
@@ -379,10 +380,10 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
 
           {/* Users List */}
           <div className="grid gap-4">
-            {users.map((user) => (
+            {users.filter(user => !!user.id).map((user) => (
               <Card key={user.id}>
                 <CardContent className="p-4">
-                  {editingUser?.id === user.id ? (
+                  {editingUser && users.some(u => u.id === editingUser.id) && editingUser.id === user.id ? (
                     <div className="space-y-4">
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div className="space-y-2">
