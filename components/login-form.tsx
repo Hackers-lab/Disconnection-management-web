@@ -102,7 +102,7 @@ export function LoginForm() {
         </form>
 
         <div className="text-center pt-4 border-t border-gray-200">
-          <p className="text-xs text-gray-500">Having trouble? Contact your system administrator</p>
+          <p className="text-xs text-gray-500">Having trouble? Contact je.kushidaccc@gmail.com</p>
         </div>
       </CardContent>
     </Card>

@@ -175,7 +175,7 @@ export function ConsumerList({
     // Base class filter
     const matchesBaseClass = 
       filters.baseClass === "All Classes" || 
-      (consumer.class || "").toUpperCase() === filters.baseClass.toUpperCase()
+      (consumer.baseClass || "").toUpperCase() === filters.baseClass.toUpperCase()
     // Agency filter (case-insensitive)
     const matchesAgency =
       filters.agency === "All Agencies" || (consumer.agency || "").toUpperCase() === filters.agency.toUpperCase()
