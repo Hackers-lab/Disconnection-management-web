@@ -42,7 +42,7 @@ interface ConsumerListProps {
   onCloseAdminPanel: () => void
 }
 
-const ITEMS_PER_PAGE = 16
+const ITEMS_PER_PAGE = 12
 
 type SortOrder = "none" | "asc" | "desc"
 
@@ -379,7 +379,7 @@ export function ConsumerList({
           <div className="relative flex-1 max-w-md w-full">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
             <Input
-              placeholder="Search consumers..."
+              placeholder="Search id, name, address..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-10"
@@ -556,7 +556,7 @@ export function ConsumerList({
               </Select>
             </div>
 
-            <div className="space-y-2">
+            {/* <div className="space-y-2">
               <label className="text-sm font-medium text-gray-700">Address</label>
               <Input
                 placeholder="Filter by address"
@@ -581,7 +581,7 @@ export function ConsumerList({
                 value={filters.consumerId}
                 onChange={(e) => setFilters((prev) => ({ ...prev, consumerId: e.target.value }))}
               />
-            </div>
+            </div> */}
 
             <div className="space-y-2">
               <label className="text-sm font-medium text-gray-700">Status</label>
@@ -601,6 +601,7 @@ export function ConsumerList({
                   <SelectItem value="pending">Pending</SelectItem>
                   <SelectItem value="PAID">Paid</SelectItem>
                   <SelectItem value="agency paid">Agency Paid</SelectItem>
+                  <SelectItem value="not found">Not Found</SelectItem>
                 </SelectContent>
               </Select>
             </div>

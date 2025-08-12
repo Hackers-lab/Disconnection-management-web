@@ -166,6 +166,7 @@ export async function fetchConsumerData(): Promise<ConsumerData[]> {
       agency: ["agency"],
       reading: ["reading"],
       imageUrl: ["image"],
+      notes: ["notes"],
 
     }
 
@@ -222,6 +223,7 @@ export async function fetchConsumerData(): Promise<ConsumerData[]> {
           longitude: columnIndices.longitude >= 0 ? values[columnIndices.longitude] || "" : "",
           agency: columnIndices.agency >= 0 ? values[columnIndices.agency] || "" : "",
           lastUpdated: new Date().toISOString().split("T")[0],
+          notes: columnIndices.notes >= 0 ? values[columnIndices.notes] || "No previous notes for this consumer" : "",
         }
 
         consumers.push(consumer)

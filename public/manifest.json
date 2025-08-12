@@ -1,8 +1,9 @@
 {
-  "name": "Consumer Management System",
-  "short_name": "ConsumerApp",
-  "description": "Disconnection Consumer Management for Field Officers",
-  "start_url": "/",
+  "name": "Disconnection Management System",
+  "short_name": "DMS",
+  "description": "Disconnection Management for Agencies",
+  "start_url": "/dashboard",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#2563eb",
@@ -26,6 +27,12 @@
       "sizes": "390x844",
       "type": "image/png",
       "form_factor": "narrow"
+    },
+    {
+    "src": "/screenshot-desktop.png",
+    "sizes": "1280x800",
+    "type": "image/png",
+    "form_factor": "wide"
     }
   ]
 }

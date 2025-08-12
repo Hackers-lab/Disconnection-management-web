@@ -486,8 +486,8 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
                 </div>
 
                 <div>
-                  <p className="text-sm font-medium text-gray-700">Gov/Non-Gov</p>
-                  <p className="text-sm text-gray-900">{consumer.govNonGov}</p>
+                  <p className="text-sm font-medium text-gray-700">Notes</p>
+                  <p className="text-sm text-gray-900">{consumer.notes}</p>
                 </div>
 
                 <div>
