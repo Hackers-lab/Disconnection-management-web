@@ -32,6 +32,7 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
+  const [statusChanged, setStatusChanged] = useState(false);
 
   const handleImageUpload = async (file: File) => {
     setUploading(true)
@@ -57,16 +58,26 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
   }
 
   const handleStatusUpdate = (status: string) => {
+    const now = new Date();
+    const day = String(now.getDate()).padStart(2, "0");
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const year = now.getFullYear();
+    const formattedDate = `${day}-${month}-${year}`;
     const currentDate = new Date().toISOString().split("T")[0]
     setFormData((prev) => ({
       ...prev,
       disconStatus: status,
-      disconDate: status === "disconnected" ? currentDate : prev.disconDate,
-    }))
+      disconDate: formattedDate,
+    }));
+    setStatusChanged(true);
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!statusChanged) {
+      alert("Please select status before saving."); // Popup before saving
+      return;
+    }
     setSaving(true)
 
     const updatedConsumer: ConsumerData = {
@@ -88,6 +99,7 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
       })
 
       if (response.ok) {
+        alert("Consumer status updated."); // Popup after saving
         onSave(updatedConsumer)
       } else {
         throw new Error("Failed to update consumer")
@@ -319,6 +331,7 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
                           <CircleX className="h-4 w-4 mr-2" />
                           NOT FOUND
                         </Button>
+                        
                       </div>
                       <p className="text-sm text-gray-600">
                         Current Status: <span className="font-medium">{formData.disconStatus}</span>
