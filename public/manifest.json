@@ -1,6 +1,6 @@
 {
   "name": "Disconnection Management System",
-  "short_name": "DMS",
+  "short_name": "Disconnection Management",
   "description": "Disconnection Management for Agencies",
   "start_url": "/dashboard",
   "scope": "/",
