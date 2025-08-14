@@ -85,6 +85,7 @@ export function ConsumerList({
     excludeDeemedDisconnection: false,
     excludeTemproryDisconnected: false,
   })
+  const [baseClasses, setBaseClasses] = useState<string[]>([])
 
   useEffect(() => {
     async function loadData() {
@@ -106,6 +107,17 @@ export function ConsumerList({
         }
 
         const data: ConsumerData[] = await consumersResponse.json()
+
+        // Extract unique baseClasses (ignore empty/null)
+        const uniqueBaseClasses = Array.from(
+          new Set(
+            data
+              .map(c => (c.baseClass || "").toUpperCase().trim())
+              .filter(bc => bc !== "")
+          )
+        ).sort()
+
+        setBaseClasses(uniqueBaseClasses)
 
         // Load agencies for admin
         let agencyList: string[] = []
@@ -481,13 +493,11 @@ export function ConsumerList({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="All Classes">All Classes</SelectItem>
-                  <SelectItem value="A">STW</SelectItem>
-                  <SelectItem value="I">IND</SelectItem>
-                  <SelectItem value="C">COM</SelectItem>
-                  <SelectItem value="D">DOM</SelectItem>
-                  <SelectItem value="S">S</SelectItem>
-                  <SelectItem value="H">H</SelectItem>
-                  <SelectItem value="W">W</SelectItem>
+                  {baseClasses.map((bc) => (
+                    <SelectItem key={bc} value={bc}>
+                      {bc}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
