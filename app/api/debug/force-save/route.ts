@@ -24,7 +24,7 @@ export async function POST() {
     const testUser = await userStorage.addUser({
       username: "force_test_" + Date.now(),
       password: "test123",
-      role: "officer",
+      role: "agency",
       agencies: ["TEST"],
     })
     console.log("🔧 Test user added:", testUser.username)

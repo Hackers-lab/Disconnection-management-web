@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
     const newUser = await userStorage.addUser({
       username,
       password,
-      role: role || "officer",
+      role: role || "agency",
       agencies: agencies || [],
     })
 

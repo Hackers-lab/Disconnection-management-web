@@ -43,7 +43,7 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
   const [newUser, setNewUser] = useState({
     username: "",
     password: "",
-    role: "officer",
+    role: "agency",
     agencies: [] as string[],
   })
 
@@ -131,7 +131,7 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
       if (response.ok) {
         await loadUsers()
         setShowAddUser(false)
-        setNewUser({ username: "", password: "", role: "officer", agencies: [] })
+        setNewUser({ username: "", password: "", role: "agency", agencies: [] })
         setMessage({ type: "success", text: "User added successfully" })
       } else {
         const error = await response.json()
@@ -333,12 +333,12 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="admin">Admin</SelectItem>
-                      <SelectItem value="officer">Officer</SelectItem>
+                      <SelectItem value="agency">agency</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
 
-                {newUser.role === "officer" && (
+                {(newUser.role === "agency" || newUser.role === "executive") && (
                   <div className="space-y-2">
                     <Label>Agencies</Label>
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
@@ -420,13 +420,14 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
                             </SelectTrigger>
                             <SelectContent>
                               <SelectItem value="admin">Admin</SelectItem>
-                              <SelectItem value="officer">Officer</SelectItem>
+                              <SelectItem value="agency">agency</SelectItem>
+                              <SelectItem value="executive">Executive</SelectItem>
                             </SelectContent>
                           </Select>
                         </div>
                       </div>
 
-                      {editingUser.role === "officer" && (
+                      {(editingUser.role === "agency" || editingUser.role === "executive") && (
                         <div className="space-y-2">
                           <Label>Agencies</Label>
                           <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
@@ -474,7 +475,7 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
                           <h3 className="font-medium">{user.username}</h3>
                           <Badge variant={user.role === "admin" ? "default" : "secondary"}>{user.role}</Badge>
                         </div>
-                        {user.role === "officer" && user.agencies.length > 0 && (
+                        {(user.role === "agency" || user.role === "executive") && user.agencies.length > 0 && (
                           <div className="flex flex-wrap gap-1">
                             {user.agencies.map((agency) => (
                               <Badge key={agency} variant="outline" className="text-xs">

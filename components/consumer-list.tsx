@@ -78,7 +78,7 @@ export function ConsumerList({
     address: "",
     name: "",
     consumerId: "",
-    status: userRole === "admin" ? "All Status" : "connected",
+    status: (userRole === "admin" || userRole === "executive") ? "All Status" : "connected",
     baseClass: "All Classes",
   })
   const [excludeFilters, setExcludeFilters] = useState({
@@ -134,13 +134,34 @@ export function ConsumerList({
 
         // Filter consumers based on user role and agencies (case-insensitive)
         let filteredData = data
+
         if (userRole !== "admin") {
-          filteredData = data.filter((consumer) => {
-            const consumerAgency = (consumer.agency || "").toUpperCase()
-            const userAgenciesUpper = userAgencies.map((a) => a.toUpperCase())
-            return userAgenciesUpper.includes(consumerAgency) && consumer.disconStatus !== "&"
-          })
+          const userAgenciesUpper = userAgencies.map((a) => a.toUpperCase())
+
+          if (userRole === "executive") {
+            // Executive: their agencies + any "bill dispute"
+            filteredData = data.filter((consumer) => {
+              const consumerAgency = (consumer.agency || "").toUpperCase()
+              const isOwnAgency = userAgenciesUpper.includes(consumerAgency)
+              const isBillDispute = consumer.disconStatus?.toLowerCase() === "bill dispute"
+              return (isOwnAgency || isBillDispute) && consumer.disconStatus !== "&"
+            })
+          } else {
+            // Normal agency user
+            filteredData = data.filter((consumer) => {
+              const consumerAgency = (consumer.agency || "").toUpperCase()
+              return userAgenciesUpper.includes(consumerAgency) && consumer.disconStatus !== "&"
+            })
+          }
         }
+
+        // if (userRole !== "admin") {
+        //   filteredData = data.filter((consumer) => {
+        //     const consumerAgency = (consumer.agency || "").toUpperCase()
+        //     const userAgenciesUpper = userAgencies.map((a) => a.toUpperCase())
+        //     return userAgenciesUpper.includes(consumerAgency) && consumer.disconStatus !== "&"
+        //   })
+        // }
 
         setConsumers(filteredData)
       } catch (error) {
@@ -707,15 +728,15 @@ export function ConsumerList({
 
               <Button onClick={() => setSelectedConsumer(consumer)} 
               className={`w-full mt-4 ${
-                  (consumer.disconStatus.toLowerCase() === "disconnected" && userRole !== "admin") 
+                  (consumer.disconStatus.toLowerCase() !== "connected" && userRole !== "admin" && userRole !== "executive") 
                     ? "bg-gray-100 text-gray-500 hover:bg-gray-100 cursor-not-allowed" 
                     : ""
                 }`}
                 size="sm"
-                disabled={consumer.disconStatus.toLowerCase() === "disconnected" && userRole !== "admin"}
+                disabled={consumer.disconStatus.toLowerCase() !== "connected" && userRole !== "admin" && userRole !== "executive"}
               >
                 <Edit className={`h-4 w-4 mr-2 ${
-                    (consumer.disconStatus.toLowerCase() === "disconnected" && userRole !== "admin") 
+                    (consumer.disconStatus.toLowerCase() !== "connected" && userRole !== "admin" && userRole !== "executive") 
                       ? "text-gray-400" 
                       : ""
                   }`} />

@@ -5,8 +5,8 @@ A Next.js web application for managing consumer disconnection data with real-tim
 ## Features
 
 - 📊 **Dashboard** with real-time statistics
-- 👥 **User Management** with role-based access (Admin/Officer)
-- 🏢 **Agency-based filtering** for officers
+- 👥 **User Management** with role-based access (Admin/agency)
+- 🏢 **Agency-based filtering** for agencys
 - 📱 **Mobile-responsive** design with tab navigation
 - 🔍 **Advanced filtering** and sorting capabilities
 - 📈 **OSD (Outstanding Dues) sorting** - High to Low, Low to High
@@ -59,7 +59,7 @@ A Next.js web application for managing consumer disconnection data with real-tim
 - **Password:** `admin123`
 - **Access:** Full system access, user management
 
-### Agency Officers
+### Agency agencys
 - **JOY GURU:** `joyguru_user1` / `pass123`
 - **ST:** `st_user1` / `pass123`
 - **MATIUR:** `matiur_user1` / `pass123`
