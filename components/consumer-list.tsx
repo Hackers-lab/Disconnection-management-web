@@ -1,5 +1,6 @@
 "use client"
 
+import React, { useImperativeHandle } from "react"  
 import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -7,11 +8,8 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Slider } from "@/components/ui/slider"
-import { Checkbox } from "@/components/ui/checkbox"
 import { Calendar as CalendarIcon } from "lucide-react"
-import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { Label } from "@/components/ui/label"
 import { format } from "date-fns"
 import {
   Search,
@@ -40,19 +38,19 @@ interface ConsumerListProps {
   onAdminClick: () => void
   showAdminPanel: boolean
   onCloseAdminPanel: () => void
+  onDownload: () => void
+}
+interface ConsumerListRef {  // <-- Add this interface
+  getCurrentConsumers: () => ConsumerData[]
 }
 
 const ITEMS_PER_PAGE = 12
 
 type SortOrder = "none" | "asc" | "desc"
 
-export function ConsumerList({
-  userRole,
-  userAgencies,
-  onAdminClick,
-  showAdminPanel,
-  onCloseAdminPanel,
-}: ConsumerListProps) {
+const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
+  (props, ref) => {
+  const { userRole, userAgencies, onAdminClick, showAdminPanel, onCloseAdminPanel } = props
   const [consumers, setConsumers] = useState<ConsumerData[]>([])
   const [agencies, setAgencies] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
@@ -86,7 +84,7 @@ export function ConsumerList({
     excludeTemproryDisconnected: false,
   })
   const [baseClasses, setBaseClasses] = useState<string[]>([])
-
+          
   useEffect(() => {
     async function loadData() {
       setLoading(true)
@@ -167,13 +165,7 @@ export function ConsumerList({
           }
         }
 
-        // if (userRole !== "admin") {
-        //   filteredData = data.filter((consumer) => {
-        //     const consumerAgency = (consumer.agency || "").toUpperCase()
-        //     const userAgenciesUpper = userAgencies.map((a) => a.toUpperCase())
-        //     return userAgenciesUpper.includes(consumerAgency) && consumer.disconStatus !== "&"
-        //   })
-        // }
+
 
         setConsumers(filteredData)
       } catch (error) {
@@ -236,6 +228,8 @@ export function ConsumerList({
 
     const excludeTemproryDisconnected =
       !excludeFilters.excludeTemproryDisconnected || !consumer.disconStatus.toLowerCase().includes("temprory")
+
+
 
     return (
       matchesSearch &&
@@ -341,6 +335,10 @@ export function ConsumerList({
     if (sortByOSD === "desc") return <ArrowDown className="h-4 w-4" />
     return <ArrowUpDown className="h-4 w-4" />
   }
+
+  useImperativeHandle(ref, () => ({
+    getCurrentConsumers: () => filteredConsumers,
+  }));
 
   if (loading) {
     return (
@@ -830,4 +828,6 @@ export function ConsumerList({
       )}
     </div>
   )
-}
+})
+
+export { ConsumerList }

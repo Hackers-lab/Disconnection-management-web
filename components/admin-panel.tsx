@@ -420,7 +420,7 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
                             </SelectTrigger>
                             <SelectContent>
                               <SelectItem value="admin">Admin</SelectItem>
-                              <SelectItem value="agency">agency</SelectItem>
+                              <SelectItem value="agency">Agency</SelectItem>
                               <SelectItem value="executive">Executive</SelectItem>
                             </SelectContent>
                           </Select>

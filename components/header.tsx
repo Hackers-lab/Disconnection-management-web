@@ -7,9 +7,10 @@ import { Power, User, Settings, Download } from "lucide-react"
 interface HeaderProps {
   userRole: string
   onAdminClick?: () => void
+  onDownload?: () => void;
 }
 
-export function Header({ userRole, onAdminClick }: HeaderProps) {
+export function Header({ userRole, onAdminClick, onDownload }: HeaderProps) {
   const handleDownload = () => {
     const url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTUdnZVO_1jP6rtHen6zsTM4ff3YEo_xPe41HvMq_q3yOtwuaoTNz4AEOtuabLbmw2BzYnJh8fCIF2Y/pub?output=csv";
     const link = document.createElement('a');
@@ -33,16 +34,17 @@ export function Header({ userRole, onAdminClick }: HeaderProps) {
               <User className="h-4 w-4" />
               <span className="capitalize">{userRole}</span>
             </div>
-            {userRole === "admin" && (
-              <>
-                <Button 
+            <Button 
                   variant="ghost" 
                   size="sm" 
-                  onClick={handleDownload}
+                  onClick={handleDownload} //onDownload
                   title="Download Data"
                 >
                   <Download className="h-4 w-4" />
                 </Button>
+            {userRole === "admin" && (
+              <>
+                
                 {onAdminClick && (
                   <Button variant="ghost" size="sm" onClick={onAdminClick} title="Admin Panel">
                     <Settings className="h-4 w-4" />
