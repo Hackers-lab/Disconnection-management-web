@@ -667,10 +667,10 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {paginatedConsumers.map((consumer) => (
           <Card key={consumer.consumerId} className="hover:shadow-md transition-shadow">
-            <CardHeader className="pb-3">
-              <div className="flex items-start justify-between">
-                <div>
-                  <CardTitle className="text-lg">{consumer.name}</CardTitle>
+            <CardHeader className="pb-3 break-words whitespace-normal">
+              <div className="flex items-start justify-between w-full">
+                <div className="min-w-0">
+                  <CardTitle className="text-lg break-words whitespace-normal">{consumer.name}</CardTitle>
                   <p className="text-sm text-gray-600">{consumer.consumerId}</p>
                 </div>
                 <div className="flex flex-col items-end space-y-1">
@@ -681,10 +681,10 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
                 </div>
               </div>
             </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex items-start space-x-2">
+            <CardContent className="space-y-3 break-words whitespace-normal">
+              <div className="flex items-start space-x-2 min-w-0">
                 <MapPin className="h-4 w-4 text-gray-400 mt-0.5 flex-shrink-0" />
-                <p className="text-sm text-gray-600">{consumer.address}</p>
+                <p className="text-sm text-gray-600 break-words whitespace-normal">{consumer.address}</p>
               </div>
               {consumer.mobileNumber && (
                 <a href={`tel:${consumer.mobileNumber}`} className="flex items-center space-x-2 hover:underline">
@@ -692,12 +692,6 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
                   <p className="text-sm text-blue-600">{consumer.mobileNumber}</p>
                 </a>
               )}
-              {/*{consumer.mobileNumber && (
-                <div className="flex items-center space-x-2">
-                  <Phone className="h-4 w-4 text-gray-400" />
-                  <p className="text-sm text-gray-600">{consumer.mobileNumber}</p>
-                </div>
-              )}*/}
 
               <div className="flex items-center space-x-2">
                 <IndianRupee className="h-4 w-4 text-gray-400" />
