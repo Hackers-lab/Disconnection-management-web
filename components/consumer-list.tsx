@@ -182,11 +182,51 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
   // Advanced filtering logic
   const filteredConsumers = consumers.filter((consumer) => {
     // Basic search term filter
-    // Date range filter
-    const matchesDateRange = !dateFilter.isActive || 
-      (consumer.disconDate && 
-        (!dateFilter.from || new Date(consumer.disconDate) >= dateFilter.from) && 
-        (!dateFilter.to || new Date(consumer.disconDate) <= dateFilter.to))
+    // Date range filter  
+    function normalizeDate(dateValue: string | Date | null | undefined): string | null {
+      if (!dateValue) return null;
+
+      // If it's already a Date object
+      if (dateValue instanceof Date) {
+        return dateValue.toISOString().split('T')[0]; // YYYY-MM-DD
+      }
+
+      // If it's a string in YYYY-MM-DD format
+      if (/^\d{4}-\d{2}-\d{2}$/.test(dateValue)) {
+        return dateValue; // already in correct format
+      }
+
+      // If it's a string in DD-MM-YYYY format
+      if (/^\d{2}-\d{2}-\d{4}$/.test(dateValue)) {
+        const [day, month, year] = dateValue.split("-");
+        return `${year}-${month}-${day}`; // convert to YYYY-MM-DD
+      }
+
+      // If it's some other format, try to parse
+      const parsed = new Date(dateValue);
+      if (!isNaN(parsed.getTime())) {
+        return parsed.toISOString().split('T')[0];
+      }
+
+      return null; // Unknown format
+    }
+
+
+    const matchesDateRange =
+      !dateFilter.isActive ||
+      (() => {
+        const disconDateNorm = normalizeDate(consumer.disconDate);
+        const fromNorm = normalizeDate(dateFilter.from);
+        const toNorm = normalizeDate(dateFilter.to);
+
+        if (!disconDateNorm) return false; // skip if no valid date
+
+        return (
+          (!fromNorm || disconDateNorm >= fromNorm) &&
+          (!toNorm || disconDateNorm <= toNorm)
+        );
+      })();
+
     const matchesSearch =
       !searchTerm ||
       consumer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||

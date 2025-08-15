@@ -105,6 +105,51 @@ function findColumnIndex(headers: string[], searchTerms: string[]): number {
   return -1
 }
 
+// lib/google-sheets.ts
+export async function getAgencyLastUpdates(): Promise<{name: string, lastUpdate: string}[]> {
+  const consumers = await fetchConsumerData();
+  const agencyMap = new Map<string, Date>();
+  const dateFormats = [
+    { pattern: /^(\d{2})-(\d{2})-(\d{4})$/, handler: (d: RegExpMatchArray) => 
+      new Date(`${d[3]}-${d[2]}-${d[1]}`) }, // DD-MM-YYYY
+    { pattern: /^(\d{2})-(\d{2})-(\d{4})$/, handler: (d: RegExpMatchArray) => 
+      new Date(`${d[3]}-${d[1]}-${d[2]}`) }, // MM-DD-YYYY
+    { pattern: /^(\d{4})-(\d{2})-(\d{2})$/, handler: (d: RegExpMatchArray) => 
+      new Date(`${d[1]}-${d[2]}-${d[3]}`) }  // YYYY-MM-DD
+  ];
+
+  consumers.forEach(consumer => {
+    if (!consumer.agency || !consumer.disconDate) return;
+
+    // Parse the date from any supported format
+    let parsedDate: Date | null = null;
+    for (const format of dateFormats) {
+      const match = consumer.disconDate.match(format.pattern);
+      if (match) {
+        parsedDate = format.handler(match);
+        break;
+      }
+    }
+
+    if (!parsedDate || isNaN(parsedDate.getTime())) return;
+
+    // Compare with existing date
+    const existingDate = agencyMap.get(consumer.agency);
+    if (!existingDate || parsedDate > existingDate) {
+      agencyMap.set(consumer.agency, parsedDate);
+    }
+  });
+
+  // Format dates to DD-MM-YYYY
+  return Array.from(agencyMap.entries()).map(([name, date]) => ({
+    name,
+    lastUpdate: `${String(date.getDate()).padStart(2, '0')}-${
+                String(date.getMonth() + 1).padStart(2, '0')}-${
+                date.getFullYear()}`
+  })).sort((a, b) => a.name.localeCompare(b.name));
+}
+
+
 export async function fetchConsumerData(): Promise<ConsumerData[]> {
   try {
     const csvUrl = process.env.GOOGLE_SHEETS_CSV_URL

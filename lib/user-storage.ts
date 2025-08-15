@@ -2,6 +2,7 @@ import { google } from "googleapis"
 
 const SHEET_ID = process.env.GOOGLE_SHEET_ID!
 const SHEET_NAME = "User" // Change to your sheet name
+const LIST_SHEET_ID = process.env.GOOGLE_LIST_SHEET_ID!
 
 async function getSheetsClient() {
   const auth = new google.auth.GoogleAuth({
