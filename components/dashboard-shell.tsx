@@ -206,14 +206,16 @@ export function DashboardShell({ role, agencies, showAdminPanel, openAdmin, clos
       styles: { 
         fontSize: 7,
         cellPadding: 1,
-        overflow: "hidden",
-        font: "helvetica"
+        overflow: "ellipsize",
+        font: "helvetica",
+        valign: "middle"
       },
       headStyles: { 
         fillColor: [41, 128, 185],
         textColor: 255,
         fontSize: 7,
-        fontStyle: "bold"
+        fontStyle: "bold",
+        halign: "center"
       },
       columnStyles: {
         0: { cellWidth: 10, halign: "center" },  // Serial number
@@ -229,7 +231,7 @@ export function DashboardShell({ role, agencies, showAdminPanel, openAdmin, clos
         10: { cellWidth: 20 } // Status
       },
       alternateRowStyles: { 
-        fillColor: [144, 238, 144] 
+        fillColor: [204, 255, 255] 
       },
       margin: { left: 5, right: 5, top: 25 },
       tableWidth: "wrap",
