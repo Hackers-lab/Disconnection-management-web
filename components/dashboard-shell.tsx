@@ -175,7 +175,7 @@ export function DashboardShell({ role, agencies, showAdminPanel, openAdmin, clos
       index + 1,
       c.consumerId || "-",
       c.name || "-",
-      c.address ? c.address.substring(0, 25) + (c.address.length > 30 ? "..." : "") : "-",
+      c.address ? c.address.substring(0, 35) + (c.address.length > 35 ? "..." : "") : "-",
       c.mobileNumber || "-",
       c.device || "-",
       c.baseClass || "-",
@@ -205,8 +205,8 @@ export function DashboardShell({ role, agencies, showAdminPanel, openAdmin, clos
       body: tableRows,
       styles: { 
         fontSize: 7,
-        cellPadding: 1.5,
-        overflow: "linebreak",
+        cellPadding: 1,
+        overflow: "hidden",
         font: "helvetica"
       },
       headStyles: { 
@@ -218,20 +218,20 @@ export function DashboardShell({ role, agencies, showAdminPanel, openAdmin, clos
       columnStyles: {
         0: { cellWidth: 10, halign: "center" },  // Serial number
         1: { cellWidth: 18 }, // Consumer ID
-        2: { cellWidth: 40 }, // Name
+        2: { cellWidth: 55 }, // Name
         3: { cellWidth: 60 }, // Address
         4: { cellWidth: 20 }, // Phone
         5: { cellWidth: 20 }, // Device
         6: { cellWidth: 10 }, // Class
         7: { cellWidth: 30 }, // Due Date
         8: { cellWidth: 20 }, // OSD
-        9: { cellWidth: 25 }, // Agency
+        9: { cellWidth: 20 }, // Agency
         10: { cellWidth: 20 } // Status
       },
       alternateRowStyles: { 
-        fillColor: [245, 245, 245] 
+        fillColor: [144, 238, 144] 
       },
-      margin: { left: 10, right: 10, top: 25 },
+      margin: { left: 5, right: 5, top: 25 },
       tableWidth: "wrap",
       didDrawPage: function(data) {
         // Footer
