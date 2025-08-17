@@ -48,7 +48,7 @@ export function DashboardShell({ role, agencies, showAdminPanel, openAdmin, clos
       doc.setTextColor(40, 53, 147);
       doc.text(`Top ${topN} Defaulters`, doc.internal.pageSize.width / 2, 15, { align: "center" });
 
-      const tableColumn = ["#", "Con ID", "Name", "Address", "Phone", "Device", "Class", "Due Date", "OSD", "Status"];
+      const tableColumn = ["#", "Con ID", "Name", "Address", "Phone", "Device", "Class", "Due Date", "OSD", "Agency", "Status", "Notes"];
       const tableRows = topConsumers.map((c, index) => [
         index + 1,
         c.consumerId || "-",
@@ -66,10 +66,14 @@ export function DashboardShell({ role, agencies, showAdminPanel, openAdmin, clos
           content: `${Math.round(Number(c.d2NetOS || "0")).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`,
           styles: { fontStyle: "bold", halign: "right" }
         },
+        c.agency || "-",
         { 
           content: c.disconStatus || "-", 
           styles: { fillColor: getStatusColorForPDF(c.disconStatus), textColor: [0, 0, 0] } 
-        }
+        },
+        {
+          content: c.notes || "-",
+        },
       ]);
 
       autoTable(doc, {
