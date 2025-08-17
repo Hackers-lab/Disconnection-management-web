@@ -16,12 +16,15 @@ interface HeaderProps {
   userAgencies?: string[] // Add this prop
   onAdminClick?: () => void
   onDownload?: () => void
+  onDownloadDefaulters?: () => void
 }
 
-export function Header({ userRole, userAgencies = [], onAdminClick, onDownload }: HeaderProps) {
+export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, onDownloadDefaulters }: HeaderProps) {
   const [showAgencyUpdates, setShowAgencyUpdates] = useState(false)
   const [agencyLastUpdates, setAgencyLastUpdates] = useState<{name: string, lastUpdate: string}[]>([])
   const [loading, setLoading] = useState(false)
+  const [showDownloadMenu, setShowDownloadMenu] = useState(false);
+
 
   const handleDownload = () => {
     const url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTUdnZVO_1jP6rtHen6zsTM4ff3YEo_xPe41HvMq_q3yOtwuaoTNz4AEOtuabLbmw2BzYnJh8fCIF2Y/pub?output=csv";
@@ -67,14 +70,40 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload }
               <User className="h-4 w-4" />
               <span className="capitalize">{userRole}</span>
             </div>
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              onClick={onDownload}
-              title="Download Data"
-            >
-              <Download className="h-4 w-4" />
-            </Button>
+            <div className="relative">
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={() => setShowDownloadMenu(!showDownloadMenu)}
+                title="Download Options"
+              >
+                <Download className="h-4 w-4" />
+              </Button>
+
+              {showDownloadMenu && (
+                <div className="absolute right-0 mt-2 w-48 bg-white border rounded shadow-lg z-50">
+                  <button
+                    className="block w-full text-left px-4 py-2 hover:bg-gray-100"
+                    onClick={() => {
+                      setShowDownloadMenu(false);
+                      onDownload && onDownload();
+                    }}
+                  >
+                    Download Report
+                  </button>
+                  <button
+                    className="block w-full text-left px-4 py-2 hover:bg-gray-100"
+                    onClick={() => {
+                      setShowDownloadMenu(false);
+                      onDownloadDefaulters && onDownloadDefaulters();
+                    }}
+                  >
+                    Top Defaulter List
+                  </button>
+                </div>
+              )}
+            </div>
+
             <Button
               variant="ghost"
               size="sm"
