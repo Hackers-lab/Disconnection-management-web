@@ -24,6 +24,16 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
   const [agencyLastUpdates, setAgencyLastUpdates] = useState<{name: string, lastUpdate: string}[]>([])
   const [loading, setLoading] = useState(false)
   const [showDownloadMenu, setShowDownloadMenu] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
+
+  const handleLogout = async () => {
+    try {
+      setLoggingOut(true);
+      await logout(); // server action, will redirect("/login")
+    } catch (err) {
+      setLoggingOut(false); // fallback if error
+    }
+  };
 
 
   const handleDownload = () => {
@@ -122,11 +132,15 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
                 )}
               </>
             )}
-            <form action={logout}>
-              <Button variant="ghost" size="sm" type="submit" title="Logout">
-                <LogOut className="h-4 w-4" />
-              </Button>
-            </form>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleLogout}
+              title="Logout"
+              disabled={loggingOut}
+            >
+              <LogOut className="h-4 w-4" />
+            </Button>
           </div>
         </div>
       </div>
@@ -160,6 +174,15 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
           </div>
         </DialogContent>
       </Dialog>
+      {loggingOut && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-white bg-opacity-70">
+          <div className="flex flex-col items-center gap-4">
+            <div className="h-12 w-12 animate-spin rounded-full border-4 border-blue-600 border-t-transparent"></div>
+            <p className="text-lg font-medium text-gray-700">Logging out...</p>
+          </div>
+        </div>
+      )}
+
     </header>
   )
 }
