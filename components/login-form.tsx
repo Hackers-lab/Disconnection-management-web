@@ -31,13 +31,21 @@ export function LoginForm() {
   }
 
   return (
+    <>
     <Card className="shadow-xl border-0 bg-white/80 backdrop-blur-sm">
       <CardHeader className="space-y-1 pb-6">
         <CardTitle className="text-2xl font-bold text-center text-gray-900">Sign In</CardTitle>
         <p className="text-sm text-gray-600 text-center">Enter your credentials to access the system</p>
       </CardHeader>
       <CardContent className="space-y-6">
-        <form action={handleSubmit} className="space-y-5">
+        <form
+          onSubmit={async (e) => {
+            e.preventDefault(); // prevent full form post
+            const formData = new FormData(e.currentTarget);
+            await handleSubmit(formData);
+          }}
+          className="space-y-5"
+        >
           <div className="space-y-2">
             <Label htmlFor="username" className="text-sm font-medium text-gray-700">
               Username
@@ -106,5 +114,15 @@ export function LoginForm() {
         </div>
       </CardContent>
     </Card>
+      {/* 🔥 Full-screen overlay */}
+        {loading && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-white bg-opacity-70">
+            <div className="flex flex-col items-center gap-4">
+              <div className="h-12 w-12 animate-spin rounded-full border-4 border-blue-600 border-t-transparent"></div>
+              <p className="text-lg font-medium text-gray-700">Signing in...</p>
+            </div>
+          </div>
+        )}
+        </>
   )
 }
