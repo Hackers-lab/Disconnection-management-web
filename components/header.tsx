@@ -26,6 +26,41 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
   const [showDownloadMenu, setShowDownloadMenu] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
 
+  // Add this helper inside Header component
+  // Helper for parsing dd-mm-yyyy to Date
+  const parseDate = (dateStr: string) => {
+    if (!dateStr) return null;
+    const parts = dateStr.split("-");
+    if (parts.length !== 3) return null;
+
+    const [day, month, year] = parts.map(p => parseInt(p, 10));
+    const date = new Date(year, month - 1, day);
+    return isNaN(date.getTime()) ? null : date;
+  };
+
+  // Row color based on date
+  const getRowColor = (dateStr: string) => {
+    const date = parseDate(dateStr);
+    if (!date) return "bg-gray-200";
+
+    const today = new Date();
+    const yesterday = new Date();
+    yesterday.setDate(today.getDate() - 1);
+
+    const format = (d: Date) => d.toISOString().split("T")[0];
+    const dateStrFmt = format(date);
+    const todayStr = format(today);
+    const yesterdayStr = format(yesterday);
+
+    if (dateStrFmt === todayStr) return "bg-green-300";
+    if (dateStrFmt === yesterdayStr) return "bg-yellow-300";
+    return "bg-red-300";
+  };
+
+
+
+
+
   const handleLogout = async () => {
     try {
       setLoggingOut(true);
@@ -54,8 +89,8 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
       if (response.ok) {
         const data = await response.json()
         // Filter agencies for non-admin users
-        const filteredData = userRole === "admin" 
-          ? data 
+        const filteredData = (userRole === "admin" || userRole === "viewer" || userRole === "executive")
+          ? data
           : data.filter((agency: { name: string, lastUpdate: string }) => userAgencies.includes(agency.name))
         setAgencyLastUpdates(filteredData)
         setShowAgencyUpdates(true)
@@ -101,6 +136,7 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
                   >
                     Download Report
                   </button>
+                  {(userRole === "admin" || userRole === "executive" || userRole === "viewer") && (
                   <button
                     className="block w-full text-left px-4 py-2 hover:bg-gray-100"
                     onClick={() => {
@@ -110,19 +146,20 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
                   >
                     Top Defaulter List
                   </button>
+                  )}
                 </div>
               )}
             </div>
-
+            {(userRole === "admin" || userRole === "executive" || userRole === "viewer") && (
             <Button
               variant="ghost"
               size="sm"
               onClick={handleUpload}
-              title="Upload Data"
+              title="Agency Last Updates"
               disabled={loading}
             >
               <List className="h-4 w-4" />
-            </Button>
+            </Button>)}
             {userRole === "admin" && (
               <>
                 {onAdminClick && (
@@ -146,6 +183,7 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
       </div>
 
       {/* Agency Updates Dialog */}
+
       <Dialog open={showAgencyUpdates} onOpenChange={setShowAgencyUpdates}>
         <DialogContent>
           <DialogHeader>
@@ -153,19 +191,33 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
           </DialogHeader>
           <div className="space-y-3 max-h-[60vh] overflow-y-auto">
             {agencyLastUpdates.length > 0 ? (
-              agencyLastUpdates.map(agency => (
-                <div key={agency.name} className="flex justify-between items-center border-b pb-2">
-                  <span className="font-medium">{agency.name}</span>
-                  <span className="text-sm text-gray-600">
-                    {agency.lastUpdate || "No updates recorded"}
-                  </span>
-                </div>
-              ))
+              [...agencyLastUpdates]  // clone before sorting
+                .sort((a, b) => {
+                  const dateA = parseDate(a.lastUpdate) || new Date(0);
+                  const dateB = parseDate(b.lastUpdate) || new Date(0);
+                  return dateB.getTime() - dateA.getTime(); // newest first
+                })
+                .map(agency => {
+                  const rowColor = getRowColor(agency.lastUpdate);
+                  return (
+                    <div
+                      key={agency.name}
+                      className={`flex justify-between items-center border-b pb-2 px-2 rounded ${rowColor}`}
+                    >
+                      <span className="font-medium">{agency.name}</span>
+                      <span className="text-sm">
+                        {agency.lastUpdate || "No updates recorded"}
+                      </span>
+                    </div>
+                  );
+                })
             ) : (
               <p className="text-gray-500 text-center py-4">
                 No agency update data available
               </p>
             )}
+
+
           </div>
           <div className="flex justify-end pt-4">
             <Button onClick={() => setShowAgencyUpdates(false)}>

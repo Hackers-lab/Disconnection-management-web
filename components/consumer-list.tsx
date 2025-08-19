@@ -39,6 +39,7 @@ interface ConsumerListProps {
   showAdminPanel: boolean
   onCloseAdminPanel: () => void
   onDownload: () => void
+  onDownloadDefaulters: () => void
 }
 interface ConsumerListRef {  // <-- Add this interface
   getCurrentConsumers: () => ConsumerData[]
@@ -76,7 +77,7 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
     address: "",
     name: "",
     consumerId: "",
-    status: (userRole === "admin" || userRole === "executive") ? "All Status" : "connected",
+    status: (userRole === "admin" || userRole === "executive" || userRole === "viewer") ? "All Status" : "connected",
     baseClass: "All Classes",
   })
   const [excludeFilters, setExcludeFilters] = useState({
@@ -119,7 +120,7 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
 
         // Load agencies for admin
         let agencyList: string[] = []
-        if (userRole === "admin") {
+        if (userRole === "admin" || userRole === "viewer") {
           try {
             const agenciesResponse = await fetch("/api/admin/agencies")
             if (agenciesResponse.ok) {
@@ -145,7 +146,7 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
         // Filter consumers based on user role and agencies (case-insensitive)
         let filteredData = data
 
-        if (userRole !== "admin") {
+        if (userRole !== "admin" && userRole !== "viewer") {
           const userAgenciesUpper = userAgencies.map((a) => a.toUpperCase())
 
           if (userRole === "executive") {
@@ -770,19 +771,19 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
 
               <Button onClick={() => setSelectedConsumer(consumer)} 
               className={`w-full mt-4 ${
-                  (consumer.disconStatus.toLowerCase() !== "connected" && userRole !== "admin" && userRole !== "executive") 
+                  ((consumer.disconStatus.toLowerCase() !== "connected" && userRole !== "admin" && userRole !== "executive") || userRole === "viewer")
                     ? "bg-gray-100 text-gray-500 hover:bg-gray-100 cursor-not-allowed" 
                     : ""
                 }`}
                 size="sm"
-                disabled={consumer.disconStatus.toLowerCase() !== "connected" && userRole !== "admin" && userRole !== "executive"}
+                disabled={(consumer.disconStatus.toLowerCase() !== "connected" && userRole !== "admin" && userRole !== "executive") || userRole === "viewer"}
               >
                 <Edit className={`h-4 w-4 mr-2 ${
-                    (consumer.disconStatus.toLowerCase() !== "connected" && userRole !== "admin" && userRole !== "executive") 
+                    ((consumer.disconStatus.toLowerCase() !== "connected" && userRole !== "admin" && userRole !== "executive") || userRole === "viewer") 
                       ? "text-gray-400" 
                       : ""
                   }`} />
-                Enter Disconnection
+                Update Status
               </Button>
             </CardContent>
           </Card>

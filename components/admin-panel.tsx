@@ -528,6 +528,7 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
                   <SelectItem value="admin">Admin</SelectItem>
                   <SelectItem value="agency">Agency</SelectItem>
                   <SelectItem value="executive">Executive</SelectItem>
+                  <SelectItem value="viewer">Viewer</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -619,6 +620,7 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
                             <SelectItem value="admin">Admin</SelectItem>
                             <SelectItem value="agency">Agency</SelectItem>
                             <SelectItem value="executive">Executive</SelectItem>
+                            <SelectItem value="viewer">Viewer</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>

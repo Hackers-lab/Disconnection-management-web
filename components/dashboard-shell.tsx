@@ -100,7 +100,7 @@ export function DashboardShell({ role, agencies, showAdminPanel, openAdmin, clos
     
     const consumers = [...consumerListRef.current.getCurrentConsumers()];
     const doc = new jsPDF({ orientation: "landscape" });
-    const isAdmin = role === "admin";
+    const isAdmin = role === "admin" || role === "viewer" || role === "executive";
     let heading = "Disconnection Summary Dashboard";
     const officeCode = consumers.length > 0 ? consumers[0].offCode : "";
     if (officeCode === "6612107") {
@@ -255,7 +255,7 @@ export function DashboardShell({ role, agencies, showAdminPanel, openAdmin, clos
     // ---- AGENCY CONSUMER LISTS ----
     const consumersByAgency: Record<string, ConsumerData[]> = {};
     consumers.forEach(c => {
-      const agency = c.agency || "Unknown";
+      const agency = c.agency || "Un-Allocated";
       if (!consumersByAgency[agency]) consumersByAgency[agency] = [];
       consumersByAgency[agency].push(c);
     });
@@ -287,7 +287,7 @@ export function DashboardShell({ role, agencies, showAdminPanel, openAdmin, clos
         { content: c.disconStatus || "-", styles: { fillColor: getStatusColorForPDF(c.disconStatus), textColor: [0,0,0] } }
       ]);
 
-      autoTable(doc, { startY: 25, head: [tableColumn], body: tableRows as any, styles: { fontSize: 7, font: "helvetica" },
+      autoTable(doc, { startY: 25, head: [tableColumn], body: tableRows as any, styles: { fontSize: isAdmin ? 7 : 7, font: "helvetica" },
       didDrawPage: function(data) {
         // Footer
         doc.setFontSize(8);
