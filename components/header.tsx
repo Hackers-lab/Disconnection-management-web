@@ -21,7 +21,7 @@ interface HeaderProps {
 
 export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, onDownloadDefaulters }: HeaderProps) {
   const [showAgencyUpdates, setShowAgencyUpdates] = useState(false)
-  const [agencyLastUpdates, setAgencyLastUpdates] = useState<{name: string, lastUpdate: string}[]>([])
+  const [agencyLastUpdates, setAgencyLastUpdates] = useState<{name: string, lastUpdate: string; lastUpdateCount: number}[]>([])
   const [loading, setLoading] = useState(false)
   const [showDownloadMenu, setShowDownloadMenu] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
@@ -261,7 +261,8 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
                 })
                 .map(agency => {
                   const rowColor = getRowColor(agency.lastUpdate);
-                  const sameDateCount = getSameDateCountForAgency(agency);
+                  //const sameDateCount = getSameDateCountForAgency(agency);
+                  const sameDateCount = agency.lastUpdateCount || 0;
 
                   return (
                     <div
@@ -277,7 +278,7 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
 
                       <span className="text-sm flex items-center gap-2">
                         {agency.lastUpdate || "No updates recorded"}
-
+                
                         {/* Show badge only when there's meaningful count */}
                         {agency.lastUpdate && sameDateCount > 1 && (
                           <span className="text-xs bg-black/10 rounded-full px-2 py-0.5">

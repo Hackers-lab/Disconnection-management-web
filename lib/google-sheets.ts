@@ -106,22 +106,37 @@ function findColumnIndex(headers: string[], searchTerms: string[]): number {
 }
 
 // lib/google-sheets.ts
-export async function getAgencyLastUpdates(): Promise<{name: string, lastUpdate: string}[]> {
+export async function getAgencyLastUpdates(): Promise<
+  { name: string; lastUpdate: string; lastUpdateCount: number }[]
+> {
   const consumers = await fetchConsumerData();
-  const agencyMap = new Map<string, Date>();
+
+  interface AgencyInfo {
+    latest: Date;
+    count: number;
+  }
+
+  const agencyMap = new Map<string, AgencyInfo>();
+
   const dateFormats = [
-    { pattern: /^(\d{2})-(\d{2})-(\d{4})$/, handler: (d: RegExpMatchArray) => 
-      new Date(`${d[3]}-${d[2]}-${d[1]}`) }, // DD-MM-YYYY
-    { pattern: /^(\d{2})-(\d{2})-(\d{4})$/, handler: (d: RegExpMatchArray) => 
-      new Date(`${d[3]}-${d[1]}-${d[2]}`) }, // MM-DD-YYYY
-    { pattern: /^(\d{4})-(\d{2})-(\d{2})$/, handler: (d: RegExpMatchArray) => 
-      new Date(`${d[1]}-${d[2]}-${d[3]}`) }  // YYYY-MM-DD
+    {
+      pattern: /^(\d{2})-(\d{2})-(\d{4})$/,
+      handler: (d: RegExpMatchArray) => new Date(`${d[3]}-${d[2]}-${d[1]}`), // DD-MM-YYYY
+    },
+    {
+      pattern: /^(\d{2})-(\d{2})-(\d{4})$/,
+      handler: (d: RegExpMatchArray) => new Date(`${d[3]}-${d[1]}-${d[2]}`), // MM-DD-YYYY
+    },
+    {
+      pattern: /^(\d{4})-(\d{2})-(\d{2})$/,
+      handler: (d: RegExpMatchArray) => new Date(`${d[1]}-${d[2]}-${d[3]}`), // YYYY-MM-DD
+    },
   ];
 
-  consumers.forEach(consumer => {
+  consumers.forEach((consumer) => {
     if (!consumer.agency || !consumer.disconDate) return;
 
-    // Parse the date from any supported format
+    // Parse the date
     let parsedDate: Date | null = null;
     for (const format of dateFormats) {
       const match = consumer.disconDate.match(format.pattern);
@@ -130,24 +145,42 @@ export async function getAgencyLastUpdates(): Promise<{name: string, lastUpdate:
         break;
       }
     }
-
     if (!parsedDate || isNaN(parsedDate.getTime())) return;
 
-    // Compare with existing date
-    const existingDate = agencyMap.get(consumer.agency);
-    if (!existingDate || parsedDate > existingDate) {
-      agencyMap.set(consumer.agency, parsedDate);
+    const info = agencyMap.get(consumer.agency);
+
+    if (!info) {
+      // first record for this agency
+      agencyMap.set(consumer.agency, { latest: parsedDate, count: 1 });
+    } else {
+      if (parsedDate > info.latest) {
+        // found a newer date → reset count
+        agencyMap.set(consumer.agency, { latest: parsedDate, count: 1 });
+      } else if (
+        parsedDate.getFullYear() === info.latest.getFullYear() &&
+        parsedDate.getMonth() === info.latest.getMonth() &&
+        parsedDate.getDate() === info.latest.getDate()
+      ) {
+        // same as latest date → increment count
+        info.count++;
+        agencyMap.set(consumer.agency, info);
+      }
+      // if older → ignore
     }
   });
 
-  // Format dates to DD-MM-YYYY
-  return Array.from(agencyMap.entries()).map(([name, date]) => ({
-    name,
-    lastUpdate: `${String(date.getDate()).padStart(2, '0')}-${
-                String(date.getMonth() + 1).padStart(2, '0')}-${
-                date.getFullYear()}`
-  })).sort((a, b) => a.name.localeCompare(b.name));
+  // Format output
+  return Array.from(agencyMap.entries())
+    .map(([name, info]) => ({
+      name,
+      lastUpdate: `${String(info.latest.getDate()).padStart(2, "0")}-${String(
+        info.latest.getMonth() + 1
+      ).padStart(2, "0")}-${info.latest.getFullYear()}`,
+      lastUpdateCount: info.count,
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
 }
+
 
 
 export async function fetchConsumerData(): Promise<ConsumerData[]> {

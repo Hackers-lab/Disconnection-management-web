@@ -5,6 +5,7 @@ import { getAgencyLastUpdates } from '@/lib/google-sheets'; // Your data source
 type AgencyUpdate = {
   name: string;
   lastUpdate: string;
+  lastUpdateCount: number;
 };
 
 export async function GET() {
