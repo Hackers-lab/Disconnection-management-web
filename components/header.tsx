@@ -280,7 +280,7 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
                         {agency.lastUpdate || "No updates recorded"}
                 
                         {/* Show badge only when there's meaningful count */}
-                        {agency.lastUpdate && sameDateCount > 1 && (
+                        {agency.lastUpdate && sameDateCount > 0 && (
                           <span className="text-xs bg-black/10 rounded-full px-2 py-0.5">
                             {sameDateCount}
                           </span>
