@@ -77,6 +77,50 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
     return counts;
   }, [agencyLastUpdates]);
 
+  // --- NEW: per-agency same-date count ---
+  const getSameDateCountForAgency = (agency: any) => {
+    const key = dateKey(agency?.lastUpdate);
+    if (!key) return 0;
+
+    // If your data already has a count for this date, use it:
+    if (typeof agency?.lastUpdateCount === "number") return agency.lastUpdateCount;
+    if (agency?.dateCounts && typeof agency.dateCounts[key] === "number") return agency.dateCounts[key];
+    if (agency?.stats && typeof agency.stats[key] === "number") return agency.stats[key];
+
+    // Otherwise, derive it from per-agency records (pick what you have):
+    const pool: string[] = [];
+
+    if (Array.isArray(agency?.updates)) {
+      // e.g., ["20-08-2025", "20-08-2025", "19-08-2025"]
+      pool.push(...agency.updates.filter(Boolean));
+    }
+
+    if (Array.isArray(agency?.logs)) {
+      // e.g., [{date:"20-08-2025"}, {date:"20-08-2025"}] or {lastUpdate:"..."}
+      pool.push(
+        ...agency.logs
+          .map((x: any) => x?.date || x?.lastUpdate)
+          .filter(Boolean)
+      );
+    }
+
+    if (Array.isArray(agency?.consumers)) {
+      // e.g., consumers with lastUpdate per consumer
+      pool.push(
+        ...agency.consumers
+          .map((c: any) => c?.lastUpdate)
+          .filter(Boolean)
+      );
+    }
+
+    if (pool.length === 0) {
+      // We at least know the agency has this lastUpdate date once
+      return agency?.lastUpdate ? 1 : 0;
+    }
+
+    return pool.reduce((acc, d) => (dateKey(d) === key ? acc + 1 : acc), 0);
+  };
+
 
 
   const handleLogout = async () => {
@@ -217,28 +261,33 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
                 })
                 .map(agency => {
                   const rowColor = getRowColor(agency.lastUpdate);
-                  const key = dateKey(agency.lastUpdate);
-                  const count = dateCounts[key] || 0;
+                  const sameDateCount = getSameDateCountForAgency(agency);
 
                   return (
                     <div
                       key={agency.name}
                       className={`flex justify-between items-center border-b pb-2 px-2 rounded ${rowColor}`}
-                      title={count ? `Agencies updated on this date: ${count}` : undefined}
+                      title={
+                        agency.lastUpdate
+                          ? `This agency has ${sameDateCount} record(s) with ${agency.lastUpdate}`
+                          : undefined
+                      }
                     >
                       <span className="font-medium">{agency.name}</span>
+
                       <span className="text-sm flex items-center gap-2">
                         {agency.lastUpdate || "No updates recorded"}
-                        {count > 0 && (
+
+                        {/* Show badge only when there's meaningful count */}
+                        {agency.lastUpdate && sameDateCount > 1 && (
                           <span className="text-xs bg-black/10 rounded-full px-2 py-0.5">
-                            {count}
+                            {sameDateCount}
                           </span>
                         )}
                       </span>
                     </div>
                   );
                 })
-
             ) : (
               <p className="text-gray-500 text-center py-4">
                 No agency update data available
