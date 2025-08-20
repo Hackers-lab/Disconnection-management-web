@@ -765,7 +765,7 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
 
               {consumer.disconDate && (
                 <div className="text-xs text-red-600">
-                  <span className="font-medium">Disconnected:</span> {consumer.disconDate}
+                  <span className="font-medium">Last Updated:</span> {consumer.disconDate}
                 </div>
               )}
 
