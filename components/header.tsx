@@ -3,7 +3,7 @@
 import { Button } from "@/components/ui/button"
 import { logout } from "@/app/actions/auth"
 import { Power, User, Settings, Download, LogOut, Upload, List } from "lucide-react"
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import {
   Dialog,
   DialogContent,
@@ -28,36 +28,54 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
 
   // Add this helper inside Header component
   // Helper for parsing dd-mm-yyyy to Date
+  // Helper for parsing dd-mm-yyyy to a local Date at 00:00
   const parseDate = (dateStr: string) => {
     if (!dateStr) return null;
     const parts = dateStr.split("-");
     if (parts.length !== 3) return null;
-
     const [day, month, year] = parts.map(p => parseInt(p, 10));
-    const date = new Date(year, month - 1, day);
-    return isNaN(date.getTime()) ? null : date;
+    const d = new Date(year, month - 1, day); // local midnight
+    return isNaN(d.getTime()) ? null : d;
   };
 
-  // Row color based on date
-  const getRowColor = (dateStr: string) => {
-    const date = parseDate(dateStr);
-    if (!date) return "bg-gray-200";
+  const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const sameDay = (a: Date, b: Date) =>
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate();
 
-    const today = new Date();
-    const yesterday = new Date();
+  const getRowColor = (dateStr: string) => {
+    const parsed = parseDate(dateStr);
+    if (!parsed) return "bg-gray-200";
+
+    const d = startOfDay(parsed);
+    const today = startOfDay(new Date());
+    const yesterday = startOfDay(new Date());
     yesterday.setDate(today.getDate() - 1);
 
-    const format = (d: Date) => d.toISOString().split("T")[0];
-    const dateStrFmt = format(date);
-    const todayStr = format(today);
-    const yesterdayStr = format(yesterday);
-
-    if (dateStrFmt === todayStr) return "bg-green-300";
-    if (dateStrFmt === yesterdayStr) return "bg-yellow-300";
+    if (sameDay(d, today)) return "bg-green-300";
+    if (sameDay(d, yesterday)) return "bg-yellow-300";
     return "bg-red-300";
   };
 
+  // Key like YYYY-MM-DD in LOCAL time for consistent counting
+  const dateKey = (dateStr: string) => {
+    const d = parseDate(dateStr);
+    if (!d) return "invalid";
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  };
 
+  const dateCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const a of agencyLastUpdates) {
+      const key = dateKey(a.lastUpdate);
+      counts[key] = (counts[key] || 0) + 1;
+    }
+    return counts;
+  }, [agencyLastUpdates]);
 
 
 
@@ -199,18 +217,28 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
                 })
                 .map(agency => {
                   const rowColor = getRowColor(agency.lastUpdate);
+                  const key = dateKey(agency.lastUpdate);
+                  const count = dateCounts[key] || 0;
+
                   return (
                     <div
                       key={agency.name}
                       className={`flex justify-between items-center border-b pb-2 px-2 rounded ${rowColor}`}
+                      title={count ? `Agencies updated on this date: ${count}` : undefined}
                     >
                       <span className="font-medium">{agency.name}</span>
-                      <span className="text-sm">
+                      <span className="text-sm flex items-center gap-2">
                         {agency.lastUpdate || "No updates recorded"}
+                        {count > 0 && (
+                          <span className="text-xs bg-black/10 rounded-full px-2 py-0.5">
+                            {count}
+                          </span>
+                        )}
                       </span>
                     </div>
                   );
                 })
+
             ) : (
               <p className="text-gray-500 text-center py-4">
                 No agency update data available
