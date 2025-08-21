@@ -669,7 +669,7 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
                   <SelectItem value="office team">Office Team</SelectItem>
                   <SelectItem value="bill dispute">Bill Dispute</SelectItem>
                   <SelectItem value="pending">Pending</SelectItem>
-                  <SelectItem value="PAID">Paid</SelectItem>
+                  <SelectItem value="Paid">Paid</SelectItem>
                   <SelectItem value="agency paid">Agency Paid</SelectItem>
                   <SelectItem value="not found">Not Found</SelectItem>
                 </SelectContent>
