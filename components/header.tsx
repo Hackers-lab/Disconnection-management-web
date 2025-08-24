@@ -274,9 +274,9 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
                           : undefined
                       }
                     >
-                      <span className="font-medium">{agency.name}</span>
+                      <span className="font-medium leading-none">{agency.name}</span>
 
-                      <span className="text-sm flex items-center gap-2">
+                      <span className="text-sm leading-none flex items-center gap-2">
                         {agency.lastUpdate || "No updates recorded"}
                 
                         {/* Show badge only when there's meaningful count */}
