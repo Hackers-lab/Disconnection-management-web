@@ -53,9 +53,9 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
     const yesterday = startOfDay(new Date());
     yesterday.setDate(today.getDate() - 1);
 
-    if (sameDay(d, today)) return "bg-green-300";
-    if (sameDay(d, yesterday)) return "bg-yellow-300";
-    return "bg-red-300";
+    if (sameDay(d, today)) return "bg-green-100 border-l-4 border-green-500 text-green-800";
+    if (sameDay(d, yesterday)) return "bg-yellow-100 border-l-4 border-yellow-500 text-yellow-800";
+    return "bg-red-100 border-l-4 border-red-500 text-red-800";
   };
 
   // Key like YYYY-MM-DD in LOCAL time for consistent counting
@@ -120,6 +120,22 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
 
     return pool.reduce((acc, d) => (dateKey(d) === key ? acc + 1 : acc), 0);
   };
+
+
+  const getBadgeColor = (dateStr: string) => {
+    const parsed = parseDate(dateStr)
+    if (!parsed) return "bg-gray-200 text-gray-800"
+
+    const d = startOfDay(parsed)
+    const today = startOfDay(new Date())
+    const yesterday = startOfDay(new Date())
+    yesterday.setDate(today.getDate() - 1)
+
+    if (sameDay(d, today)) return "bg-green-200 text-green-800"
+    if (sameDay(d, yesterday)) return "bg-yellow-200 text-yellow-800"
+    return "bg-red-200 text-red-800"
+  }
+
 
 
 
@@ -247,9 +263,9 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
       {/* Agency Updates Dialog */}
 
       <Dialog open={showAgencyUpdates} onOpenChange={setShowAgencyUpdates}>
-        <DialogContent>
+        <DialogContent className="max-w-2xl rounded-xl shadow-lg">
           <DialogHeader>
-            <DialogTitle>Agency Last Updates</DialogTitle>
+            <DialogTitle className="text-xl font-bold text-gray-800 border-b pb-2">Agency Last Updates</DialogTitle>
           </DialogHeader>
           <div className="space-y-3 max-h-[60vh] overflow-y-auto">
             {agencyLastUpdates.length > 0 ? (
@@ -257,7 +273,12 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
                 .sort((a, b) => {
                   const dateA = parseDate(a.lastUpdate) || new Date(0);
                   const dateB = parseDate(b.lastUpdate) || new Date(0);
-                  return dateB.getTime() - dateA.getTime(); // newest first
+                  if (dateB.getTime() !== dateA.getTime()) {
+                    return dateB.getTime() - dateA.getTime();
+                  }
+                  const countA = a.lastUpdateCount || 0;
+                  const countB = b.lastUpdateCount || 0;
+                  return countB - countA;
                 })
                 .map(agency => {
                   const rowColor = getRowColor(agency.lastUpdate);
@@ -267,7 +288,7 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
                   return (
                     <div
                       key={agency.name}
-                      className={`flex justify-between items-center border-b pb-2 px-2 rounded ${rowColor}`}
+                      className={`flex min-h-6 items-center justify-between px-4 rounded-lg shadow-sm hover:shadow-md transition ${rowColor}`}
                       title={
                         agency.lastUpdate
                           ? `This agency has ${sameDateCount} record(s) with ${agency.lastUpdate}`
@@ -281,10 +302,17 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
                 
                         {/* Show badge only when there's meaningful count */}
                         {agency.lastUpdate && sameDateCount > 0 && (
-                          <span className="text-xs bg-black/10 rounded-full px-2 py-0.5">
+                          <span
+                            className={
+                              "inline-flex items-center justify-center text-xs font-semibold rounded-full px-2 py-0.5 " +
+                              getBadgeColor(agency.lastUpdate)
+                            }
+                          >
                             {sameDateCount}
                           </span>
                         )}
+
+
                       </span>
                     </div>
                   );
