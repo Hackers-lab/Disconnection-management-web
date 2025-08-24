@@ -32,10 +32,10 @@ export function LoginForm() {
 
   return (
     <>
-    <Card className="shadow-xl border-0 bg-white/80 backdrop-blur-sm">
-      <CardHeader className="space-y-1 pb-6">
-        <CardTitle className="text-2xl font-bold text-center text-gray-900">Sign In</CardTitle>
-        <p className="text-sm text-gray-600 text-center">Enter your credentials to access the system</p>
+    <Card className="rounded-2xl shadow-lg hover:shadow-xl transition bg-white/90 backdrop-blur-sm border border-gray-100">
+      <CardHeader className="space-y-2 pb-6 text-center">
+        <CardTitle className="text-3xl font-bold text-gray-900">Welcome Back</CardTitle>
+        <p className="text-sm text-gray-500">Sign in to continue to your dashboard</p>
       </CardHeader>
       <CardContent className="space-y-6">
         <form
@@ -58,7 +58,7 @@ export function LoginForm() {
                 type="text"
                 required
                 placeholder="Enter your username"
-                className="pl-10 h-12 border-gray-300 focus:border-blue-500 focus:ring-blue-500"
+                className="pl-10 h-14 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-400 focus:ring-offset-0"
               />
             </div>
           </div>
@@ -75,7 +75,7 @@ export function LoginForm() {
                 type={showPassword ? "text" : "password"}
                 required
                 placeholder="Enter your password"
-                className="pl-10 pr-10 h-12 border-gray-300 focus:border-blue-500 focus:ring-blue-500"
+                className="pl-10 h-14 rounded-xl border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-400 focus:ring-offset-0"
               />
               <button
                 type="button"
@@ -95,7 +95,8 @@ export function LoginForm() {
 
           <Button
             type="submit"
-            className="w-full h-12 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors duration-200"
+            className="w-full h-12 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 
+             text-white font-semibold rounded-full shadow-md hover:shadow-lg transition"
             disabled={loading}
           >
             {loading ? (
@@ -109,17 +110,19 @@ export function LoginForm() {
           </Button>
         </form>
 
-        <div className="text-center pt-4 border-t border-gray-200">
-          <p className="text-xs text-gray-500">Having trouble? Contact je.kushidaccc@gmail.com</p>
+        <div className="text-center pt-4 border-t border-gray-100">
+          <p className="text-xs text-gray-400">
+            Having trouble? <a href="mailto:je.kushidaccc@gmail.com" className="text-blue-500 hover:underline">Contact support</a>
+          </p>
         </div>
       </CardContent>
     </Card>
       {/* 🔥 Full-screen overlay */}
         {loading && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-white bg-opacity-70">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-white/60 backdrop-blur-sm">
             <div className="flex flex-col items-center gap-4">
-              <div className="h-12 w-12 animate-spin rounded-full border-4 border-blue-600 border-t-transparent"></div>
-              <p className="text-lg font-medium text-gray-700">Signing in...</p>
+              <div className="h-14 w-14 animate-spin rounded-full border-4 border-blue-600 border-t-transparent"></div>
+              <p className="text-base font-medium text-gray-700 animate-pulse">Signing in...</p>
             </div>
           </div>
         )}

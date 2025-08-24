@@ -10,8 +10,8 @@ export default function LoginPage() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
             </svg>
           </div>
-          <h2 className="text-3xl font-bold text-gray-900">Consumer Disconnection Management </h2>
-          <p className="mt-2 text-sm text-gray-600">Sign in to manage disconnection consumers</p>
+          <h2 className="text-3xl font-bold text-gray-900">Disconnection Management </h2>
+          {/* <p className="mt-2 text-sm text-gray-600">Sign in to manage disconnection consumers</p> */}
         </div>
         <LoginForm />
       </div>

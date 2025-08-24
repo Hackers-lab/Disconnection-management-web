@@ -2,7 +2,7 @@
 
 import { Button } from "@/components/ui/button"
 import { logout } from "@/app/actions/auth"
-import { Power, User, Settings, Download, LogOut, Upload, List } from "lucide-react"
+import { Power, User, Settings, Download, LogOut, Upload, List, Building2, Calendar, Clock } from "lucide-react"
 import { useState, useMemo } from "react"
 import {
   Dialog,
@@ -13,7 +13,7 @@ import {
 
 interface HeaderProps {
   userRole: string
-  userAgencies?: string[] // Add this prop
+  userAgencies?: string[]
   onAdminClick?: () => void
   onDownload?: () => void
   onDownloadDefaulters?: () => void
@@ -26,15 +26,13 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
   const [showDownloadMenu, setShowDownloadMenu] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
 
-  // Add this helper inside Header component
-  // Helper for parsing dd-mm-yyyy to Date
-  // Helper for parsing dd-mm-yyyy to a local Date at 00:00
+  // --- Date helpers ---
   const parseDate = (dateStr: string) => {
     if (!dateStr) return null;
     const parts = dateStr.split("-");
     if (parts.length !== 3) return null;
     const [day, month, year] = parts.map(p => parseInt(p, 10));
-    const d = new Date(year, month - 1, day); // local midnight
+    const d = new Date(year, month - 1, day);
     return isNaN(d.getTime()) ? null : d;
   };
 
@@ -46,108 +44,40 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
 
   const getRowColor = (dateStr: string) => {
     const parsed = parseDate(dateStr);
-    if (!parsed) return "bg-gray-200";
+    if (!parsed) return "bg-gray-50 border border-gray-200";
 
     const d = startOfDay(parsed);
     const today = startOfDay(new Date());
     const yesterday = startOfDay(new Date());
     yesterday.setDate(today.getDate() - 1);
 
-    if (sameDay(d, today)) return "bg-green-100 border-l-4 border-green-500 text-green-800";
-    if (sameDay(d, yesterday)) return "bg-yellow-100 border-l-4 border-yellow-500 text-yellow-800";
-    return "bg-red-100 border-l-4 border-red-500 text-red-800";
+    if (sameDay(d, today)) return "bg-green-50 border border-green-200 hover:bg-green-100";
+    if (sameDay(d, yesterday)) return "bg-yellow-50 border border-yellow-200 hover:bg-yellow-100";
+    return "bg-red-50 border border-red-200 hover:bg-red-100";
   };
-
-  // Key like YYYY-MM-DD in LOCAL time for consistent counting
-  const dateKey = (dateStr: string) => {
-    const d = parseDate(dateStr);
-    if (!d) return "invalid";
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, "0");
-    const day = String(d.getDate()).padStart(2, "0");
-    return `${y}-${m}-${day}`;
-  };
-
-  const dateCounts = useMemo(() => {
-    const counts: Record<string, number> = {};
-    for (const a of agencyLastUpdates) {
-      const key = dateKey(a.lastUpdate);
-      counts[key] = (counts[key] || 0) + 1;
-    }
-    return counts;
-  }, [agencyLastUpdates]);
-
-  // --- NEW: per-agency same-date count ---
-  const getSameDateCountForAgency = (agency: any) => {
-    const key = dateKey(agency?.lastUpdate);
-    if (!key) return 0;
-
-    // If your data already has a count for this date, use it:
-    if (typeof agency?.lastUpdateCount === "number") return agency.lastUpdateCount;
-    if (agency?.dateCounts && typeof agency.dateCounts[key] === "number") return agency.dateCounts[key];
-    if (agency?.stats && typeof agency.stats[key] === "number") return agency.stats[key];
-
-    // Otherwise, derive it from per-agency records (pick what you have):
-    const pool: string[] = [];
-
-    if (Array.isArray(agency?.updates)) {
-      // e.g., ["20-08-2025", "20-08-2025", "19-08-2025"]
-      pool.push(...agency.updates.filter(Boolean));
-    }
-
-    if (Array.isArray(agency?.logs)) {
-      // e.g., [{date:"20-08-2025"}, {date:"20-08-2025"}] or {lastUpdate:"..."}
-      pool.push(
-        ...agency.logs
-          .map((x: any) => x?.date || x?.lastUpdate)
-          .filter(Boolean)
-      );
-    }
-
-    if (Array.isArray(agency?.consumers)) {
-      // e.g., consumers with lastUpdate per consumer
-      pool.push(
-        ...agency.consumers
-          .map((c: any) => c?.lastUpdate)
-          .filter(Boolean)
-      );
-    }
-
-    if (pool.length === 0) {
-      // We at least know the agency has this lastUpdate date once
-      return agency?.lastUpdate ? 1 : 0;
-    }
-
-    return pool.reduce((acc, d) => (dateKey(d) === key ? acc + 1 : acc), 0);
-  };
-
 
   const getBadgeColor = (dateStr: string) => {
-    const parsed = parseDate(dateStr)
-    if (!parsed) return "bg-gray-200 text-gray-800"
+    const parsed = parseDate(dateStr);
+    if (!parsed) return "bg-gray-200 text-gray-700";
+    const d = startOfDay(parsed);
+    const today = startOfDay(new Date());
+    const yesterday = startOfDay(new Date());
+    yesterday.setDate(today.getDate() - 1);
 
-    const d = startOfDay(parsed)
-    const today = startOfDay(new Date())
-    const yesterday = startOfDay(new Date())
-    yesterday.setDate(today.getDate() - 1)
+    if (sameDay(d, today)) return "bg-green-200 text-green-800";
+    if (sameDay(d, yesterday)) return "bg-yellow-200 text-yellow-800";
+    return "bg-red-200 text-red-800";
+  };
 
-    if (sameDay(d, today)) return "bg-green-200 text-green-800"
-    if (sameDay(d, yesterday)) return "bg-yellow-200 text-yellow-800"
-    return "bg-red-200 text-red-800"
-  }
-
-
-
-
+  // --- Actions ---
   const handleLogout = async () => {
     try {
       setLoggingOut(true);
-      await logout(); // server action, will redirect("/login")
+      await logout();
     } catch (err) {
-      setLoggingOut(false); // fallback if error
+      setLoggingOut(false);
     }
   };
-
 
   const handleDownload = () => {
     const url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTUdnZVO_1jP6rtHen6zsTM4ff3YEo_xPe41HvMq_q3yOtwuaoTNz4AEOtuabLbmw2BzYnJh8fCIF2Y/pub?output=csv";
@@ -161,17 +91,17 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
 
   const handleUpload = async () => {
     try {
-      setLoading(true)
-      // Fetch agency last updates
+      setLoading(true);
+      setAgencyLastUpdates([]);
+      setShowAgencyUpdates(true);
+
       const response = await fetch("/api/agency-last-updates")
       if (response.ok) {
         const data = await response.json()
-        // Filter agencies for non-admin users
         const filteredData = (userRole === "admin" || userRole === "viewer" || userRole === "executive")
           ? data
           : data.filter((agency: { name: string, lastUpdate: string }) => userAgencies.includes(agency.name))
         setAgencyLastUpdates(filteredData)
-        setShowAgencyUpdates(true)
       }
     } catch (error) {
       console.error("Error fetching agency updates:", error)
@@ -193,6 +123,8 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
               <User className="h-4 w-4" />
               <span className="capitalize">{userRole}</span>
             </div>
+
+            {/* Download menu */}
             <div className="relative">
               <Button 
                 variant="ghost" 
@@ -204,9 +136,10 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
               </Button>
 
               {showDownloadMenu && (
-                <div className="absolute right-0 mt-2 w-48 bg-white border rounded shadow-lg z-50">
+                <div className="absolute right-0 mt-2 w-48 bg-white border rounded-lg shadow-lg z-50">
                   <button
-                    className="block w-full text-left px-4 py-2 hover:bg-gray-100"
+                    type="button"
+                    className="block w-full text-left px-4 py-2 hover:bg-blue-50"
                     onClick={() => {
                       setShowDownloadMenu(false);
                       onDownload && onDownload();
@@ -216,7 +149,8 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
                   </button>
                   {(userRole === "admin" || userRole === "executive" || userRole === "viewer") && (
                   <button
-                    className="block w-full text-left px-4 py-2 hover:bg-gray-100"
+                    type="button"
+                    className="block w-full text-left px-4 py-2 hover:bg-blue-50"
                     onClick={() => {
                       setShowDownloadMenu(false);
                       onDownloadDefaulters && onDownloadDefaulters();
@@ -228,6 +162,7 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
                 </div>
               )}
             </div>
+
             {(userRole === "admin" || userRole === "executive" || userRole === "viewer") && (
             <Button
               variant="ghost"
@@ -238,15 +173,13 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
             >
               <List className="h-4 w-4" />
             </Button>)}
-            {userRole === "admin" && (
-              <>
-                {onAdminClick && (
-                  <Button variant="ghost" size="sm" onClick={onAdminClick} title="Admin Panel">
-                    <Settings className="h-4 w-4" />
-                  </Button>
-                )}
-              </>
+
+            {userRole === "admin" && onAdminClick && (
+              <Button variant="ghost" size="sm" onClick={onAdminClick} title="Admin Panel">
+                <Settings className="h-4 w-4" />
+              </Button>
             )}
+
             <Button
               variant="ghost"
               size="sm"
@@ -261,77 +194,138 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
       </div>
 
       {/* Agency Updates Dialog */}
-
       <Dialog open={showAgencyUpdates} onOpenChange={setShowAgencyUpdates}>
-        <DialogContent className="max-w-2xl rounded-xl shadow-lg">
-          <DialogHeader>
-            <DialogTitle className="text-xl font-bold text-gray-800 border-b pb-2">Agency Last Updates</DialogTitle>
+        <DialogContent className="max-w-2xl rounded-xl shadow-xl">
+          <DialogHeader className="border-b pb-4">
+            <div className="flex items-center space-x-3">
+              <Building2 className="h-6 w-6 text-blue-600" />
+              <DialogTitle className="text-2xl font-bold text-gray-800">
+                Agency Last Updates
+              </DialogTitle>
+            </div>
+            <p className="text-sm text-gray-500 mt-1">
+              Last update status for all agencies
+            </p>
           </DialogHeader>
-          <div className="space-y-3 max-h-[60vh] overflow-y-auto">
-            {agencyLastUpdates.length > 0 ? (
-              [...agencyLastUpdates]  // clone before sorting
-                .sort((a, b) => {
-                  const dateA = parseDate(a.lastUpdate) || new Date(0);
-                  const dateB = parseDate(b.lastUpdate) || new Date(0);
-                  if (dateB.getTime() !== dateA.getTime()) {
-                    return dateB.getTime() - dateA.getTime();
-                  }
-                  const countA = a.lastUpdateCount || 0;
-                  const countB = b.lastUpdateCount || 0;
-                  return countB - countA;
-                })
-                .map(agency => {
-                  const rowColor = getRowColor(agency.lastUpdate);
-                  //const sameDateCount = getSameDateCountForAgency(agency);
-                  const sameDateCount = agency.lastUpdateCount || 0;
 
-                  return (
-                    <div
-                      key={agency.name}
-                      className={`flex min-h-6 items-center justify-between px-4 rounded-lg shadow-sm hover:shadow-md transition ${rowColor}`}
-                      title={
-                        agency.lastUpdate
-                          ? `This agency has ${sameDateCount} record(s) with ${agency.lastUpdate}`
-                          : undefined
-                      }
-                    >
-                      <span className="font-medium leading-none">{agency.name}</span>
+          {/* Loading */}
+          {loading && (
+            <div className="flex flex-col items-center justify-center py-12">
+              <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-600 border-t-transparent mb-4"></div>
+              <p className="text-gray-600">Loading agency updates...</p>
+            </div>
+          )}
 
-                      <span className="text-sm leading-none flex items-center gap-2">
-                        {agency.lastUpdate || "No updates recorded"}
-                
-                        {/* Show badge only when there's meaningful count */}
-                        {agency.lastUpdate && sameDateCount > 0 && (
-                          <span
-                            className={
-                              "inline-flex items-center justify-center text-xs font-semibold rounded-full px-2 py-0.5 " +
-                              getBadgeColor(agency.lastUpdate)
-                            }
-                          >
-                            {sameDateCount}
-                          </span>
-                        )}
-
-
-                      </span>
+          {/* Summary Stats */}
+          {!loading && agencyLastUpdates.length > 0 && (
+            <>
+              {/* <div className="bg-gray-50 rounded-lg p-4 mb-4">
+                <div className="grid grid-cols-3 gap-4 text-center">
+                  <div>
+                    <div className="text-2xl font-bold text-green-600">
+                      {agencyLastUpdates.filter(a => {
+                        const parsed = parseDate(a.lastUpdate);
+                        return parsed && sameDay(startOfDay(parsed), startOfDay(new Date()));
+                      }).length}
                     </div>
-                  );
-                })
-            ) : (
-              <p className="text-gray-500 text-center py-4">
-                No agency update data available
+                    <div className="text-sm text-gray-600">Updated Today</div>
+                  </div>
+                  <div>
+                    <div className="text-2xl font-bold text-yellow-600">
+                      {agencyLastUpdates.filter(a => {
+                        const parsed = parseDate(a.lastUpdate);
+                        const yesterday = startOfDay(new Date());
+                        yesterday.setDate(yesterday.getDate() - 1);
+                        return parsed && sameDay(startOfDay(parsed), yesterday);
+                      }).length}
+                    </div>
+                    <div className="text-sm text-gray-600">Updated Yesterday</div>
+                  </div>
+                  <div>
+                    <div className="text-2xl font-bold text-red-600">
+                      {agencyLastUpdates.filter(a => {
+                        const parsed = parseDate(a.lastUpdate);
+                        const twoDaysAgo = startOfDay(new Date());
+                        twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
+                        return parsed && parsed < twoDaysAgo;
+                      }).length}
+                    </div>
+                    <div className="text-sm text-gray-600">Outdated</div>
+                  </div>
+                </div>
+              </div> */}
+
+              {/* Agency List */}
+              <div className="space-y-2 max-h-[60vh] overflow-y-auto">
+                {[...agencyLastUpdates]
+                  .sort((a, b) => {
+                    const dateA = parseDate(a.lastUpdate) || new Date(0);
+                    const dateB = parseDate(b.lastUpdate) || new Date(0);
+                    if (dateB.getTime() !== dateA.getTime()) {
+                      return dateB.getTime() - dateA.getTime();
+                    }
+
+                    // If dates are equal, compare counts (highest first)
+                    const countA = a.lastUpdateCount || 0;
+                    const countB = b.lastUpdateCount || 0;
+                    return countB - countA;
+
+                  })
+                  .map(agency => {
+                    const sameDateCount = agency.lastUpdateCount || 0;
+                    return (
+                      <div
+                        key={agency.name}
+                        className={`flex items-center justify-between h-8 px-3 rounded-lg transition-all duration-200 ${getRowColor(agency.lastUpdate)}`}
+                        title={
+                          agency.lastUpdate
+                            ? `This agency has ${sameDateCount} record(s) with ${agency.lastUpdate}`
+                            : undefined
+                        }
+                      >
+                        <div className="flex items-center space-x-3">
+                          <div className="w-2 h-2 rounded-full bg-current opacity-60"></div>
+                          <span className="font-medium text-gray-900">{agency.name}</span>
+                        </div>
+
+                        <div className="flex items-center space-x-2">
+                          <Clock className="h-3 w-3 text-gray-400" />
+                          <span className="text-sm font-medium text-gray-700">
+                            {agency.lastUpdate || "No updates"}
+                          </span>
+                          {agency.lastUpdate && sameDateCount > 0 && (
+                            <span className={`text-xs font-bold px-2 py-1 rounded-full ${getBadgeColor(agency.lastUpdate)}`}>
+                              {sameDateCount}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+              </div>
+            </>
+          )}
+
+          {/* Empty state */}
+          {!loading && agencyLastUpdates.length === 0 && (
+            <div className="text-center py-8">
+              <Calendar className="h-12 w-12 text-gray-300 mx-auto mb-4" />
+              <p className="text-gray-500 text-lg font-medium">No update data available</p>
+              <p className="text-gray-400 text-sm mt-1">
+                Agency update information will appear here once available
               </p>
-            )}
+            </div>
+          )}
 
-
-          </div>
-          <div className="flex justify-end pt-4">
+          {/* Footer */}
+          <div className="flex justify-end pt-4 border-t">
             <Button onClick={() => setShowAgencyUpdates(false)}>
               Close
             </Button>
           </div>
         </DialogContent>
       </Dialog>
+
       {loggingOut && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-white bg-opacity-70">
           <div className="flex flex-col items-center gap-4">
@@ -340,7 +334,6 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
           </div>
         </div>
       )}
-
     </header>
   )
 }

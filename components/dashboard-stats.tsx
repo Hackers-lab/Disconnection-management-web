@@ -145,16 +145,18 @@ export function DashboardStats({ consumers, loading = false }: DashboardStatsPro
   if (loading) {
     return (
       <div className="space-y-4">
-        <div className="flex justify-between items-center p-4 bg-gray-100 rounded-lg cursor-pointer">
-          <h3 className="font-medium">Dashboard Statistics</h3>
-          <ChevronDown className="h-5 w-5" />
+        <div className="flex justify-between items-center p-4 
+          bg-white/40 backdrop-blur-md rounded-lg shadow-sm border border-gray-200/50 
+          cursor-pointer hover:shadow-md transition-all">
+          <h3 className="font-semibold text-gray-800">Dashboard Statistics</h3>
+          <ChevronDown className="h-5 w-5 text-gray-600" />
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <Card key={i} className="animate-pulse">
-              <CardContent className="p-3">
-                <div className="h-3 bg-gray-200 rounded mb-2"></div>
-                <div className="h-6 bg-gray-200 rounded"></div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 mb-4">
+          {Array.from({ length: 6 }).map((_, i) => (    
+            <Card key={i} className="animate-pulse rounded-xl shadow-sm">
+              <CardContent className="p-4 space-y-3">
+                <div className="h-3 rounded bg-gradient-to-r from-gray-200 via-gray-300 to-gray-200"></div>
+                <div className="h-6 rounded bg-gradient-to-r from-gray-200 via-gray-300 to-gray-200"></div>
               </CardContent>
             </Card>
           ))}

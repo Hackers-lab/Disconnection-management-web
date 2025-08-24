@@ -89,6 +89,24 @@ body {
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply relative min-h-screen bg-gradient-to-br from-blue-100 via-indigo-100 to-purple-100;
   }
+
+  body::before {
+    content: "";
+    @apply absolute inset-0 bg-white/40 backdrop-blur-2xl;
+    z-index: -1;
+  }
+
+  @keyframes shimmer {
+    0% { background-position: -200px 0; }
+    100% { background-position: 200px 0; }
+  }
+
+  .shimmer {
+    background: linear-gradient(90deg, #e5e7eb 25%, #f3f4f6 50%, #e5e7eb 75%);
+    background-size: 400px 100%;
+    animation: shimmer 1.5s infinite;
+  }
+
 }
