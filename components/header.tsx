@@ -51,9 +51,9 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
     const yesterday = startOfDay(new Date());
     yesterday.setDate(today.getDate() - 1);
 
-    if (sameDay(d, today)) return "bg-green-50 border border-green-200 hover:bg-green-100";
-    if (sameDay(d, yesterday)) return "bg-yellow-50 border border-yellow-200 hover:bg-yellow-100";
-    return "bg-red-50 border border-red-200 hover:bg-red-100";
+    if (sameDay(d, today)) return "bg-green-100 border border-green-200 hover:bg-green-100";
+    if (sameDay(d, yesterday)) return "bg-yellow-100 border border-yellow-200 hover:bg-yellow-100";
+    return "bg-red-100 border border-red-200 hover:bg-red-100";
   };
 
   const getBadgeColor = (dateStr: string) => {
