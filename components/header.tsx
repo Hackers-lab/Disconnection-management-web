@@ -147,7 +147,7 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
                   >
                     Download Report
                   </button>
-                  {(userRole === "admin" || userRole === "executive" || userRole === "viewer") && (
+                  {(userRole === "admin" || userRole === "executive" || userRole === "viewer" || userRole === "agency") && (
                   <button
                     type="button"
                     className="block w-full text-left px-4 py-2 hover:bg-blue-50"
