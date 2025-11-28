@@ -324,6 +324,16 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
     return 0
   })
 
+    // Helper to ensure links work even if "https://" is missing in the sheet
+  const getValidUrl = (url: string | undefined) => {
+    if (!url) return "#";
+    const cleanUrl = url.trim();
+    if (cleanUrl.startsWith("http://") || cleanUrl.startsWith("https://")) {
+      return cleanUrl;
+    }
+    return `https://${cleanUrl}`;
+  };
+
   // Pagination logic
   const totalPages = Math.ceil(sortedConsumers.length / ITEMS_PER_PAGE)
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE
@@ -352,6 +362,8 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
         return "bg-gray-100 text-gray-800"
     }
   }
+
+
 
   const handleUpdateConsumer = (updatedConsumer: ConsumerData) => {
     setConsumers((prev) =>
@@ -815,22 +827,22 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
                 </div>
               )}
 
-              {/* 👇 NEW IMAGE LINK SECTION 👇 */}
-              {true && (
-                <div className="pt-1">
+              {/* 👇 UPDATED IMAGE LINK SECTION 👇 */}
+              {consumer.imageUrl && (
+                <div className="pt-2 pb-1 relative z-10"> {/* Added z-10 and spacing */}
                   <a
-                    href={consumer.imageUrl}
+                    href={getValidUrl(consumer.imageUrl)}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center space-x-2 text-xs text-blue-600 hover:text-blue-800 hover:underline transition-colors"
-                    onClick={(e) => e.stopPropagation()} // Prevent triggering card click if you add one later
+                    className="inline-flex items-center space-x-2 text-xs font-medium text-blue-600 hover:text-blue-800 hover:underline transition-colors cursor-pointer"
+                    onClick={(e) => e.stopPropagation()} 
                   >
                     <ImageIcon className="h-3.5 w-3.5" />
                     <span>View Uploaded Image</span>
                   </a>
                 </div>
               )}
-              {/* 👆 END NEW IMAGE LINK SECTION 👆 */}
+              {/* 👆 END UPDATED SECTION 👆 */}
 
               <Button onClick={() => setSelectedConsumer(consumer)} 
               className={`w-full mt-4 ${
