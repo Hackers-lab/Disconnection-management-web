@@ -592,9 +592,9 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
           <Slider
             value={osdRange}
             onValueChange={setOsdRange}
-            max={maxOsdValue}
+            max={50000}
             min={0}
-            step={100}
+            step={1000}
             className="w-full"
           />
           <div className="flex justify-between text-xs text-gray-500 mt-1">
