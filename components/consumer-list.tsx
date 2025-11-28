@@ -26,6 +26,7 @@ import {
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
+  Image as ImageIcon,
 } from "lucide-react"
 import { ConsumerForm } from "./consumer-form"
 import { AdminPanel } from "./admin-panel"
@@ -813,6 +814,23 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
                   <span className="font-medium">Last Updated:</span> {consumer.disconDate}
                 </div>
               )}
+
+              {/* 👇 NEW IMAGE LINK SECTION 👇 */}
+              {consumer.imageUrl && (
+                <div className="pt-1">
+                  <a
+                    href={consumer.imageUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center space-x-2 text-xs text-blue-600 hover:text-blue-800 hover:underline transition-colors"
+                    onClick={(e) => e.stopPropagation()} // Prevent triggering card click if you add one later
+                  >
+                    <ImageIcon className="h-3.5 w-3.5" />
+                    <span>View Uploaded Image</span>
+                  </a>
+                </div>
+              )}
+              {/* 👆 END NEW IMAGE LINK SECTION 👆 */}
 
               <Button onClick={() => setSelectedConsumer(consumer)} 
               className={`w-full mt-4 ${
