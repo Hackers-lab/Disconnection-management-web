@@ -332,19 +332,23 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
                           NOT FOUND
                         </Button>
                         
-                        {/* 👇 NEW REISSUE BUTTON START 👇 */}
+                        {/* 👇 UPDATED REISSUE BUTTON 👇 */}
                         {userRole === "admin" && (
                           <Button
                             type="button"
-                            variant="outline"
-                            className="flex-1 border-blue-600 text-blue-600 hover:bg-blue-50"
+                            // Check if current status is "connected" to toggle style
+                            variant={formData.disconStatus === "connected" ? "default" : "outline"}
+                            className={`flex-1 ${
+                              formData.disconStatus === "connected"
+                                ? "bg-blue-600 hover:bg-blue-700 text-white" // Solid Blue when active
+                                : "border-blue-600 text-blue-600 hover:bg-blue-50" // Outline Blue when inactive
+                            }`}
                             onClick={() => handleStatusUpdate("connected")}
                           >
                             <RotateCcw className="h-4 w-4 mr-2" />
                             REISSUE
                           </Button>
                         )}
-                        {/* 👆 NEW REISSUE BUTTON END 👆 */}
                         
                       </div>
                       <p className="text-sm text-gray-600">
