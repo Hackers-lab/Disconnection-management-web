@@ -2,12 +2,14 @@ name: Trigger Account B Deploy
 on:
   push:
     branches:
-      - main  # same branch Account A uses
+      - main
 
 jobs:
   trigger-vercel:
     runs-on: ubuntu-latest
     steps:
       - name: Call Account B Deploy Hook
+        # Added '-f' to fail if the link is broken
+        # Added '-v' to show details in the logs
         run: |
-          curl -X POST "https://api.vercel.com/v1/integrations/deploy/prj_qtmfmiMwBxLwOiG3BLFeUxFGM3Ly/cvwsEbcenH"
+          curl -f -v -X POST "https://api.vercel.com/v1/integrations/deploy/prj_qtmfmiMwBxLwOiG3BLFeUxFGM3Ly/wxcnxvfV1Z"
