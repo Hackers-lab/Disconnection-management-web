@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
-import { ArrowLeft, Upload, Camera, MapPin, Power, Clock, CircleX, Check } from "lucide-react"
+import { ArrowLeft, Upload, Camera, MapPin, Power, Clock, CircleX, Check, RotateCcw } from "lucide-react"
 import imageCompression from "browser-image-compression";
 import type { ConsumerData } from "@/lib/google-sheets"
 
@@ -331,6 +331,20 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
                           <CircleX className="h-4 w-4 mr-2" />
                           NOT FOUND
                         </Button>
+                        
+                        {/* 👇 NEW REISSUE BUTTON START 👇 */}
+                        {userRole === "admin" && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="flex-1 border-blue-600 text-blue-600 hover:bg-blue-50"
+                            onClick={() => handleStatusUpdate("connected")}
+                          >
+                            <RotateCcw className="h-4 w-4 mr-2" />
+                            REISSUE
+                          </Button>
+                        )}
+                        {/* 👆 NEW REISSUE BUTTON END 👆 */}
                         
                       </div>
                       <p className="text-sm text-gray-600">
