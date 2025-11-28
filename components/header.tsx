@@ -98,7 +98,7 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
       const response = await fetch("/api/agency-last-updates")
       if (response.ok) {
         const data = await response.json()
-        const filteredData = (userRole === "admin" || userRole === "viewer" || userRole === "executive")
+        const filteredData = (userRole === "admin" || userRole === "viewer" || userRole === "executive" || userRole === "agency")
           ? data
           : data.filter((agency: { name: string, lastUpdate: string }) => userAgencies.includes(agency.name))
         setAgencyLastUpdates(filteredData)
