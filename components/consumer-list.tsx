@@ -74,6 +74,7 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
   })
   const [filters, setFilters] = useState({
     agency: "All Agencies",
+    mru: "All MRUs",
     address: "",
     name: "",
     consumerId: "",
@@ -85,6 +86,7 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
     excludeTemproryDisconnected: false,
   })
   const [baseClasses, setBaseClasses] = useState<string[]>([])
+  const [mrus, setMrus] = useState<string[]>([])
           
   useEffect(() => {
     async function loadData() {
@@ -116,7 +118,18 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
           )
         ).sort()
 
+
         setBaseClasses(uniqueBaseClasses)
+
+        
+        const uniqueMrus = Array.from(
+          new Set(
+            data
+              .map(c => (c.mru || "").trim())
+              .filter(m => m !== "")
+          )
+        ).sort()
+        setMrus(uniqueMrus)
 
         // Load agencies for admin
         let agencyList: string[] = []
@@ -246,6 +259,9 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
     const matchesAgency =
       filters.agency === "All Agencies" || (consumer.agency || "").toUpperCase() === filters.agency.toUpperCase()
 
+    const matchesMru = 
+      filters.mru === "All MRUs" || (consumer.mru || "") === filters.mru
+
     // Address fuzzy match
     const matchesAddress = !filters.address || consumer.address.toLowerCase().includes(filters.address.toLowerCase())
 
@@ -275,6 +291,7 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
     return (
       matchesSearch &&
       matchesAgency &&
+      matchesMru &&
       matchesAddress &&
       matchesBaseClass &&
       matchesName &&
@@ -345,6 +362,7 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
     setFilters({
       agency: "All Agencies",
       address: "",
+      mru: "All MRUs",
       name: "",
       consumerId: "",
       status: "All Status",
@@ -672,6 +690,26 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
                   <SelectItem value="Paid">Paid</SelectItem>
                   <SelectItem value="agency paid">Agency Paid</SelectItem>
                   <SelectItem value="not found">Not Found</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+{/* 6. Insert MRU Filter Here */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-700">MRU</label>
+              <Select
+                value={filters.mru}
+                onValueChange={(value) => setFilters((prev) => ({ ...prev, mru: value }))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="All MRUs" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="All MRUs">All MRUs</SelectItem>
+                  {mrus.map((mru) => (
+                    <SelectItem key={mru} value={mru}>
+                      {mru}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
