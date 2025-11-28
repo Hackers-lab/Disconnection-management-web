@@ -592,7 +592,7 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
           <Slider
             value={osdRange}
             onValueChange={setOsdRange}
-            max={50000}
+            max={maxOsdValue}
             min={0}
             step={1000}
             className="w-full"
