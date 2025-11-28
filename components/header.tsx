@@ -163,7 +163,7 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
               )}
             </div>
 
-            {(userRole === "admin" || userRole === "executive" || userRole === "viewer") && (
+            {(userRole === "admin" || userRole === "executive" || userRole === "viewer" || userRole === "agency") && (
             <Button
               variant="ghost"
               size="sm"
