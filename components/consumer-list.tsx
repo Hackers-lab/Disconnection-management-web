@@ -816,7 +816,7 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
               )}
 
               {/* 👇 NEW IMAGE LINK SECTION 👇 */}
-              {consumer.imageUrl && (
+              {true && (
                 <div className="pt-1">
                   <a
                     href={consumer.imageUrl}
