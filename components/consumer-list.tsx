@@ -122,14 +122,14 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
         setBaseClasses(uniqueBaseClasses)
 
         
-        const uniqueMrus = Array.from(
+       /* const uniqueMrus = Array.from(
           new Set(
             data
               .map(c => (c.mru || "").trim())
               .filter(m => m !== "")
           )
         ).sort()
-        setMrus(uniqueMrus)
+        setMrus(uniqueMrus) */
 
         // Load agencies for admin
         let agencyList: string[] = []
@@ -178,8 +178,14 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
             })
           }
         }
-
-
+        const uniqueMrus = Array.from(
+          new Set(
+            filteredData
+              .map(c => (c.mru || "").trim())
+              .filter(m => m !== "")
+          )
+        ).sort()
+        setMrus(uniqueMrus)
 
         setConsumers(filteredData)
       } catch (error) {
