@@ -243,7 +243,7 @@ export async function fetchConsumerData(): Promise<ConsumerData[]> {
       longitude: ["longitude", "lng", "long"],
       agency: ["agency"],
       reading: ["reading"],
-      imageUrl: ["image"],
+      imageUrl: ["image", "photo", "link", "url", "imageurl", "imagelink"],
       notes: ["notes"],
 
     }
@@ -302,6 +302,8 @@ export async function fetchConsumerData(): Promise<ConsumerData[]> {
           agency: columnIndices.agency >= 0 ? values[columnIndices.agency] || "" : "",
           lastUpdated: new Date().toISOString().split("T")[0],
           notes: columnIndices.notes >= 0 ? values[columnIndices.notes] || "" : "",
+          reading: columnIndices.reading >= 0 ? values[columnIndices.reading] || "" : "",
+          imageUrl: columnIndices.imageUrl >= 0 ? values[columnIndices.imageUrl] || "" : "",
         }
 
         consumers.push(consumer)

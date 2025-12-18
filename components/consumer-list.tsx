@@ -27,6 +27,10 @@ import {
   ArrowUp,
   ArrowDown,
   Image as ImageIcon,
+  Database,
+  Cloud,
+  RefreshCw,
+  Trash2,
 } from "lucide-react"
 import { ConsumerForm } from "./consumer-form"
 import { AdminPanel } from "./admin-panel"
@@ -45,6 +49,55 @@ interface ConsumerListProps {
 }
 interface ConsumerListRef {  // <-- Add this interface
   getCurrentConsumers: () => ConsumerData[]
+}
+
+// IndexedDB Helper Functions to handle large datasets (>5MB)
+const DB_NAME = "DisconnectionAppDB"
+const STORE_NAME = "keyval"
+
+function openDB() {
+  return new Promise<IDBDatabase>((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME, 1)
+    request.onerror = () => reject(request.error)
+    request.onsuccess = () => resolve(request.result)
+    request.onupgradeneeded = (event) => {
+      const db = (event.target as IDBOpenDBRequest).result
+      if (!db.objectStoreNames.contains(STORE_NAME)) {
+        db.createObjectStore(STORE_NAME)
+      }
+    }
+  })
+}
+
+async function getFromCache<T>(key: string): Promise<T | null> {
+  try {
+    const db = await openDB()
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(STORE_NAME, "readonly")
+      const store = transaction.objectStore(STORE_NAME)
+      const request = store.get(key)
+      request.onerror = () => reject(request.error)
+      request.onsuccess = () => resolve(request.result)
+    })
+  } catch (error) {
+    console.warn(`Error reading ${key} from cache:`, error)
+    return null
+  }
+}
+
+async function saveToCache(key: string, data: any) {
+  try {
+    const db = await openDB()
+    return new Promise<void>((resolve, reject) => {
+      const transaction = db.transaction(STORE_NAME, "readwrite")
+      const store = transaction.objectStore(STORE_NAME)
+      const request = store.put(data, key)
+      request.onerror = () => reject(request.error)
+      request.onsuccess = () => resolve()
+    })
+  } catch (error) {
+    console.warn(`Error saving ${key} to cache:`, error)
+  }
 }
 
 const ITEMS_PER_PAGE = 12
@@ -89,117 +142,202 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
   })
   const [baseClasses, setBaseClasses] = useState<string[]>([])
   const [mrus, setMrus] = useState<string[]>([])
+  const [isCachedData, setIsCachedData] = useState(false)
+  const [isBackgroundUpdating, setIsBackgroundUpdating] = useState(false)
           
   useEffect(() => {
+    const CACHE_KEY = "consumers_data_cache"
+    const AGENCY_CACHE_KEY = "agencies_data_cache"
+
+    async function processData(data: ConsumerData[], preloadedAgencies: string[] | null = null, isBackgroundUpdate = false) {
+      // Debug: Check for image property existence to help troubleshoot missing images
+      if (data.length > 0 && !isBackgroundUpdate) {
+        const sampleWithImage = data.find(c => c.imageUrl || (c as any).image);
+        if (sampleWithImage) {
+           console.log("📸 Image found in data for consumer:", sampleWithImage.consumerId);
+        } else {
+           console.log("⚠️ No 'imageUrl' or 'image' property found in data. Available keys:", Object.keys(data[0]));
+        }
+      }
+
+      // Extract unique baseClasses (ignore empty/null)
+      const uniqueBaseClasses = Array.from(
+        new Set(
+          data
+            .map(c => (c.baseClass || "").toUpperCase().trim())
+            .filter(bc => bc !== "")
+        )
+      ).sort()
+      setBaseClasses(uniqueBaseClasses)
+
+      // Load agencies for admin
+      let agencyList: string[] = []
+      if (preloadedAgencies && preloadedAgencies.length > 0) {
+        agencyList = preloadedAgencies
+      } else if (userRole === "admin" || userRole === "viewer") {
+        // Fallback fetch if not preloaded
+        try {
+          const agenciesResponse = await fetch("/api/admin/agencies")
+          if (agenciesResponse.ok) {
+            const agencyData = await agenciesResponse.json()
+            agencyList = agencyData.filter((a: any) => a.isActive).map((a: any) => a.name)
+          }
+        } catch (error) {
+          console.warn("Failed to load agencies, using default list")
+          agencyList = Array.from(new Set(data.map((c) => c.agency).filter(Boolean)))
+        }
+      } else {
+        agencyList = userAgencies
+      }
+      setAgencies(agencyList)
+
+      // Calculate max OSD value for slider
+      const osdValues = data.map((c) => Number.parseFloat(c.d2NetOS || "0")).filter((v) => !isNaN(v))
+      const maxOsd = Math.max(...osdValues, 50000)
+      const calculatedMax = Math.ceil(maxOsd / 1000) * 1000
+      setMaxOsdValue(calculatedMax)
+      
+      // Only reset the range slider on initial load, not during background updates
+      if (!isBackgroundUpdate) {
+        setOsdRange([0, calculatedMax])
+      }
+
+      // Filter consumers based on user role and agencies (case-insensitive)
+      let filteredData = data
+
+      if (userRole !== "admin" && userRole !== "viewer") {
+        const userAgenciesUpper = userAgencies.map((a) => a.toUpperCase())
+
+        if (userRole === "executive") {
+          // Executive: their agencies + any "bill dispute"
+          filteredData = data.filter((consumer) => {
+            const consumerAgency = (consumer.agency || "").toUpperCase()
+            const isOwnAgency = userAgenciesUpper.includes(consumerAgency)
+            const isBillDispute = consumer.disconStatus?.toLowerCase() === "bill dispute"
+            return (isOwnAgency || isBillDispute) && consumer.disconStatus !== "&"
+          })
+        } else {
+          // Normal agency user
+          filteredData = data.filter((consumer) => {
+            const consumerAgency = (consumer.agency || "").toUpperCase()
+            return userAgenciesUpper.includes(consumerAgency) && consumer.disconStatus !== "&"
+          })
+        }
+      }
+      const uniqueMrus = Array.from(
+        new Set(
+          filteredData
+            .map(c => (c.mru || "").trim())
+            .filter(m => m !== "")
+        )
+      ).sort()
+      setMrus(uniqueMrus)
+
+      setConsumers(filteredData)
+    }
+
     async function loadData() {
-      setLoading(true)
+      // Try to load from cache first
+      let cachedLoaded = false
+      try {
+        // Use IndexedDB instead of localStorage
+        const cachedConsumers = await getFromCache<ConsumerData[]>(CACHE_KEY)
+        
+        let cachedAgencies: string[] | null = null
+        if (userRole === "admin" || userRole === "viewer") {
+          cachedAgencies = await getFromCache<string[]>(AGENCY_CACHE_KEY)
+        }
+
+        if (cachedConsumers && Array.isArray(cachedConsumers) && cachedConsumers.length > 0) {
+          console.log("✅ [Cache Hit] Loaded from IndexedDB")
+          await processData(cachedConsumers, cachedAgencies, false)
+          setLoading(false)
+          cachedLoaded = true
+          setIsCachedData(true)
+        }
+      } catch (e) {
+        console.error("Cache load failed", e)
+      }
+
+      if (!cachedLoaded) setLoading(true)
+      else setIsBackgroundUpdating(true)
       setError(null)
 
       try {
-        //console.log("🔄 Starting to fetch consumers...")
-
+        console.log("🔄 [Network] Fetching fresh data...")
         // Load consumers
-        const consumersResponse = await fetch("/api/consumers", {
-          method: "GET",
-          headers: { "Content-Type": "application/json" },
-          cache: "no-store",
-        })
+        const promises: Promise<Response>[] = [
+          fetch("/api/consumers", {
+            method: "GET",
+            headers: { "Content-Type": "application/json" },
+            cache: "no-store",
+          })
+        ]
+
+        // Parallel fetch for agencies if admin
+        if (userRole === "admin" || userRole === "viewer") {
+          promises.push(fetch("/api/admin/agencies"))
+        }
+
+        const responses = await Promise.all(promises)
+        const consumersResponse = responses[0]
 
         if (!consumersResponse.ok) {
           throw new Error(`API Error: ${consumersResponse.status}`)
         }
 
         const data: ConsumerData[] = await consumersResponse.json()
+        console.log("✅ [Network] Downloaded fresh data")
 
-        // Extract unique baseClasses (ignore empty/null)
-        const uniqueBaseClasses = Array.from(
-          new Set(
-            data
-              .map(c => (c.baseClass || "").toUpperCase().trim())
-              .filter(bc => bc !== "")
-          )
-        ).sort()
-
-
-        setBaseClasses(uniqueBaseClasses)
-
-        
-       /* const uniqueMrus = Array.from(
-          new Set(
-            data
-              .map(c => (c.mru || "").trim())
-              .filter(m => m !== "")
-          )
-        ).sort()
-        setMrus(uniqueMrus) */
-
-        // Load agencies for admin
-        let agencyList: string[] = []
+        // Handle Agencies
+        let freshAgencies: string[] | null = null
         if (userRole === "admin" || userRole === "viewer") {
-          try {
-            const agenciesResponse = await fetch("/api/admin/agencies")
-            if (agenciesResponse.ok) {
-              const agencyData = await agenciesResponse.json()
-              agencyList = agencyData.filter((a: any) => a.isActive).map((a: any) => a.name)
-            }
-          } catch (error) {
-            console.warn("Failed to load agencies, using default list")
-            agencyList = Array.from(new Set(data.map((c) => c.agency).filter(Boolean)))
-          }
-        } else {
-          agencyList = userAgencies
-        }
-
-        setAgencies(agencyList)
-
-        // Calculate max OSD value for slider
-        const osdValues = data.map((c) => Number.parseFloat(c.d2NetOS || "0")).filter((v) => !isNaN(v))
-        const maxOsd = Math.max(...osdValues, 50000)
-        setMaxOsdValue(Math.ceil(maxOsd / 1000) * 1000)
-        setOsdRange([0, Math.ceil(maxOsd / 1000) * 1000])
-
-        // Filter consumers based on user role and agencies (case-insensitive)
-        let filteredData = data
-
-        if (userRole !== "admin" && userRole !== "viewer") {
-          const userAgenciesUpper = userAgencies.map((a) => a.toUpperCase())
-
-          if (userRole === "executive") {
-            // Executive: their agencies + any "bill dispute"
-            filteredData = data.filter((consumer) => {
-              const consumerAgency = (consumer.agency || "").toUpperCase()
-              const isOwnAgency = userAgenciesUpper.includes(consumerAgency)
-              const isBillDispute = consumer.disconStatus?.toLowerCase() === "bill dispute"
-              return (isOwnAgency || isBillDispute) && consumer.disconStatus !== "&"
-            })
-          } else {
-            // Normal agency user
-            filteredData = data.filter((consumer) => {
-              const consumerAgency = (consumer.agency || "").toUpperCase()
-              return userAgenciesUpper.includes(consumerAgency) && consumer.disconStatus !== "&"
-            })
+          if (responses[1] && responses[1].ok) {
+            const agencyData = await responses[1].json()
+            freshAgencies = agencyData.filter((a: any) => a.isActive).map((a: any) => a.name)
+            // Cache agencies
+            await saveToCache(AGENCY_CACHE_KEY, freshAgencies)
           }
         }
-        const uniqueMrus = Array.from(
-          new Set(
-            filteredData
-              .map(c => (c.mru || "").trim())
-              .filter(m => m !== "")
-          )
-        ).sort()
-        setMrus(uniqueMrus)
 
-        setConsumers(filteredData)
+        // Update cache
+        try {
+          await saveToCache(CACHE_KEY, data)
+        } catch (e) {
+          console.warn("Cache save failed", e)
+        }
+
+        // Process fresh data (pass true if we already loaded cache to avoid resetting UI state like slider)
+        await processData(data, freshAgencies, cachedLoaded)
+        setIsCachedData(false)
+
       } catch (error) {
         console.error("💥 Error loading data:", error)
-        setError(error instanceof Error ? error.message : "Unknown error occurred")
+        if (!cachedLoaded) {
+          setError(error instanceof Error ? error.message : "Unknown error occurred")
+        }
       } finally {
         setLoading(false)
+        setIsBackgroundUpdating(false)
       }
     }
 
     loadData()
   }, [userRole, userAgencies])
+
+  const clearCache = async () => {
+    if (confirm("Are you sure you want to clear the cache and reload?")) {
+      try {
+        const db = await openDB()
+        const transaction = db.transaction(STORE_NAME, "readwrite")
+        const store = transaction.objectStore(STORE_NAME)
+        const request = store.clear()
+        request.onsuccess = () => window.location.reload()
+      } catch (e) {
+        console.error("Failed to clear cache", e)
+      }
+    }
+  }
 
   // Advanced filtering logic
   const filteredConsumers = consumers.filter((consumer) => {
@@ -355,7 +493,6 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
         return "bg-yellow-100 text-yellow-800"
       case "deemed disconnection":
         return "bg-orange-100 text-orange-800"
-      case "temprory disconnected":
       case "temprory disconnected":
         return "bg-purple-100 text-purple-800"
       default:
@@ -737,8 +874,30 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
         )}
 
         <div className="flex justify-between items-center mt-4 text-sm text-gray-600">
-          <span>
+          <div className="flex items-center gap-2 flex-wrap">
             Showing {startIndex + 1}-{Math.min(endIndex, sortedConsumers.length)} of {sortedConsumers.length} consumers
+            
+            {isCachedData ? (
+              <div className="flex items-center gap-1">
+                <Badge variant="secondary" className="text-[10px] h-5 px-1.5 gap-1 font-normal text-gray-500">
+                  <Database className="h-3 w-3" /> Cached
+                </Badge>
+                <Button variant="ghost" size="icon" className="h-5 w-5 text-gray-400 hover:text-red-500" onClick={clearCache} title="Clear Cache">
+                  <Trash2 className="h-3 w-3" />
+                </Button>
+              </div>
+            ) : (
+              <Badge variant="outline" className="text-[10px] h-5 px-1.5 gap-1 font-normal bg-green-50 text-green-700 border-green-200">
+                <Cloud className="h-3 w-3" /> Live
+              </Badge>
+            )}
+            
+            {isBackgroundUpdating && (
+              <span className="flex items-center text-xs text-blue-600 animate-pulse ml-1">
+                <RefreshCw className="h-3 w-3 mr-1 animate-spin" /> Updating...
+              </span>
+            )}
+
             {sortByOSD !== "none" && (
               <span className="ml-2 text-blue-600">
                 (sorted by OSD: {sortByOSD === "asc" ? "Low to High" : "High to Low"})
@@ -750,7 +909,7 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
                 {dateFilter.to ? ` to ${format(dateFilter.to, 'MMM dd, yyyy')}` : ''})
               </span>
             )}
-          </span>
+          </div>
           {(Object.values(filters).some((f) => f !== "All Agencies" && f !== "All Status" && f !== "") ||
             searchTerm ||
             osdRange[0] !== 0 ||
@@ -828,10 +987,10 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
               )}
 
               {/* 👇 UPDATED IMAGE LINK SECTION 👇 */}
-              {consumer.imageUrl && (
+              {(consumer.imageUrl || (consumer as any).image) && (
                 <div className="pt-2 pb-1 relative z-10"> {/* Added z-10 and spacing */}
                   <a
-                    href={getValidUrl(consumer.imageUrl)}
+                    href={getValidUrl((consumer.imageUrl || (consumer as any).image) as string)}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center space-x-2 text-xs font-medium text-blue-600 hover:text-blue-800 hover:underline transition-colors cursor-pointer"
