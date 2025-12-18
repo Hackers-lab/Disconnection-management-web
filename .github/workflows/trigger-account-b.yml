@@ -12,4 +12,4 @@ jobs:
         # Added '-f' to fail if the link is broken
         # Added '-v' to show details in the logs
         run: |
-          curl -f -v -X POST "https://api.vercel.com/v1/integrations/deploy/prj_78q6d1HyfrGO1q92ZwUfVUDmb5mg/D1MDdY9E8p"
+          curl -f -v -X POST "https://api.vercel.com/v1/integrations/deploy/prj_78q6d1HyfrGO1q92ZwUfVUDmb5mg/GeWvEfkhjf"
