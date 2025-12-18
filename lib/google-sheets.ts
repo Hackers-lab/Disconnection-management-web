@@ -22,6 +22,7 @@ export interface ConsumerData {
   notes?: string
   reading?: string
   imageUrl?: string
+  _syncStatus?: 'syncing' | 'error'
 }
 
 const AGENCIES = [

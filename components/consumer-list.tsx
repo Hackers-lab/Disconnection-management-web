@@ -1,7 +1,7 @@
 "use client"
 
 
-import React, { useImperativeHandle } from "react"  
+import React, { useImperativeHandle, useRef } from "react"  
 import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -144,12 +144,28 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
   const [mrus, setMrus] = useState<string[]>([])
   const [isCachedData, setIsCachedData] = useState(false)
   const [isBackgroundUpdating, setIsBackgroundUpdating] = useState(false)
+
+  const consumersRef = useRef<ConsumerData[]>(consumers)
+  useEffect(() => {
+    consumersRef.current = consumers
+  }, [consumers])
           
   useEffect(() => {
     const CACHE_KEY = "consumers_data_cache"
     const AGENCY_CACHE_KEY = "agencies_data_cache"
 
     async function processData(data: ConsumerData[], preloadedAgencies: string[] | null = null, isBackgroundUpdate = false) {
+      // Merge local pending/error states with incoming network data to prevent "Silent Reversion"
+      if (isBackgroundUpdate) {
+        data = data.map(newC => {
+          const existing = consumersRef.current.find(c => c.consumerId === newC.consumerId)
+          if (existing && (existing._syncStatus === 'syncing' || existing._syncStatus === 'error')) {
+            return existing
+          }
+          return newC
+        })
+      }
+
       // Debug: Check for image property existence to help troubleshoot missing images
       if (data.length > 0 && !isBackgroundUpdate) {
         const sampleWithImage = data.find(c => c.imageUrl || (c as any).image);
@@ -502,17 +518,56 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
 
 
 
-  const handleUpdateConsumer = (updatedConsumer: ConsumerData) => {
-    setConsumers((prev) =>
-      prev
-        .map((consumer) => (consumer.consumerId === updatedConsumer.consumerId ? updatedConsumer : consumer))
-        .filter(
-          (consumer) =>
-            // Remove disconnected consumers from agency users' view
-            userRole === "admin" || consumer.disconStatus !== "&",
-        ),
-    )
-    setSelectedConsumer(null)
+  const handleUpdateConsumer = async (updatedConsumer: ConsumerData) => {
+    // 1. Optimistic Update: Mark as syncing and update local state/cache immediately
+    const syncingConsumer = { ...updatedConsumer, _syncStatus: 'syncing' as const };
+    
+    setConsumers((prev) => {
+      const newList = prev
+        .map((c) => (c.consumerId === updatedConsumer.consumerId ? syncingConsumer : c))
+        .filter((c) => userRole === "admin" || c.disconStatus !== "&");
+      saveToCache("consumers_data_cache", newList);
+      return newList;
+    });
+    setSelectedConsumer(null);
+
+    // 2. Background Sync with Retry Logic
+    const attemptSync = async (data: ConsumerData, retriesLeft: number) => {
+      try {
+        const response = await fetch("/api/consumers/update", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(data),
+        });
+
+        if (!response.ok) throw new Error("Update failed");
+
+        // Success: Clear sync status
+        setConsumers((prev) => {
+          const newList = prev.map((c) => 
+            c.consumerId === data.consumerId ? { ...data, _syncStatus: undefined } : c
+          );
+          saveToCache("consumers_data_cache", newList);
+          return newList;
+        });
+      } catch (error) {
+        if (retriesLeft > 0) {
+          console.warn(`Sync failed for ${data.consumerId}. Retrying in 5s...`);
+          setTimeout(() => attemptSync(data, retriesLeft - 1), 5000);
+        } else {
+          // Permanent Failure: Mark as error
+          setConsumers((prev) => {
+            const newList = prev.map((c) => 
+              c.consumerId === data.consumerId ? { ...data, _syncStatus: 'error' as const } : c
+            );
+            saveToCache("consumers_data_cache", newList);
+            return newList;
+          });
+        }
+      }
+    };
+
+    attemptSync(updatedConsumer, 3);
   }
 
   const clearFilters = () => {
@@ -932,7 +987,15 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
                   <p className="text-sm text-gray-600">{consumer.consumerId}</p>
                 </div>
                 <div className="flex flex-col items-end space-y-1">
-                  <Badge className={getStatusColor(consumer.disconStatus)}>{consumer.disconStatus}</Badge>
+                  <div className="flex items-center gap-1">
+                    {consumer._syncStatus === 'syncing' && (
+                      <RefreshCw className="h-3 w-3 animate-spin text-blue-500" title="Syncing..." />
+                    )}
+                    {consumer._syncStatus === 'error' && (
+                      <AlertCircle className="h-3 w-3 text-red-500" title="Sync failed (saved locally)" />
+                    )}
+                    <Badge className={getStatusColor(consumer.disconStatus)}>{consumer.disconStatus}</Badge>
+                  </div>
                   <Badge variant="outline" className="text-xs">
                     {consumer.agency}
                   </Badge>

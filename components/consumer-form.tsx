@@ -30,7 +30,6 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
   })  
   const [cameraActive, setCameraActive] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [statusChanged, setStatusChanged] = useState(false);
 
@@ -78,7 +77,6 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
       alert("Please select status before saving."); // Popup before saving
       return;
     }
-    setSaving(true)
 
     const updatedConsumer: ConsumerData = {
       ...consumer,
@@ -91,25 +89,8 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
       lastUpdated: new Date().toISOString().split("T")[0],
     }
 
-    try {
-      const response = await fetch("/api/consumers/update", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(updatedConsumer),
-      })
-
-      if (response.ok) {
-        alert("Consumer status updated."); // Popup after saving
-        onSave(updatedConsumer)
-      } else {
-        throw new Error("Failed to update consumer")
-      }
-    } catch (error) {
-      console.error("Error updating consumer:", error)
-      
-    } finally {
-      setSaving(false)
-    }
+    // OPTIMISTIC UPDATE: Call onSave immediately to update UI and close form
+    onSave(updatedConsumer);
   }
 
   const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -485,15 +466,14 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
                 </div>
 
                 <div className="flex space-x-4 pt-4">
-                  <Button type="submit" className="flex-1" disabled={saving}>
-                    {saving ? "Saving..." : "Save Changes"}
+                  <Button type="submit" className="flex-1">
+                    Save Changes
                   </Button>
                   <Button
                     type="button"
                     variant="outline"
                     onClick={onCancel}
                     className="flex-1 bg-transparent"
-                    disabled={saving}
                   >
                     Cancel
                   </Button>
