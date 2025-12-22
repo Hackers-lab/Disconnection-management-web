@@ -39,6 +39,7 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
   
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const mediaStreamRef = useRef<MediaStream | null>(null)
 
   // Fetch location on mount
   useEffect(() => {
@@ -161,13 +162,19 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
   // --- 3. CAMERA LOGIC ---
   const startCamera = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { facingMode: "environment" } // Use back camera
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "environment" }, // Use back camera
       })
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream
-        setCameraActive(true)
-      }
+
+      // store stream and activate camera UI first, then attach the stream to the video
+      mediaStreamRef.current = stream
+      setCameraActive(true)
+
+      // Wait for the video element to mount, then attach stream
+      // use requestAnimationFrame to schedule attachment on next paint
+      requestAnimationFrame(() => {
+        if (videoRef.current) videoRef.current.srcObject = stream
+      })
     } catch (err) {
       console.error("Camera error", err)
       alert("Unable to access camera. Please allow permissions.")
@@ -195,12 +202,14 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
   }
 
   const stopCamera = () => {
-    const video = videoRef.current
-    if (video && video.srcObject) {
-      const tracks = (video.srcObject as MediaStream).getTracks()
-      tracks.forEach(track => track.stop())
-      video.srcObject = null
+    const stream = mediaStreamRef.current || (videoRef.current && (videoRef.current.srcObject as MediaStream))
+    if (stream) {
+      const tracks = stream.getTracks()
+      tracks.forEach((track) => track.stop())
     }
+
+    if (videoRef.current) videoRef.current.srcObject = null
+    mediaStreamRef.current = null
     setCameraActive(false)
   }
 
@@ -362,7 +371,7 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
                     <div className="grid grid-cols-2 gap-3">
                         <Button 
                             type="button" 
-                            variant="outline" 
+                            variant="outline"
                             className="h-12 border-blue-200 text-blue-700 hover:bg-blue-50"
                             onClick={startCamera}
                             disabled={uploading}
@@ -371,7 +380,7 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
                         </Button>
                         <Button 
                             type="button" 
-                            variant="outline" 
+                            variant="outline"
                             className="h-12"
                             onClick={() => fileInputRef.current?.click()}
                             disabled={uploading}
@@ -461,8 +470,6 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
                 <span className="font-mono text-xs">{consumer.latitude}, {consumer.longitude}</span>
               </div>
               <Button
-                variant="outline"
-                size="sm"
                 className="w-full mt-2"
                 onClick={() => {
                   const url = `https://www.google.com/maps?q=${consumer.latitude},${consumer.longitude}`
