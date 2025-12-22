@@ -304,27 +304,27 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
                 <Label className="text-xs font-bold text-gray-500 uppercase">Set Status</Label>
                 <div className="grid grid-cols-1 gap-3">
                     <div className="flex gap-3">
-                        <Button type="button" variant={formData.disconStatus === "disconnected" ? "default" : "outline"} className={`flex-1 h-12 ${formData.disconStatus === "disconnected" ? "bg-red-600 hover:bg-red-700 text-white" : "border-red-200 text-red-700 hover:bg-red-50"}`} onClick={() => handleStatusUpdate("disconnected")}>
+                        <Button type="button" variant={formData.disconStatus === "disconnected" ? "default" : "outline"} className={`flex-1 h-12 border-2 ${formData.disconStatus === "disconnected" ? "bg-slate-800 hover:bg-slate-900 text-white border-slate-800" : "border-slate-300 text-slate-700 hover:border-slate-800 hover:bg-slate-50"}`} onClick={() => handleStatusUpdate("disconnected")}>
                             <Power className="h-4 w-4 mr-2" /> DISCONNECT
                         </Button>
-                        <Button type="button" variant={formData.disconStatus === "bill dispute" ? "default" : "outline"} className={`flex-1 h-12 ${formData.disconStatus === "bill dispute" ? "bg-yellow-500 hover:bg-yellow-600 text-white" : "border-yellow-200 text-yellow-700 hover:bg-yellow-50"}`} onClick={() => handleStatusUpdate("bill dispute")}>
+                        <Button type="button" variant={formData.disconStatus === "bill dispute" ? "default" : "outline"} className={`flex-1 h-12 border-2 ${formData.disconStatus === "bill dispute" ? "bg-slate-800 hover:bg-slate-900 text-white border-slate-800" : "border-slate-300 text-slate-700 hover:border-slate-800 hover:bg-slate-50"}`} onClick={() => handleStatusUpdate("bill dispute")}>
                             <AlertCircle className="h-4 w-4 mr-2" /> DISPUTE
                         </Button>
                     </div>
                     <div className="flex gap-3">
-                        <Button type="button" variant={formData.disconStatus === "office team" ? "default" : "outline"} className={`flex-1 ${formData.disconStatus === "office team" ? "bg-purple-600 hover:bg-purple-700 text-white" : "border-purple-600 text-purple-600 hover:bg-purple-50"}`} onClick={() => handleStatusUpdate("office team")}>
+                        <Button type="button" variant={formData.disconStatus === "office team" ? "default" : "outline"} className={`flex-1 h-12 border-2 ${formData.disconStatus === "office team" ? "bg-slate-800 hover:bg-slate-900 text-white border-slate-800" : "border-slate-300 text-slate-700 hover:border-slate-800 hover:bg-slate-50"}`} onClick={() => handleStatusUpdate("office team")}>
                             <Clock className="h-4 w-4 mr-2" /> OFFICE TEAM
                         </Button>
-                        <Button type="button" variant={formData.disconStatus === "agency paid" ? "default" : "outline"} className={`flex-1 ${formData.disconStatus === "agency paid" ? "bg-green-600 text-white" : "border-green-200 text-green-700"}`} onClick={() => handleStatusUpdate("agency paid")}>
+                        <Button type="button" variant={formData.disconStatus === "agency paid" ? "default" : "outline"} className={`flex-1 h-12 border-2 ${formData.disconStatus === "agency paid" ? "bg-slate-800 hover:bg-slate-900 text-white border-slate-800" : "border-slate-300 text-slate-700 hover:border-slate-800 hover:bg-slate-50"}`} onClick={() => handleStatusUpdate("agency paid")}>
                             <Check className="h-4 w-4 mr-2" /> PAID
                         </Button>
                     </div>
                     <div className="flex gap-3">
-                        <Button type="button" variant={formData.disconStatus === "not found" ? "default" : "outline"} className={`flex-1 ${formData.disconStatus === "not found" ? "bg-gray-600 text-white" : "border-gray-200 text-gray-700"}`} onClick={() => handleStatusUpdate("not found")}>
+                        <Button type="button" variant={formData.disconStatus === "not found" ? "default" : "outline"} className={`flex-1 h-12 border-2 ${formData.disconStatus === "not found" ? "bg-slate-800 hover:bg-slate-900 text-white border-slate-800" : "border-slate-300 text-slate-700 hover:border-slate-800 hover:bg-slate-50"}`} onClick={() => handleStatusUpdate("not found")}>
                             <CircleX className="h-4 w-4 mr-2" /> NOT FOUND
                         </Button>
                         {userRole === "admin" && (
-                            <Button type="button" variant={formData.disconStatus === "connected" ? "default" : "outline"} className={`flex-1 ${formData.disconStatus === "connected" ? "bg-blue-600 text-white" : "border-blue-200 text-blue-700"}`} onClick={() => handleStatusUpdate("connected")}>
+                            <Button type="button" variant={formData.disconStatus === "connected" ? "default" : "outline"} className={`flex-1 h-12 border-2 ${formData.disconStatus === "connected" ? "bg-slate-800 hover:bg-slate-900 text-white border-slate-800" : "border-slate-300 text-slate-700 hover:border-slate-800 hover:bg-slate-50"}`} onClick={() => handleStatusUpdate("connected")}>
                                 <RotateCcw className="h-4 w-4 mr-2" /> REISSUE
                             </Button>
                         )}
@@ -372,7 +372,7 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
                         <Button 
                             type="button" 
                             variant="outline"
-                            className="h-12 border-blue-200 text-blue-700 hover:bg-blue-50"
+                            className="h-12 border-2 border-slate-300 text-slate-700 hover:border-slate-800 hover:bg-slate-50"
                             onClick={startCamera}
                             disabled={uploading}
                         >
@@ -381,7 +381,7 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
                         <Button 
                             type="button" 
                             variant="outline"
-                            className="h-12"
+                            className="h-12 border-2 border-slate-300 text-slate-700 hover:border-slate-800 hover:bg-slate-50"
                             onClick={() => fileInputRef.current?.click()}
                             disabled={uploading}
                         >
