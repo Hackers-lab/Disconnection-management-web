@@ -1,30 +1,18 @@
+// app/api/consumers/update/route.ts
 import { type NextRequest, NextResponse } from "next/server"
-import { updateConsumerViaAppsScript } from "@/lib/google-apps-script"
+import { updateConsumerInGoogleSheet } from "@/lib/google-sheets-api" // Changed import
 import type { ConsumerData } from "@/lib/google-sheets"
 
 export async function POST(request: NextRequest) {
   try {
-    //console.log("🔄 API /consumers/update called")
-
     const consumer: ConsumerData = await request.json()
-    // console.log("📥 Received consumer data:", {
-    //   consumerId: consumer.consumerId,
-    //   name: consumer.name,
-    //   disconStatus: consumer.disconStatus,
-    //   agency: consumer.agency,
-    // })
 
-    const result = await updateConsumerViaAppsScript(consumer)
-    // console.log("📤 Update result:", result)
-    // console.log("📡 Apps Script raw response:", result);
+    console.log(`🔄 Updating consumer ${consumer.consumerId}...`)
 
+    // Use the direct Sheets API function
+    const result = await updateConsumerInGoogleSheet(consumer)
 
-    if (result.success) {
-      return NextResponse.json(result, { status: 200 })
-      alert("Disconnection status updated.")
-    } else {
-      return NextResponse.json(result, { status: 500 })
-    }
+    return NextResponse.json(result, { status: 200 })
   } catch (error) {
     console.error("💥 API /consumers/update error:", error)
     return NextResponse.json(

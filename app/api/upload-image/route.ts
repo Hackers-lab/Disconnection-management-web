@@ -1,5 +1,9 @@
+// app/api/upload-image/route.ts
 import { type NextRequest, NextResponse } from "next/server"
-import { put } from "@vercel/blob"
+import { uploadImageToDrive } from "@/lib/google-drive" // Ensure this file exists now
+
+// Allow the function to run longer for slower uploads (Standard is 10s on Hobby, up to 60s on Pro)
+export const maxDuration = 60;
 
 export async function POST(request: NextRequest) {
   try {
@@ -11,15 +15,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 })
     }
 
-    // Upload to Vercel Blob
-    const blob = await put(`consumer-images/${consumerId}-${Date.now()}.${file.name.split(".").pop()}`, file, {
-      access: "public",
-    })
+    if (!consumerId) {
+      return NextResponse.json({ error: "No consumerId provided" }, { status: 400 })
+    }
+
+    // Upload to Google Drive
+    const publicUrl = await uploadImageToDrive(file, consumerId)
 
     return NextResponse.json({
       success: true,
-      url: blob.url,
-      message: "Image uploaded successfully",
+      url: publicUrl,
+      message: "Image uploaded successfully to Google Drive",
     })
   } catch (error) {
     console.error("Image upload error:", error)

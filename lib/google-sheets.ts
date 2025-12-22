@@ -22,30 +22,7 @@ export interface ConsumerData {
   notes?: string
   reading?: string
   imageUrl?: string
-  _syncStatus?: 'syncing' | 'error'
 }
-
-const AGENCIES = [
-  "ESAR",
-  "MANSUR",
-  "MR",
-  "AMS",
-  "MH",
-  "NMC",
-  "SIGMA",
-  "SA",
-  "SUPREME",
-  "MATIN",
-  "MUKTI",
-  "KUSHIDA",
-  "SM",
-  "JE",
-  "HASIB",
-  "SAJID",
-  "ABHIK",
-  "BAPI",
-  "SPOT",
-]
 
 // Helper function to clean and parse numeric values
 function parseNumericValue(value: string): string {
@@ -186,8 +163,8 @@ export async function getAgencyLastUpdates(): Promise<
 
 export async function fetchConsumerData(): Promise<ConsumerData[]> {
   try {
-    const csvUrl = process.env.GOOGLE_SHEETS_CSV_URL
-    if (!csvUrl) throw new Error("GOOGLE_SHEETS_CSV_URL env variable not set")
+    const csvUrl = process.env.DISCONNECTION_CSV
+    if (!csvUrl) throw new Error("DISCONNECTION_CSV env variable not set")
 
     const response = await fetch(
       csvUrl,
@@ -204,21 +181,18 @@ export async function fetchConsumerData(): Promise<ConsumerData[]> {
     }
 
     const csvText = await response.text()
-    //console.log("CSV data received, length:", csvText.length)
 
     if (!csvText || csvText.trim().length === 0) {
       throw new Error("Empty CSV data received")
     }
 
     const lines = csvText.split("\n").filter((line) => line.trim().length > 0)
-    //console.log("Number of lines:", lines.length)
 
     if (lines.length < 2) {
       throw new Error("CSV must have at least header and one data row")
     }
 
     const headers = parseCSVLine(lines[0])
-    //console.log("Headers found:", headers.length, headers.slice(0, 10))
 
     const consumers: ConsumerData[] = []
 
@@ -255,8 +229,6 @@ export async function fetchConsumerData(): Promise<ConsumerData[]> {
       columnIndices[key] = findColumnIndex(headers, searchTerms)
     })
 
-    // console.log("Column indices:", columnIndices)
-
     // Process data rows
     for (let i = 1; i < lines.length; i++) {
       try {
@@ -276,8 +248,6 @@ export async function fetchConsumerData(): Promise<ConsumerData[]> {
         // Get and clean the OSD value
         const rawOSD = columnIndices.d2NetOS >= 0 ? values[columnIndices.d2NetOS] || "0" : "0"
         const cleanedOSD = parseNumericValue(rawOSD)
-
-        //console.log(`Consumer ${consumerId}: Raw OSD="${rawOSD}" -> Cleaned OSD="${cleanedOSD}"`)
 
         // Create consumer object
         const consumer: ConsumerData = {
@@ -312,12 +282,6 @@ export async function fetchConsumerData(): Promise<ConsumerData[]> {
         console.warn(`Error processing row ${i}:`, rowError)
       }
     }
-
-    //console.log(`Successfully processed ${consumers.length} consumers`)
-
-    // Log some OSD values for debugging
-    const osdSample = consumers.slice(0, 5).map((c) => ({ id: c.consumerId, osd: c.d2NetOS }))
-    //console.log("Sample OSD values:", osdSample)
 
     return consumers
   } catch (error) {
@@ -374,9 +338,4 @@ export async function fetchConsumerData(): Promise<ConsumerData[]> {
     //console.log("Returning mock data due to error")
     return mockData
   }
-}
-
-export async function updateConsumerInSheet(consumer: ConsumerData) {
-  console.log("Would update consumer in Google Sheets:", consumer)
-  return { success: true, message: "Consumer updated successfully" }
 }

@@ -1,6 +1,6 @@
 import { google } from "googleapis"
 
-const SHEET_ID = process.env.GOOGLE_SHEET_ID!
+const SHEET_ID = process.env.USERS_SHEET!
 const SHEET_NAME = "User" // Change to your sheet name
 const LIST_SHEET_ID = process.env.GOOGLE_LIST_SHEET_ID!
 
@@ -30,7 +30,10 @@ export class UserStorage {
       range: `${SHEET_NAME}!A2:E`,
     })
     const rows = res.data.values || []
-    return rows.map(([id, username, password, role, agencies]) => ({
+    // Filter out empty rows or rows where the username (index 1) is missing
+    return rows
+      .filter(row => row && row.length > 0 && row[1])
+      .map(([id, username, password, role, agencies]) => ({
       id,
       username,
       password,
@@ -82,11 +85,35 @@ export class UserStorage {
     const users = await this.getUsers()
     const idx = users.findIndex(u => u.id === id)
     if (idx === -1) return null
-    // Delete the row by clearing it (Google Sheets API doesn't support row deletion directly)
-    await sheets.spreadsheets.values.clear({
+
+    // To delete a row completely, we first need the numeric sheetId of the tab
+    const spreadsheet = await sheets.spreadsheets.get({
       spreadsheetId: SHEET_ID,
-      range: `${SHEET_NAME}!A${idx + 2}:E${idx + 2}`,
     })
+    const sheet = spreadsheet.data.sheets?.find(s => s.properties?.title === SHEET_NAME)
+    const targetSheetId = sheet?.properties?.sheetId
+
+    if (targetSheetId === undefined || targetSheetId === null) {
+      throw new Error(`Sheet tab "${SHEET_NAME}" not found`)
+    }
+
+    // Use batchUpdate with deleteDimension to remove the row entirely from the sheet
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId: SHEET_ID,
+      requestBody: {
+        requests: [{
+          deleteDimension: {
+            range: {
+              sheetId: targetSheetId,
+              dimension: "ROWS",
+              startIndex: idx + 1, // 0-based index: Row 1 is 0, Row 2 (A2) is 1
+              endIndex: idx + 2
+            }
+          }
+        }]
+      }
+    })
+
     return users[idx]
   }
 }

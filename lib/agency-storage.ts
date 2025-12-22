@@ -1,6 +1,6 @@
 import { google } from "googleapis"
 
-const SHEET_ID = process.env.GOOGLE_SHEET_ID!
+const SHEET_ID = process.env.USERS_SHEET!
 const AGENCY_SHEET_NAME = "Agencies" // Change if your sheet name is different
 
 async function getSheetsClient() {

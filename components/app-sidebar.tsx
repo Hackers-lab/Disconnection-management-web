@@ -47,7 +47,7 @@ export function AppSidebar({ activeView, setActiveView, userRole, isMobile = fal
     },
     { 
       id: "deemed", 
-      label: "Deemed Disconnection Visit", 
+      label: "Deemed Visit", 
       icon: UserX, 
       allowedRoles: ["admin", "executive", "agency"]
     },

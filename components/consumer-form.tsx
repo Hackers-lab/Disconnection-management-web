@@ -11,7 +11,6 @@ import {
   ArrowLeft, Upload, Camera, MapPin, Power, Clock, CircleX, Check, RotateCcw,
   Smartphone, IndianRupee, Box, Monitor, AlertCircle, Calendar, Loader2
 } from "lucide-react"
-import imageCompression from "browser-image-compression"
 import type { ConsumerData } from "@/lib/google-sheets"
 
 interface ConsumerFormProps {
@@ -36,6 +35,7 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
   const [statusChanged, setStatusChanged] = useState(false)
   const [cameraActive, setCameraActive] = useState(false)
   const [location, setLocation] = useState<{lat: number, lng: number} | null>(null)
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -52,6 +52,13 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
     }
   }, [])
 
+  // Cleanup preview URL on unmount or change
+  useEffect(() => {
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl)
+    }
+  }, [previewUrl])
+
   // --- 1. WATERMARK & COMPRESSION HELPER ---
   const processImage = async (imageFile: File): Promise<File> => {
     return new Promise((resolve) => {
@@ -59,9 +66,24 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
       img.src = URL.createObjectURL(imageFile)
       
       img.onload = async () => {
+        // Resize logic: Max dimension 1024px
+        let width = img.width
+        let height = img.height
+        const maxDim = 1024
+        
+        if (width > maxDim || height > maxDim) {
+          if (width > height) {
+            height = Math.round((height * maxDim) / width)
+            width = maxDim
+          } else {
+            width = Math.round((width * maxDim) / height)
+            height = maxDim
+          }
+        }
+
         const canvas = document.createElement("canvas")
-        canvas.width = img.width
-        canvas.height = img.height
+        canvas.width = width
+        canvas.height = height
         const ctx = canvas.getContext("2d")
         
         if (!ctx) {
@@ -69,18 +91,18 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
           return
         }
 
-        // Draw original image
-        ctx.drawImage(img, 0, 0)
+        // Draw image scaled
+        ctx.drawImage(img, 0, 0, width, height)
 
         // -- Watermark Config --
-        const fontSize = Math.max(24, img.width * 0.035) // Responsive font size
+        const fontSize = Math.max(24, width * 0.035) // Responsive font size
         const padding = fontSize / 2
         const lineHeight = fontSize * 1.3
         const barHeight = (lineHeight * 2) + (padding * 2)
 
         // Draw Semi-transparent Black Bar at Bottom
         ctx.fillStyle = "rgba(0, 0, 0, 0.6)"
-        ctx.fillRect(0, img.height - barHeight, img.width, barHeight)
+        ctx.fillRect(0, height - barHeight, width, barHeight)
 
         // Draw Text
         ctx.font = `bold ${fontSize}px sans-serif`
@@ -92,7 +114,7 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
           day: '2-digit', month: '2-digit', year: 'numeric', 
           hour: '2-digit', minute: '2-digit', hour12: true 
         })
-        ctx.fillText(`Date: ${dateStr}`, padding, img.height - barHeight + padding + fontSize)
+        ctx.fillText(`Date: ${dateStr}`, padding, height - barHeight + padding + fontSize)
 
         // Line 2: GPS
         let locStr = "GPS: Waiting for signal..."
@@ -107,25 +129,19 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
              locStr = "GPS: Location Disabled/Unavailable"
            }
         }
-        ctx.fillText(locStr, padding, img.height - padding)
+        ctx.fillText(locStr, padding, height - padding)
 
         // Convert Canvas to File
         canvas.toBlob(async (blob) => {
           if (blob) {
-            const watermarkedFile = new File([blob], imageFile.name, { type: "image/jpeg" })
-            
-            // Compress the watermarked image
-            const options = { maxSizeMB: 0.15, maxWidthOrHeight: 1200, useWebWorker: true }
-            try {
-              const compressed = await imageCompression(watermarkedFile, options)
-              resolve(compressed)
-            } catch (e) {
-              resolve(watermarkedFile) // Fallback to uncompressed if error
-            }
+            // Create file from blob (Quality 0.6 gives good compression ~100KB for 1024px)
+            const processedFile = new File([blob], imageFile.name, { type: "image/jpeg" })
+            console.log(`Processed: ${(imageFile.size / 1024).toFixed(2)} KB -> ${(processedFile.size / 1024).toFixed(2)} KB`)
+            resolve(processedFile)
           } else {
             resolve(imageFile)
           }
-        }, "image/jpeg", 0.95)
+        }, "image/jpeg", 0.6) // Reduced quality from 0.95 to 0.6 for instant compression
       }
       
       img.onerror = () => resolve(imageFile)
@@ -134,6 +150,10 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
 
   // --- 2. UPLOAD TO SERVER ---
   const handleUpload = async (file: File) => {
+    // Create immediate preview
+    const objectUrl = URL.createObjectURL(file)
+    setPreviewUrl(objectUrl)
+
     setUploading(true)
     try {
       // Process: Watermark -> Compress
@@ -150,6 +170,7 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
 
       if (result.success) {
         setFormData(prev => ({ ...prev, imageUrl: result.url }))
+        // Keep local previewUrl active for immediate feedback
       }
     } catch (error) {
       console.error("Upload failed", error)
@@ -409,20 +430,27 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
                     </div>
                 )}
 
-                {/* Upload Status */}
-                {uploading && (
-                    <div className="flex items-center justify-center p-4 bg-blue-50 rounded text-blue-700 text-sm">
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Watermarking & Uploading...
-                    </div>
-                )}
-
-                {/* Preview */}
-                {formData.imageUrl && !uploading && !cameraActive && (
+                {/* Preview & Status */}
+                {(previewUrl || formData.imageUrl) && !cameraActive && (
                     <div className="relative mt-2 rounded-lg overflow-hidden border border-gray-200">
-                        <img src={formData.imageUrl} alt="Evidence" className="w-full h-48 object-cover" />
-                        <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-xs p-2 text-center">
-                            Uploaded Successfully
-                        </div>
+                        <img 
+                            src={previewUrl || formData.imageUrl} 
+                            alt="Evidence" 
+                            className={`w-full h-48 object-cover ${uploading ? 'opacity-50' : ''}`} 
+                        />
+                        {uploading && (
+                            <div className="absolute inset-0 flex items-center justify-center bg-black/10">
+                                <div className="bg-white/90 px-4 py-2 rounded-full flex items-center shadow-sm">
+                                    <Loader2 className="h-4 w-4 mr-2 animate-spin text-blue-600" />
+                                    <span className="text-xs font-medium text-blue-600">Processing...</span>
+                                </div>
+                            </div>
+                        )}
+                        {!uploading && formData.imageUrl && (
+                            <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-xs p-2 text-center">
+                                Uploaded Successfully
+                            </div>
+                        )}
                     </div>
                 )}
             </div>
