@@ -7,7 +7,9 @@ import {
   ClipboardCheck,  // NSC
   UserX,           // Deemed (Using UserX as per your sidebar)
   Settings,         // Admin
-  LayoutDashboard
+  LayoutDashboard,
+  ArrowRight,
+  RadioTower
 } from "lucide-react"
 import { ViewType } from "@/components/app-sidebar"
 
@@ -53,7 +55,7 @@ export function DashboardMenu({ onSelect, userRole }: DashboardMenuProps) {
       id: "dtr",
       title: "DTR Management",
       description: "DTR inspections",
-      icon: UserX,
+      icon: RadioTower,
       color: "text-orange-600",
       bgColor: "bg-orange-50",
       borderColor: "hover:border-orange-200",
@@ -82,12 +84,14 @@ export function DashboardMenu({ onSelect, userRole }: DashboardMenuProps) {
   ]
 
   return (
-    <div className="p-8">
-      <div className="flex items-center mb-8">
-        <LayoutDashboard className="h-8 w-8 text-blue-600 mr-3" />
+    <div className="p-8 max-w-7xl mx-auto">
+      <div className="flex items-center mb-10">
+        <div className="p-3 bg-blue-50 rounded-xl mr-4">
+          <LayoutDashboard className="h-8 w-8 text-blue-600" />
+        </div>
         <div>
            <h2 className="text-3xl font-bold tracking-tight text-gray-900">Dashboard</h2>
-           <p className="text-gray-500">Select a module to get started</p>
+           <p className="text-gray-500 mt-1">Select a module to get started</p>
         </div>
       </div>
       
@@ -100,22 +104,28 @@ export function DashboardMenu({ onSelect, userRole }: DashboardMenuProps) {
           return (
             <Card 
               key={module.id} 
-              className={`cursor-pointer transition-all duration-200 hover:shadow-lg hover:-translate-y-1 border-2 border-transparent ${module.borderColor}`}
+              className={`group relative cursor-pointer transition-all duration-300 hover:shadow-xl hover:-translate-y-1 border border-gray-200 ${module.borderColor} overflow-hidden`}
               onClick={() => onSelect(module.id as ViewType)}
             >
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium text-gray-600">
-                  {module.title}
-                </CardTitle>
-                <div className={`p-2 rounded-full ${module.bgColor}`}>
+              <div className={`absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity duration-300`}>
+                 <Icon className={`h-24 w-24 ${module.color}`} />
+              </div>
+
+              <CardHeader className="relative pb-2">
+                <div className={`w-12 h-12 rounded-xl ${module.bgColor} flex items-center justify-center mb-4 transition-transform duration-300 group-hover:scale-110`}>
                   <Icon className={`h-6 w-6 ${module.color}`} />
                 </div>
+                <CardTitle className="text-xl font-semibold text-gray-900 group-hover:text-blue-600 transition-colors">
+                  {module.title}
+                </CardTitle>
               </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{/* Count could go here */}</div>
-                <p className="text-xs text-gray-500 mt-2">
+              <CardContent className="relative">
+                <p className="text-sm text-gray-500 mb-4 line-clamp-2">
                   {module.description}
                 </p>
+                <div className="flex items-center text-sm font-medium text-blue-600 opacity-0 transform translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300">
+                  Access Module <ArrowRight className="ml-2 h-4 w-4" />
+                </div>
               </CardContent>
             </Card>
           )
