@@ -1,7 +1,7 @@
 "use client"
 
 import { Card, CardContent } from "@/components/ui/card"
-import { Users, Power, Clock, CheckCircle, AlertCircle, TrendingUp, ChevronDown, ChevronUp } from "lucide-react"
+import { Users, Power, Clock, CheckCircle, AlertCircle, TrendingUp, ChevronDown, ChevronUp, HelpCircle } from "lucide-react"
 import type { ConsumerData } from "@/lib/google-sheets"
 import { useState } from "react"
 import {
@@ -11,22 +11,34 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  TableFooter,
 } from "@/components/ui/table"
 
 interface DashboardStatsProps {
   consumers: ConsumerData[]
   loading?: boolean
+  onStatusSelect?: (status: string | null) => void
 }
 
 interface Stats {
   total: number
   connected: number
+  connectedAmount: number
   disconnected: number
+  disconnectedAmount: number
   pending: number
+  pendingAmount: number
   billDispute: number
+  billDisputeAmount: number
   officeTeam: number
+  officeTeamAmount: number
   totalOutstanding: number
   paid: number
+  paidAmount: number
+  notAttended: number
+  notAttendedAmount: number
+  notFound: number
+  notFoundAmount: number
 }
 
 interface AgencyReport {
@@ -43,22 +55,34 @@ interface AgencyReport {
   billDisputeAmount: number
   notAttended: number
   notAttendedAmount: number
+  notFound: number
+  notFoundAmount: number
   performance: number
 }
 
-export function DashboardStats({ consumers, loading = false }: DashboardStatsProps) {
+export function DashboardStats({ consumers, loading = false, onStatusSelect }: DashboardStatsProps) {
   const [isSliderOpen, setIsSliderOpen] = useState(false)
 
   // Calculate statistics
   const stats: Stats = {
     total: consumers.length,
     connected: 0,
+    connectedAmount: 0,
     disconnected: 0,
+    disconnectedAmount: 0,
     pending: 0,
+    pendingAmount: 0,
     billDispute: 0,
+    billDisputeAmount: 0,
     officeTeam: 0,
+    officeTeamAmount: 0,
     totalOutstanding: 0,
     paid: 0,
+    paidAmount: 0,
+    notAttended: 0,
+    notAttendedAmount: 0,
+    notFound: 0,
+    notFoundAmount: 0,
   }
 
   const agencyReport: Record<string, AgencyReport> = {}
@@ -83,6 +107,8 @@ export function DashboardStats({ consumers, loading = false }: DashboardStatsPro
         billDisputeAmount: 0,
         notAttended: 0,
         notAttendedAmount: 0,
+        notFound: 0,
+        notFoundAmount: 0,
         performance: 0,
       }
     }
@@ -94,32 +120,48 @@ export function DashboardStats({ consumers, loading = false }: DashboardStatsPro
     switch (status) {
       case "connected":
         stats.connected++
+        stats.connectedAmount += outstanding
+        stats.notAttended++
+        stats.notAttendedAmount += outstanding
         agencyReport[agency].notAttended++
         agencyReport[agency].notAttendedAmount += outstanding
         break
       case "agency paid":
       case "paid":
         stats.paid++
+        stats.paidAmount += outstanding
         agencyReport[agency].paid++
         agencyReport[agency].paidAmount += outstanding
         break
       case "disconnected":
         stats.disconnected++
+        stats.disconnectedAmount += outstanding
         agencyReport[agency].disconnected++
         agencyReport[agency].disconnectedAmount += outstanding
         break
       case "office team":
         stats.pending++
+        stats.pendingAmount += outstanding
         stats.officeTeam++
+        stats.officeTeamAmount += outstanding
         agencyReport[agency].officeTeam++
         agencyReport[agency].officeTeamAmount += outstanding
         break
       case "bill dispute":
         stats.billDispute++
+        stats.billDisputeAmount += outstanding
         agencyReport[agency].billDispute++
         agencyReport[agency].billDisputeAmount += outstanding
         break
+      case "not found":
+        stats.notFound++
+        stats.notFoundAmount += outstanding
+        agencyReport[agency].notFound++
+        agencyReport[agency].notFoundAmount += outstanding
+        break
       default:
+        stats.notAttended++
+        stats.notAttendedAmount += outstanding
         agencyReport[agency].notAttended++
         agencyReport[agency].notAttendedAmount += outstanding
     }
@@ -134,6 +176,33 @@ export function DashboardStats({ consumers, loading = false }: DashboardStatsPro
         : 0
     }))
     .sort((a, b) => b.performance - a.performance)
+
+  // Calculate total stats for footer
+  const totalStats = agencyReportData.reduce((acc, curr) => ({
+    total: acc.total + curr.total,
+    totalAmount: acc.totalAmount + curr.totalAmount,
+    disconnected: acc.disconnected + curr.disconnected,
+    disconnectedAmount: acc.disconnectedAmount + curr.disconnectedAmount,
+    paid: acc.paid + curr.paid,
+    paidAmount: acc.paidAmount + curr.paidAmount,
+    officeTeam: acc.officeTeam + curr.officeTeam,
+    officeTeamAmount: acc.officeTeamAmount + curr.officeTeamAmount,
+    billDispute: acc.billDispute + curr.billDispute,
+    billDisputeAmount: acc.billDisputeAmount + curr.billDisputeAmount,
+    notAttended: acc.notAttended + curr.notAttended,
+    notAttendedAmount: acc.notAttendedAmount + curr.notAttendedAmount,
+    notFound: acc.notFound + curr.notFound,
+    notFoundAmount: acc.notFoundAmount + curr.notFoundAmount,
+  }), {
+    total: 0, totalAmount: 0, disconnected: 0, disconnectedAmount: 0,
+    paid: 0, paidAmount: 0, officeTeam: 0, officeTeamAmount: 0,
+    billDispute: 0, billDisputeAmount: 0, notAttended: 0, notAttendedAmount: 0,
+    notFound: 0, notFoundAmount: 0
+  })
+
+  const totalPerformance = totalStats.totalAmount > 0
+    ? ((totalStats.paidAmount + totalStats.disconnectedAmount) / totalStats.totalAmount) * 100
+    : 0
 
   const getPerformanceColor = (performance: number) => {
     if (performance >= 80) return "bg-green-50 text-green-800"
@@ -169,51 +238,74 @@ export function DashboardStats({ consumers, loading = false }: DashboardStatsPro
     {
       title: "Total",
       value: stats.total.toLocaleString(),
+      amount: stats.totalOutstanding,
       icon: Users,
       color: "text-blue-600",
       bgColor: "bg-blue-50",
+      filter: null,
     },
     {
       title: "Connected",
       value: stats.connected.toLocaleString(),
+      amount: stats.connectedAmount,
       icon: CheckCircle,
       color: "text-red-600",
       bgColor: "bg-red-50",
+      filter: "connected",
     },
     {
       title: "Disconnected",
       value: stats.disconnected.toLocaleString(),
+      amount: stats.disconnectedAmount,
       icon: Power,
       color: "text-red-600",
       bgColor: "bg-red-50",
+      filter: "disconnected",
     },
     {
       title: "Paid",
       value: stats.paid.toLocaleString(),
+      amount: stats.paidAmount,
       icon: CheckCircle,
       color: "text-green-600",
       bgColor: "bg-green-50",
+      filter: "paid",
     },
     {
       title: "Office Team",
       value: stats.pending.toLocaleString(),
+      amount: stats.pendingAmount,
       icon: Clock,
       color: "text-yellow-600",
       bgColor: "bg-yellow-50",
+      filter: "office team",
     },
     {
       title: "Bill Dispute",
       value: stats.billDispute.toLocaleString(),
+      amount: stats.billDisputeAmount,
       icon: AlertCircle,
       color: "text-orange-600",
       bgColor: "bg-orange-50",
+      filter: "bill dispute",
+    },
+    {
+      title: "Not Found",
+      value: stats.notFound.toLocaleString(),
+      amount: stats.notFoundAmount,
+      icon: HelpCircle,
+      color: "text-indigo-600",
+      bgColor: "bg-indigo-50",
+      filter: "not found",
     },
     {
       title: "Total Outstanding",
       value: `₹${stats.totalOutstanding.toLocaleString()}`,
+      amount: null,
       icon: TrendingUp,
       color: "text-purple-600",
       bgColor: "bg-purple-50",
+      filter: null,
     },
   ]
 
@@ -229,14 +321,21 @@ export function DashboardStats({ consumers, loading = false }: DashboardStatsPro
 
       {isSliderOpen && (
         <div className="space-y-6">
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3 mb-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 mb-4">
             {statCards.map((stat, index) => (
-              <Card key={index} className="hover:shadow-md transition-shadow">
+              <Card 
+                key={index} 
+                className="hover:shadow-md transition-shadow cursor-pointer"
+                onClick={() => onStatusSelect?.(stat.filter)}
+              >
                 <CardContent className="p-3">
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-xs font-medium text-gray-600 mb-1">{stat.title}</p>
                       <p className="text-lg font-bold text-gray-900">{stat.value}</p>
+                      {stat.amount !== null && (
+                        <p className="text-xs font-medium text-gray-500">₹{stat.amount.toLocaleString()}</p>
+                      )}
                     </div>
                     <div className={`p-1.5 rounded-lg ${stat.bgColor}`}>
                       <stat.icon className={`h-4 w-4 ${stat.color}`} />
@@ -258,6 +357,7 @@ export function DashboardStats({ consumers, loading = false }: DashboardStatsPro
                   <TableHead className="text-center border-r px-0.1" colSpan={2}>Paid</TableHead>
                   <TableHead className="text-center border-r px-0.1" colSpan={2}>Office Team</TableHead>
                   <TableHead className="text-center border-r px-0.1" colSpan={2}>Bill Dispute</TableHead>
+                  <TableHead className="text-center border-r px-0.1" colSpan={2}>Not Found</TableHead>
                   <TableHead className="text-center border-r px-0.1" colSpan={2}>Not Attended</TableHead>
                   <TableHead className="text-center w-[80px] px-0.1" rowSpan={2}>Performance</TableHead>
                 </TableRow>
@@ -284,6 +384,10 @@ export function DashboardStats({ consumers, loading = false }: DashboardStatsPro
                   <TableHead className="text-center border-r bg-gray-100 px-0.1 w-[40px]">Count</TableHead>
                   <TableHead className="text-center border-r bg-white-100 px-0.1 w-[40px]">Amount</TableHead>
                   
+                  {/* Not Found */}
+                  <TableHead className="text-center border-r bg-gray-50 px-0.1 w-[40px]">Count</TableHead>
+                  <TableHead className="text-center border-r bg-white px-0.1 w-[40px]">Amount</TableHead>
+
                   {/* Not Attended */}
                   <TableHead className="text-center border-r bg-gray px-0.1 w-[40px]">Count</TableHead>
                   <TableHead className="text-center px-0.1 bg-white w-[40px]">Amount</TableHead>
@@ -318,6 +422,10 @@ export function DashboardStats({ consumers, loading = false }: DashboardStatsPro
                     <TableCell className="text-center border-r px-0.1 bg-gray-50">{agency.billDispute}</TableCell>
                     <TableCell className="text-center border-r px-0.1 bg-white-50">₹{agency.billDisputeAmount.toLocaleString()}</TableCell>
                     
+                    {/* Not Found */}
+                    <TableCell className="text-center border-r px-0.1 bg-gray-50">{agency.notFound}</TableCell>
+                    <TableCell className="text-center border-r px-0.1 bg-white">₹{agency.notFoundAmount.toLocaleString()}</TableCell>
+
                     {/* Not Attended */}
                     <TableCell className="text-center border-r px-0.1 bg-gray-50">{agency.notAttended}</TableCell>
                     <TableCell className="text-center border-r px-0.1 bg-white">₹{agency.notAttendedAmount.toLocaleString()}</TableCell>
@@ -329,6 +437,28 @@ export function DashboardStats({ consumers, loading = false }: DashboardStatsPro
                   </TableRow>
                 ))}
               </TableBody>
+              <TableFooter className="bg-gray-100 font-medium">
+                <TableRow className="border-b h-1">
+                  <TableCell className="border-r px-2 sticky left-0 text-xs">Total</TableCell>
+                  <TableCell className="text-center border-r px-0.1">{totalStats.total}</TableCell>
+                  <TableCell className="text-center border-r px-0.1">₹{totalStats.totalAmount.toLocaleString()}</TableCell>
+                  <TableCell className="text-center border-r px-0.1">{totalStats.disconnected}</TableCell>
+                  <TableCell className="text-center border-r px-0.1">₹{totalStats.disconnectedAmount.toLocaleString()}</TableCell>
+                  <TableCell className="text-center border-r px-0.1">{totalStats.paid}</TableCell>
+                  <TableCell className="text-center border-r px-0.1">₹{totalStats.paidAmount.toLocaleString()}</TableCell>
+                  <TableCell className="text-center border-r px-0.1">{totalStats.officeTeam}</TableCell>
+                  <TableCell className="text-center border-r px-0.1">₹{totalStats.officeTeamAmount.toLocaleString()}</TableCell>
+                  <TableCell className="text-center border-r px-0.1">{totalStats.billDispute}</TableCell>
+                  <TableCell className="text-center border-r px-0.1">₹{totalStats.billDisputeAmount.toLocaleString()}</TableCell>
+                  <TableCell className="text-center border-r px-0.1">{totalStats.notFound}</TableCell>
+                  <TableCell className="text-center border-r px-0.1">₹{totalStats.notFoundAmount.toLocaleString()}</TableCell>
+                  <TableCell className="text-center border-r px-0.1">{totalStats.notAttended}</TableCell>
+                  <TableCell className="text-center border-r px-0.1">₹{totalStats.notAttendedAmount.toLocaleString()}</TableCell>
+                  <TableCell className={`text-center border-r px-0.1 ${getPerformanceColor(totalPerformance)}`}>
+                    {totalPerformance.toFixed(1)}%
+                  </TableCell>
+                </TableRow>
+              </TableFooter>
             </Table>
           </div>
         </div>

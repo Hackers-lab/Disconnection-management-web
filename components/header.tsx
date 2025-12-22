@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button"
 import { logout } from "@/app/actions/auth"
 import { 
   Power, 
+  HomeIcon,
   User, 
   Settings, 
   Download, 
@@ -149,7 +150,7 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
               className="flex items-center space-x-2 cursor-pointer hover:opacity-80 transition-opacity"
               onClick={() => setActiveView("home")}
             >
-              <Power className="h-6 w-6 text-blue-600" />
+              <HomeIcon className="h-6 w-6 text-blue-600" />
               <span className="text-xl font-semibold text-gray-900 hidden xs:inline">Report</span>
             </div>
           </div>
