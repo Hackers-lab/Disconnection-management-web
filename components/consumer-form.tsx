@@ -1,14 +1,17 @@
 "use client"
 
 import type React from "react"
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
-import { ArrowLeft, Upload, Camera, MapPin, Power, Clock, CircleX, Check, RotateCcw } from "lucide-react"
-import imageCompression from "browser-image-compression";
+import { 
+  ArrowLeft, Upload, Camera, MapPin, Power, Clock, CircleX, Check, RotateCcw,
+  Smartphone, IndianRupee, Box, Monitor, AlertCircle, Calendar, Loader2
+} from "lucide-react"
+import imageCompression from "browser-image-compression"
 import type { ConsumerData } from "@/lib/google-sheets"
 
 interface ConsumerFormProps {
@@ -26,549 +29,471 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
     agency: consumer.agency || "",
     image: null as File | null,
     reading: consumer.reading || "",
-    imageUrl: consumer.imageUrl, // Use imageId as the identifier for the uploaded image
-  })  
-  const [cameraActive, setCameraActive] = useState(false);
-  const videoRef = useRef<HTMLVideoElement | null>(null);
+    imageUrl: consumer.imageUrl,
+  })
+  
   const [uploading, setUploading] = useState(false)
-  const [statusChanged, setStatusChanged] = useState(false);
+  const [statusChanged, setStatusChanged] = useState(false)
+  const [cameraActive, setCameraActive] = useState(false)
+  const [location, setLocation] = useState<{lat: number, lng: number} | null>(null)
+  
+  const videoRef = useRef<HTMLVideoElement | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const handleImageUpload = async (file: File) => {
+  // Fetch location on mount
+  useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => setLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+        (err) => console.warn("Location access denied or unavailable", err),
+        { enableHighAccuracy: true }
+      )
+    }
+  }, [])
+
+  // --- 1. WATERMARK & COMPRESSION HELPER ---
+  const processImage = async (imageFile: File): Promise<File> => {
+    return new Promise((resolve) => {
+      const img = new Image()
+      img.src = URL.createObjectURL(imageFile)
+      
+      img.onload = async () => {
+        const canvas = document.createElement("canvas")
+        canvas.width = img.width
+        canvas.height = img.height
+        const ctx = canvas.getContext("2d")
+        
+        if (!ctx) {
+          resolve(imageFile)
+          return
+        }
+
+        // Draw original image
+        ctx.drawImage(img, 0, 0)
+
+        // -- Watermark Config --
+        const fontSize = Math.max(24, img.width * 0.035) // Responsive font size
+        const padding = fontSize / 2
+        const lineHeight = fontSize * 1.3
+        const barHeight = (lineHeight * 2) + (padding * 2)
+
+        // Draw Semi-transparent Black Bar at Bottom
+        ctx.fillStyle = "rgba(0, 0, 0, 0.6)"
+        ctx.fillRect(0, img.height - barHeight, img.width, barHeight)
+
+        // Draw Text
+        ctx.font = `bold ${fontSize}px sans-serif`
+        ctx.fillStyle = "#ffffff"
+        ctx.textBaseline = "bottom"
+        
+        // Line 1: Date
+        const dateStr = new Date().toLocaleString("en-IN", { 
+          day: '2-digit', month: '2-digit', year: 'numeric', 
+          hour: '2-digit', minute: '2-digit', hour12: true 
+        })
+        ctx.fillText(`Date: ${dateStr}`, padding, img.height - barHeight + padding + fontSize)
+
+        // Line 2: GPS
+        let locStr = "GPS: Waiting for signal..."
+        if (location) {
+          locStr = `Lat: ${location.lat.toFixed(6)}, Long: ${location.lng.toFixed(6)}`
+        } else if (navigator.geolocation) {
+           // Try one last fetch if state was null
+           try {
+             const pos: any = await new Promise((res, rej) => navigator.geolocation.getCurrentPosition(res, rej, {timeout: 2000}))
+             locStr = `Lat: ${pos.coords.latitude.toFixed(6)}, Long: ${pos.coords.longitude.toFixed(6)}`
+           } catch (e) {
+             locStr = "GPS: Location Disabled/Unavailable"
+           }
+        }
+        ctx.fillText(locStr, padding, img.height - padding)
+
+        // Convert Canvas to File
+        canvas.toBlob(async (blob) => {
+          if (blob) {
+            const watermarkedFile = new File([blob], imageFile.name, { type: "image/jpeg" })
+            
+            // Compress the watermarked image
+            const options = { maxSizeMB: 0.15, maxWidthOrHeight: 1200, useWebWorker: true }
+            try {
+              const compressed = await imageCompression(watermarkedFile, options)
+              resolve(compressed)
+            } catch (e) {
+              resolve(watermarkedFile) // Fallback to uncompressed if error
+            }
+          } else {
+            resolve(imageFile)
+          }
+        }, "image/jpeg", 0.95)
+      }
+      
+      img.onerror = () => resolve(imageFile)
+    })
+  }
+
+  // --- 2. UPLOAD TO SERVER ---
+  const handleUpload = async (file: File) => {
     setUploading(true)
     try {
-      const formData = new FormData()
-      formData.append("file", file)
-      formData.append("consumerId", consumer.consumerId)
+      // Process: Watermark -> Compress
+      const processedFile = await processImage(file)
+      
+      setFormData(prev => ({ ...prev, image: processedFile })) // Save file to state for immediate UI feedback
 
-      const response = await fetch("/api/upload-image", {
-        method: "POST",
-        body: formData,
-      })
+      const uploadData = new FormData()
+      uploadData.append("file", processedFile)
+      uploadData.append("consumerId", consumer.consumerId)
 
+      const response = await fetch("/api/upload-image", { method: "POST", body: uploadData })
       const result = await response.json()
+
       if (result.success) {
-        setFormData((prev) => ({ ...prev, imageUrl: result.url }))
+        setFormData(prev => ({ ...prev, imageUrl: result.url }))
       }
     } catch (error) {
-      console.error("Image upload failed:", error)
+      console.error("Upload failed", error)
+      alert("Image upload failed. Please try again.")
     } finally {
       setUploading(false)
     }
   }
 
+  // --- 3. CAMERA LOGIC ---
+  const startCamera = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        video: { facingMode: "environment" } // Use back camera
+      })
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream
+        setCameraActive(true)
+      }
+    } catch (err) {
+      console.error("Camera error", err)
+      alert("Unable to access camera. Please allow permissions.")
+    }
+  }
+
+  const capturePhoto = () => {
+    const video = videoRef.current
+    if (!video) return
+
+    const canvas = document.createElement("canvas")
+    canvas.width = video.videoWidth
+    canvas.height = video.videoHeight
+    const ctx = canvas.getContext("2d")
+    if (ctx) {
+      ctx.drawImage(video, 0, 0)
+      canvas.toBlob((blob) => {
+        if (blob) {
+          const file = new File([blob], "camera_capture.jpg", { type: "image/jpeg" })
+          stopCamera()
+          handleUpload(file)
+        }
+      }, "image/jpeg")
+    }
+  }
+
+  const stopCamera = () => {
+    const video = videoRef.current
+    if (video && video.srcObject) {
+      const tracks = (video.srcObject as MediaStream).getTracks()
+      tracks.forEach(track => track.stop())
+      video.srcObject = null
+    }
+    setCameraActive(false)
+  }
+
   const handleStatusUpdate = (status: string) => {
     const now = new Date();
-    const day = String(now.getDate()).padStart(2, "0");
-    const month = String(now.getMonth() + 1).padStart(2, "0");
-    const year = now.getFullYear();
-    const formattedDate = `${day}-${month}-${year}`;
-    const currentDate = new Date().toISOString().split("T")[0]
-    setFormData((prev) => ({
-      ...prev,
-      disconStatus: status,
-      disconDate: formattedDate,
-    }));
+    const formattedDate = now.toLocaleDateString("en-GB").replace(/\//g, "-");
+    setFormData((prev) => ({ ...prev, disconStatus: status, disconDate: formattedDate }));
     setStatusChanged(true);
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!statusChanged) {
-      alert("Please select status before saving."); // Popup before saving
-      return;
+    e.preventDefault();
+    if (!statusChanged && !formData.reading && !formData.notes && !formData.imageUrl) {
+        if(formData.disconStatus === consumer.disconStatus) {
+             alert("Please select a status or add details before saving.");
+             return;
+        }
     }
-
     const updatedConsumer: ConsumerData = {
       ...consumer,
-      disconStatus: formData.disconStatus,
-      disconDate: formData.disconDate,
-      agency: formData.agency, // Allow agency update for admin
-      notes: formData.notes,
-      reading: formData.reading,
-      imageUrl: formData.imageUrl, // Use imageUrl as imageId
+      ...formData,
       lastUpdated: new Date().toISOString().split("T")[0],
     }
-
-    // OPTIMISTIC UPDATE: Call onSave immediately to update UI and close form
     onSave(updatedConsumer);
   }
 
-  const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    // if (file) {
-    //   setFormData((prev) => ({ ...prev, image: file }))
-    //   handleImageUpload(file)
-    // }
-    if (!file) return;
-
-      try {
-        // Compression options (adjust as needed)
-        const options = {
-          maxSizeMB: 0.1,       // Target 100KB
-          maxWidthOrHeight: 800, // Reduce dimensions
-          useWebWorker: true,   // Faster compression
-        };
-
-        // Compress the image
-        const compressedFile = await imageCompression(file, options);
-        
-        // Update state and upload
-        setFormData((prev) => ({ ...prev, image: compressedFile }));
-        await handleImageUpload(compressedFile);
-
-      } catch (error) {
-        console.error("Compression failed:", error);
-        alert("Failed to compress image. Uploading original.");
-        setFormData((prev) => ({ ...prev, image: file }));
-        await handleImageUpload(file);
-      }
-  }
-
-  // const handleCameraCapture = async () => {
-  //   try {
-  //     const stream = await navigator.mediaDevices.getUserMedia({
-  //       video: { facingMode: "environment" },
-  //     })
-
-  //     const video = document.createElement("video")
-  //     video.srcObject = stream
-  //     video.play()
-
-  //     alert("Camera functionality would open here. In a real app, this would capture and upload the image.")
-
-  //     stream.getTracks().forEach((track) => track.stop())
-  //   } catch (error) {
-  //     console.error("Camera access failed:", error)
-  //     alert("Camera access denied or not available")
-  //   }
-  // }
-
-  const handleCameraCapture = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "environment" }, // Use back camera on phones
-      });
-
-      const videoElement = videoRef.current;
-      if (videoElement) {
-        videoElement.srcObject = stream;
-        videoElement.play();
-        setCameraActive(true);
-      }
-    } catch (error) {
-      console.error("Camera access failed:", error);
-      alert("Camera access denied or not available");
-    }
-  };
-
-
   return (
-    <div className="max-w-4xl mx-auto">
-      <div className="mb-6">
-        <Button variant="ghost" onClick={onCancel} className="mb-4">
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          Back to Consumer List
+    <div className="max-w-3xl mx-auto space-y-4 pb-28"> {/* Added padding-bottom for sticky footer */}
+      
+      {/* Header */}
+      <div className="flex items-center gap-2 mb-2">
+        <Button variant="ghost" size="icon" onClick={onCancel}>
+          <ArrowLeft className="h-5 w-5" />
         </Button>
-        <h1 className="text-2xl font-bold text-gray-900">Update Consumer Details</h1>
-        <p className="text-gray-600">
-          Consumer: {consumer.name} ({consumer.consumerId})
-        </p>
+        <h1 className="text-xl font-bold text-gray-900">Update Consumer</h1>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Main Form */}
-        <div className="lg:col-span-2">
-          <Card>
-            <CardHeader>
-              <CardTitle>Consumer Information</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <form onSubmit={handleSubmit} className="space-y-1">
-                {/* Consumer Information - Read Only */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="name">Consumer Name</Label>
-                    <Input id="name" value={consumer.name} disabled className="bg-gray-50" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="consumerId">Consumer ID</Label>
-                    <Input id="consumerId" value={consumer.consumerId} disabled className="bg-gray-50" />
-                  </div>
+      {/* --- 1. SINGLE DETAILS CARD --- */}
+      <Card className="bg-slate-50 border-slate-200 shadow-sm">
+        <CardContent className="p-4 space-y-3">
+            <div className="flex justify-between items-start border-b border-slate-200 pb-3">
+                <div>
+                    <h2 className="text-lg font-bold text-gray-900">{consumer.name}</h2>
+                    <p className="text-xs text-gray-500 font-mono">ID: {consumer.consumerId}</p>
                 </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="address">Address</Label>
-                  <Input id="address" value={consumer.address} disabled className="bg-gray-50" />
+                <div className="text-right">
+                    <div className="text-xl font-bold text-red-600 flex items-center justify-end">
+                        <IndianRupee className="h-5 w-5" />
+                        {Number(consumer.d2NetOS).toLocaleString()}
+                    </div>
+                    <span className="text-[10px] text-gray-500 uppercase tracking-wide">Outstanding</span>
                 </div>
+            </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="outstandingDues">Outstanding Dues</Label>
-                    <Input
-                      id="outstandingDues"
-                      value={`₹${Number.parseFloat(consumer.d2NetOS || "0").toLocaleString()}`}
-                      disabled
-                      className="bg-gray-50 text-red-600 font-medium"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="dueDateRange">Due Date Range</Label>
-                    <Input id="dueDateRange" value={consumer.osDuedateRange} disabled className="bg-gray-50" />
-                  </div>
+            <div className="flex items-start gap-2 text-sm text-gray-700">
+                <MapPin className="h-4 w-4 mt-0.5 text-blue-500 shrink-0" />
+                <span className="leading-snug">{consumer.address}</span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-y-2 gap-x-4 text-xs text-gray-600 pt-1">
+                <div className="flex items-center gap-2">
+                    <Smartphone className="h-4 w-4 text-gray-400" />
+                    <a href={`tel:${consumer.mobileNumber}`} className="font-medium text-blue-600 underline">
+                        {consumer.mobileNumber || "N/A"}
+                    </a>
                 </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="mobileNumber">Mobile Number</Label>
-                    <Input
-                      id="mobileNumber"
-                      value={consumer.mobileNumber || "Not provided"}
-                      disabled
-                      className="bg-gray-50"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="device">Device</Label>
-                    <Input id="device" value={consumer.device} disabled className="bg-gray-50" />
-                  </div>
+                <div className="flex items-center gap-2 justify-end">
+                    <Calendar className="h-4 w-4 text-gray-400" />
+                    <span>Due: <strong>{consumer.osDuedateRange}</strong></span>
                 </div>
+                <div className="flex items-center gap-2">
+                    <Box className="h-4 w-4 text-gray-400" />
+                    <span>Class: {consumer.baseClass}</span>
+                </div>
+                <div className="flex items-center gap-2 justify-end">
+                    <Monitor className="h-4 w-4 text-gray-400" />
+                    <span>Device: {consumer.device}</span>
+                </div>
+            </div>
+        </CardContent>
+      </Card>
 
-                {/* Update Section */}
-                <div className="pt-4 border-t">
-                  <h3 className="text-lg font-medium text-gray-900 mb-4">Update Section</h3>
-
-                  {/* Status Update Buttons */}
-                  <div className="space-y-4">
-                    <div className="space-y-2">
-                      <Label>Connection Status</Label>
-                      <div className="flex space-x-4">
-                        <Button
-                          type="button"
-                          variant={formData.disconStatus === "disconnected" ? "default" : "outline"}
-                          className={`flex-1 ${
-                            formData.disconStatus === "disconnected"
-                              ? "bg-red-600 hover:bg-red-700 text-white"
-                              : "border-red-600 text-red-600 hover:bg-red-50"
-                          }`}
-                          onClick={() => handleStatusUpdate("disconnected")}
-                        >
-                          <Power className="h-4 w-4 mr-2" />
-                          DISCONNECTED
+      {/* --- 2. UPDATE FORM --- */}
+      <Card className="border shadow-sm">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-lg">Action & Evidence</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-6">
+            
+            {/* Status Buttons */}
+            <div className="space-y-3">
+                <Label className="text-xs font-bold text-gray-500 uppercase">Set Status</Label>
+                <div className="grid grid-cols-1 gap-3">
+                    <div className="flex gap-3">
+                        <Button type="button" variant={formData.disconStatus === "disconnected" ? "default" : "outline"} className={`flex-1 h-12 ${formData.disconStatus === "disconnected" ? "bg-red-600 hover:bg-red-700 text-white" : "border-red-200 text-red-700 hover:bg-red-50"}`} onClick={() => handleStatusUpdate("disconnected")}>
+                            <Power className="h-4 w-4 mr-2" /> DISCONNECT
                         </Button>
-                        <Button
-                          type="button"
-                          variant={formData.disconStatus === "bill dispute" ? "default" : "outline"}
-                          className={`flex-1 ${
-                            formData.disconStatus === "bill dispute"
-                              ? "bg-yellow-600 hover:bg-yellow-700 text-white"
-                              : "border-yellow-600 text-yellow-600 hover:bg-yellow-50"
-                          }`}
-                          onClick={() => handleStatusUpdate("bill dispute")}
-                        >
-                          <Clock className="h-4 w-4 mr-2" />
-                          BILL DISPUTE
+                        <Button type="button" variant={formData.disconStatus === "bill dispute" ? "default" : "outline"} className={`flex-1 h-12 ${formData.disconStatus === "bill dispute" ? "bg-yellow-500 hover:bg-yellow-600 text-white" : "border-yellow-200 text-yellow-700 hover:bg-yellow-50"}`} onClick={() => handleStatusUpdate("bill dispute")}>
+                            <AlertCircle className="h-4 w-4 mr-2" /> DISPUTE
                         </Button>
-
-                      </div>
-                      <div className="flex space-x-4">
-                        <Button
-                          type="button"
-                          variant={formData.disconStatus === "office team" ? "default" : "outline"}
-                          className={`flex-1 ${
-                            formData.disconStatus === "office team"
-                              ? "bg-purple-600 hover:bg-purple-700 text-white"
-                              : "border-purple-600 text-purple-600 hover:bg-purple-50"
-                          }`}
-                          onClick={() => handleStatusUpdate("office team")}
-                        >
-                          <Clock className="h-4 w-4 mr-2" />
-                          OFFICE TEAM
+                    </div>
+                    <div className="flex gap-3">
+                        <Button type="button" variant={formData.disconStatus === "office team" ? "default" : "outline"} className={`flex-1 ${formData.disconStatus === "office team" ? "bg-purple-600 hover:bg-purple-700 text-white" : "border-purple-600 text-purple-600 hover:bg-purple-50"}`} onClick={() => handleStatusUpdate("office team")}>
+                            <Clock className="h-4 w-4 mr-2" /> OFFICE TEAM
                         </Button>
-                        <Button
-                          type="button"
-                          variant={formData.disconStatus === "agency paid" ? "default" : "outline"}
-                          className={`flex-1 ${
-                            formData.disconStatus === "agency paid"
-                              ? "bg-green-600 hover:bg-green-700 text-white"
-                              : "border-green-600 text-green-600 hover:bg-green-50"
-                          }`}
-                          onClick={() => handleStatusUpdate("agency paid")}
-                        >
-                          <Check className="h-4 w-4 mr-2" />
-                          PAID
+                        <Button type="button" variant={formData.disconStatus === "agency paid" ? "default" : "outline"} className={`flex-1 ${formData.disconStatus === "agency paid" ? "bg-green-600 text-white" : "border-green-200 text-green-700"}`} onClick={() => handleStatusUpdate("agency paid")}>
+                            <Check className="h-4 w-4 mr-2" /> PAID
                         </Button>
-                      </div>
-                      <div className="flex space-x-4">
-                        <Button
-                          type="button"
-                          variant={formData.disconStatus === "not found" ? "default" : "outline"}
-                          className={`flex-1 ${
-                            formData.disconStatus === "not found"
-                              ? "bg-red-600 hover:bg-red-700 text-white"
-                              : "border-red-600 text-red-600 hover:bg-red-50"
-                          }`}
-                          onClick={() => handleStatusUpdate("not found")}
-                        >
-                          <CircleX className="h-4 w-4 mr-2" />
-                          NOT FOUND
+                    </div>
+                    <div className="flex gap-3">
+                        <Button type="button" variant={formData.disconStatus === "not found" ? "default" : "outline"} className={`flex-1 ${formData.disconStatus === "not found" ? "bg-gray-600 text-white" : "border-gray-200 text-gray-700"}`} onClick={() => handleStatusUpdate("not found")}>
+                            <CircleX className="h-4 w-4 mr-2" /> NOT FOUND
                         </Button>
-                        
-                        {/* 👇 UPDATED REISSUE BUTTON 👇 */}
                         {userRole === "admin" && (
-                          <Button
-                            type="button"
-                            // Check if current status is "connected" to toggle style
-                            variant={formData.disconStatus === "connected" ? "default" : "outline"}
-                            className={`flex-1 ${
-                              formData.disconStatus === "connected"
-                                ? "bg-blue-600 hover:bg-blue-700 text-white" // Solid Blue when active
-                                : "border-blue-600 text-blue-600 hover:bg-blue-50" // Outline Blue when inactive
-                            }`}
-                            onClick={() => handleStatusUpdate("connected")}
-                          >
-                            <RotateCcw className="h-4 w-4 mr-2" />
-                            REISSUE
-                          </Button>
+                            <Button type="button" variant={formData.disconStatus === "connected" ? "default" : "outline"} className={`flex-1 ${formData.disconStatus === "connected" ? "bg-blue-600 text-white" : "border-blue-200 text-blue-700"}`} onClick={() => handleStatusUpdate("connected")}>
+                                <RotateCcw className="h-4 w-4 mr-2" /> REISSUE
+                            </Button>
                         )}
-                        
-                      </div>
-                      <p className="text-sm text-gray-600">
-                        Current Status: <span className="font-medium">{formData.disconStatus}</span>
-                        {formData.disconDate && (
-                          <span className="ml-2">
-                            | Date: <span className="font-medium">{formData.disconDate}</span>
-                          </span>
-                        )}
-                      </p>
                     </div>
-
-                    {/* Agency Selection - Admin Only */}
-                    {userRole === "admin" && (
-                      <div className="space-y-2">
-                        <Label htmlFor="agency">Agency</Label>
-                        <select
-                          id="agency"
-                          value={formData.agency}
-                          onChange={(e) => setFormData((prev) => ({ ...prev, agency: e.target.value }))}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        >
-                          {availableAgencies.map((agency) => (
-                            <option key={agency} value={agency}>
-                              {agency}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
-
-                    <div className="space-y-2">
-                      <Label htmlFor="reading">Reading</Label>
-                      <Textarea
-                        id="reading"
-                        placeholder="Last meter reading..."
-                        value={formData.reading}
-                        onChange={(e) => setFormData((prev) => ({ ...prev, reading: e.target.value }))}
-                        rows={1}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="notes">Notes</Label>
-                      <Textarea
-                        id="notes"
-                        placeholder="Add any notes about the consumer..."
-                        value={formData.notes}
-                        onChange={(e) => setFormData((prev) => ({ ...prev, notes: e.target.value }))}
-                        rows={3}
-                      />
-                    </div>
-
-                    
-
-                    {/* Image Upload */}
-                    <div className="space-y-2">
-                      <Label htmlFor="image">Upload Image</Label>
-                      <div className="flex items-center space-x-4">
-                        <div className="flex-1">
-                          <Input
-                            id="image"
-                            type="file"
-                            accept="image/*"
-                            onChange={handleImageChange}
-                            className="hidden"
-                          />
-                          <Button
-                            type="button"
-                            variant="outline"
-                            onClick={() => document.getElementById("image")?.click()}
-                            className="w-full"
-                            disabled={uploading}
-                          >
-                            <Upload className="h-4 w-4 mr-2" />
-                            {uploading ? "Uploading..." : formData.image ? formData.image.name : "Choose Image"}
-                          </Button>
-                        </div>
-                        {/* <Button type="button" variant="outline" onClick={handleCameraCapture} disabled={uploading}>
-                          <Camera className="h-4 w-4" />
-                        </Button> */}
-                      </div>
-
-                      {cameraActive && (
-                        <div className="mt-4 space-y-2">
-                          <div className="relative w-full max-w-sm h-64 bg-black rounded">
-                            <video
-                              ref={videoRef}
-                              className="absolute inset-0 w-full h-full object-cover rounded"
-                              autoPlay
-                              playsInline
-                            />
-                          </div>
-
-                          <Button
-                            type="button"
-                            onClick={async () => {
-                              const video = videoRef.current;
-                              if (video) {
-                                const canvas = document.createElement("canvas");
-                                canvas.width = video.videoWidth;
-                                canvas.height = video.videoHeight;
-                                canvas.getContext("2d")?.drawImage(video, 0, 0);
-
-                                canvas.toBlob((blob) => {
-                                  if (blob) {
-                                    const file = new File([blob], "camera-capture.jpg", { type: "image/jpeg" });
-                                    setFormData((prev) => ({ ...prev, image: file }));
-                                    handleImageUpload(file);
-                                  }
-                                }, "image/jpeg");
-
-                                const tracks = (video.srcObject as MediaStream)?.getTracks();
-                                tracks?.forEach((track) => track.stop());
-                                setCameraActive(false);
-                              }
-                            }}
-                          >
-                            Capture
-                          </Button>
-                        </div>
-                      )}
-
-                      {formData.imageUrl && (
-                        <div className="mt-2">
-                          <img
-                            src={formData.imageUrl || "/placeholder.svg"}
-                            alt="Uploaded"
-                            className="w-32 h-32 object-cover rounded"
-                          />
-                        </div>
-                      )}
-                    </div>
-                  </div>
                 </div>
-
-                <div className="flex space-x-4 pt-4">
-                  <Button type="submit" className="flex-1">
-                    Save Changes
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={onCancel}
-                    className="flex-1 bg-transparent"
-                  >
-                    Cancel
-                  </Button>
+                <div className="bg-gray-50 p-2 rounded text-center text-xs text-gray-500">
+                    Current: <span className="font-bold text-gray-900 uppercase">{formData.disconStatus}</span>
+                    {formData.disconDate && <span> ({formData.disconDate})</span>}
                 </div>
-              </form>
-            </CardContent>
-          </Card>
-        </div>
+            </div>
 
-        {/* Information Sidebar */}
-        <div className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Information</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 gap-4">
-                <div>
-                  <p className="text-sm font-medium text-gray-700">Nature of Connection</p>
-                  <p className="text-sm text-gray-900">{consumer.natureOfConn}</p>
-                </div>
-
-                <div>
-                  <p className="text-sm font-medium text-gray-700">Notes</p>
-                  <p className="text-sm text-gray-900">{consumer.notes}</p>
-                </div>
-
-                <div>
-                  <p className="text-sm font-medium text-gray-700">Class</p>
-                  <p className="text-sm text-gray-900">{consumer.class}</p>
-                </div>
-
-                <div>
-                  <p className="text-sm font-medium text-gray-700">Base Class</p>
-                  <p className="text-sm text-gray-900">{consumer.baseClass}</p>
-                </div>
-
-                <div>
-                  <p className="text-sm font-medium text-gray-700">MRU</p>
-                  <p className="text-sm text-gray-900">{consumer.mru}</p>
-                </div>
-
-                <div>
-                  <p className="text-sm font-medium text-gray-700">Office Code</p>
-                  <p className="text-sm text-gray-900">{consumer.offCode}</p>
-                </div>
-
-                <div>
-                  <p className="text-sm font-medium text-gray-700">Agency</p>
-                  <p className="text-sm text-gray-900">{consumer.agency}</p>
-                </div>
+            {/* Admin: Agency Selection */}
+            {userRole === "admin" && (
+              <div className="space-y-2 pt-2 border-t">
+                <Label>Assign Agency</Label>
+                <select 
+                  value={formData.agency} 
+                  onChange={(e) => setFormData({...formData, agency: e.target.value})}
+                  className="w-full p-2 border rounded-md text-sm"
+                >
+                  <option value="">Select Agency</option>
+                  {availableAgencies.map(a => <option key={a} value={a}>{a}</option>)}
+                </select>
               </div>
-            </CardContent>
-          </Card>
+            )}
 
-          {/* Location Info */}
-          {consumer.latitude && consumer.longitude && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center">
-                  <MapPin className="h-4 w-4 mr-2" />
-                  Location
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  <div>
-                    <p className="text-sm font-medium text-gray-700">GIS Pole</p>
-                    <p className="text-sm text-gray-900">{consumer.gisPole}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-gray-700">Latitude</p>
-                    <p className="text-sm text-gray-900">{consumer.latitude}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-gray-700">Longitude</p>
-                    <p className="text-sm text-gray-900">{consumer.longitude}</p>
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="w-full mt-2 bg-transparent"
-                    onClick={() => {
-                      const url = `https://www.google.com/maps?q=${consumer.latitude},${consumer.longitude}`
-                      window.open(url, "_blank")
+            {/* Image Upload with Live Camera */}
+            <div className="space-y-3 pt-2 border-t">
+                <Label className="text-xs font-bold text-gray-500 uppercase">Evidence (Auto-Watermarked)</Label>
+                
+                {/* Hidden File Input for Gallery */}
+                <input 
+                    ref={fileInputRef}
+                    type="file" 
+                    accept="image/*" 
+                    className="hidden" 
+                    onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleUpload(file);
                     }}
-                  >
-                    View on Map
-                  </Button>
+                />
+
+                {!cameraActive ? (
+                    <div className="grid grid-cols-2 gap-3">
+                        <Button 
+                            type="button" 
+                            variant="outline" 
+                            className="h-12 border-blue-200 text-blue-700 hover:bg-blue-50"
+                            onClick={startCamera}
+                            disabled={uploading}
+                        >
+                            <Camera className="h-5 w-5 mr-2" /> Camera (Live)
+                        </Button>
+                        <Button 
+                            type="button" 
+                            variant="outline" 
+                            className="h-12"
+                            onClick={() => fileInputRef.current?.click()}
+                            disabled={uploading}
+                        >
+                            <Upload className="h-5 w-5 mr-2" /> Gallery
+                        </Button>
+                    </div>
+                ) : (
+                    <div className="space-y-3 bg-black p-2 rounded-lg">
+                        <div className="relative w-full h-64 bg-black rounded overflow-hidden">
+                            <video 
+                                ref={videoRef} 
+                                autoPlay 
+                                playsInline 
+                                className="absolute inset-0 w-full h-full object-cover"
+                            />
+                        </div>
+                        <div className="flex gap-3">
+                            <Button className="flex-1 bg-white text-black hover:bg-gray-200" onClick={capturePhoto}>
+                                Capture Photo
+                            </Button>
+                            <Button variant="destructive" onClick={stopCamera}>
+                                Cancel
+                            </Button>
+                        </div>
+                    </div>
+                )}
+
+                {/* Upload Status */}
+                {uploading && (
+                    <div className="flex items-center justify-center p-4 bg-blue-50 rounded text-blue-700 text-sm">
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Watermarking & Uploading...
+                    </div>
+                )}
+
+                {/* Preview */}
+                {formData.imageUrl && !uploading && !cameraActive && (
+                    <div className="relative mt-2 rounded-lg overflow-hidden border border-gray-200">
+                        <img src={formData.imageUrl} alt="Evidence" className="w-full h-48 object-cover" />
+                        <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-xs p-2 text-center">
+                            Uploaded Successfully
+                        </div>
+                    </div>
+                )}
+            </div>
+
+            {/* Notes & Reading */}
+            <div className="space-y-4 pt-2 border-t">
+                <div className="space-y-2">
+                    <Label>Meter Reading</Label>
+                    <Input 
+                        placeholder="Enter reading..." 
+                        value={formData.reading} 
+                        onChange={e => setFormData({...formData, reading: e.target.value})}
+                    />
                 </div>
-              </CardContent>
-            </Card>
-          )}
-        </div>
+                <div className="space-y-2">
+                    <Label>Remarks</Label>
+                    <Textarea 
+                        placeholder="Any additional notes..." 
+                        value={formData.notes} 
+                        onChange={e => setFormData({...formData, notes: e.target.value})}
+                    />
+                </div>
+            </div>
+
+        </CardContent>
+      </Card>
+
+      {/* --- 3. LOCATION INFO --- */}
+      {consumer.latitude && consumer.longitude && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center">
+              <MapPin className="h-4 w-4 mr-2" />
+              Location Details
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-gray-600">GIS Pole:</span>
+                <span className="font-medium">{consumer.gisPole || "N/A"}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">Coordinates:</span>
+                <span className="font-mono text-xs">{consumer.latitude}, {consumer.longitude}</span>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full mt-2"
+                onClick={() => {
+                  const url = `https://www.google.com/maps?q=${consumer.latitude},${consumer.longitude}`
+                  window.open(url, "_blank")
+                }}
+              >
+                Open in Maps
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* --- STICKY FOOTER ACTIONS --- */}
+      <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-gray-200 z-50 flex gap-3 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)]">
+        <Button 
+            variant="outline" 
+            className="flex-1 h-12 border-gray-300 text-gray-700" 
+            onClick={onCancel}
+        >
+            Cancel
+        </Button>
+        <Button 
+            className="flex-[2] h-12 text-lg shadow-sm bg-blue-600 hover:bg-blue-700 text-white" 
+            onClick={handleSubmit}
+            disabled={uploading}
+        >
+            {uploading ? "Uploading..." : "Save Update"}
+        </Button>
       </div>
+
     </div>
   )
 }

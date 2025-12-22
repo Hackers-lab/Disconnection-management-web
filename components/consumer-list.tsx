@@ -11,6 +11,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Slider } from "@/components/ui/slider"
 import { Calendar as CalendarIcon } from "lucide-react"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet"
 import { format } from "date-fns"
 import {
   Search,
@@ -674,11 +681,9 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
       <DashboardStats consumers={filteredConsumers} loading={false} />
 
       {/* Search and Filter Controls */}
-      <div className="bg-white p-4 rounded-lg shadow-sm border">
-        {/* Responsive filter/search row */}
-        <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-4 mb-4">
-          {/* Search field */}
-          <div className="relative flex-1 max-w-md w-full">
+      <div className="bg-white p-4 rounded-lg shadow-sm border sticky top-[64px] z-30">
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
             <Input
               placeholder="Search id, name, address..."
@@ -688,291 +693,194 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
             />
           </div>
 
-          {/* Filter/sort controls */}
-          <div className="flex flex-wrap gap-2 items-center mt-2 md:mt-0">
-            {/* Date Filter Button */}
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className={`flex items-center space-x-2 bg-transparent ${dateFilter.isActive ? "bg-blue-50 border-blue-300" : ""}`}
-                >
-                  <CalendarIcon className="h-4 w-4" />
-                  <span className="hidden sm:inline">Dates</span>
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-[300px] p-2 rounded-lg shadow-md">
-                <div className="space-y-4 text-xs">
-                  <div className="flex gap-2">
-                    <div className="space-y-1 flex-1">
-                      <label className="text-[10px] text-gray-600 font-medium">From</label>
-                      <Input
-                        type="date"
-                        value={dateFilter.from?.toISOString().split('T')[0] || ''}
-                        onChange={(e) =>
-                          setDateFilter((prev) => ({
-                            ...prev,
-                            from: e.target.value ? new Date(e.target.value) : null,
-                            isActive: true,
-                          }))
-                        }
-                        className="h-7 text-xs px-2 w-full"
-                      />
-                    </div>
-                    <div className="space-y-1 flex-1">
-                      <label className="text-[10px] text-gray-600 font-medium">To</label>
-                      <Input
-                        type="date"
-                        value={dateFilter.to?.toISOString().split('T')[0] || ''}
-                        onChange={(e) =>
-                          setDateFilter((prev) => ({
-                            ...prev,
-                            to: e.target.value ? new Date(e.target.value) : null,
-                            isActive: true,
-                          }))
-                        }
-                        className="h-7 text-xs px-2 w-full"
-                      />
-                    </div>
+          <Sheet>
+            <SheetTrigger asChild>
+              <Button variant="outline" size="icon" className="relative shrink-0">
+                <Filter className="h-4 w-4" />
+                {(Object.values(filters).some((f) => f !== "All Agencies" && f !== "All Status" && f !== "All Classes" && f !== "All MRUs" && f !== "") ||
+                  osdRange[0] !== 0 ||
+                  osdRange[1] !== maxOsdValue ||
+                  dateFilter.isActive ||
+                  sortByOSD !== "none") && (
+                  <span className="absolute -top-1 -right-1 h-3 w-3 bg-blue-600 rounded-full border-2 border-white" />
+                )}
+              </Button>
+            </SheetTrigger>
+            <SheetContent className="w-[300px] sm:w-[400px] overflow-y-auto">
+              <SheetHeader className="mb-6">
+                <SheetTitle>Filters & Sort</SheetTitle>
+              </SheetHeader>
+              
+              <div className="space-y-6 pb-20">
+                {/* OSD Range */}
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm font-medium">Outstanding Dues</label>
+                    <span className="text-xs text-muted-foreground">
+                      ₹{osdRange[0].toLocaleString()} - ₹{osdRange[1].toLocaleString()}
+                    </span>
                   </div>
+                  <Slider
+                    value={osdRange}
+                    onValueChange={setOsdRange}
+                    max={maxOsdValue}
+                    min={0}
+                    step={1000}
+                  />
+                </div>
 
-                  <div className="flex justify-end pt-1">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 px-2 text-[11px]"
-                      onClick={() => setDateFilter({ from: null, to: null, isActive: false })}
-                    >
-                      Clear
-                    </Button>
+                {/* Date Filter */}
+                <div className="space-y-3">
+                  <label className="text-sm font-medium">Disconnection Date</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <span className="text-[10px] text-muted-foreground uppercase font-bold">From</span>
+                      <Input
+                        type="date"
+                        value={dateFilter.from ? format(dateFilter.from, 'yyyy-MM-dd') : ''}
+                        onChange={(e) => setDateFilter(prev => ({ ...prev, from: e.target.value ? new Date(e.target.value) : null, isActive: true }))}
+                        className="h-8"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <span className="text-[10px] text-muted-foreground uppercase font-bold">To</span>
+                      <Input
+                        type="date"
+                        value={dateFilter.to ? format(dateFilter.to, 'yyyy-MM-dd') : ''}
+                        onChange={(e) => setDateFilter(prev => ({ ...prev, to: e.target.value ? new Date(e.target.value) : null, isActive: true }))}
+                        className="h-8"
+                      />
+                    </div>
                   </div>
                 </div>
-              </PopoverContent>
-            </Popover>
 
-            {/* Base Class Filter */}
-            <div>
-              <Select
-                value={filters.baseClass}
-                onValueChange={(value) => setFilters((prev) => ({ ...prev, baseClass: value }))}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="All Classes" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="All Classes">All Classes</SelectItem>
-                  {baseClasses.map((bc) => (
-                    <SelectItem key={bc} value={bc}>
-                      {bc}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+                {/* Dropdowns */}
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Agency</label>
+                    <Select
+                      value={filters.agency}
+                      onValueChange={(value) => setFilters((prev) => ({ ...prev, agency: value }))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="All Agencies" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="All Agencies">All Agencies</SelectItem>
+                        {agencies.map((agency) => (
+                          <SelectItem key={agency} value={agency}>
+                            {agency}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
 
-            {/* Sort by OSD Button */}
-            <Button
-              variant="outline"
-              onClick={toggleOSDSort}
-              className="flex items-center space-x-2 bg-transparent"
-              title={`Sort by Outstanding Dues: ${sortByOSD === "none" ? "None" : sortByOSD === "asc" ? "Low to High" : "High to Low"}`}
-            >
-              {getSortIcon()}
-              <span className="hidden sm:inline">Sort OSD</span>
-            </Button>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Status</label>
+                    <Select
+                      value={filters.status}
+                      onValueChange={(value) => setFilters((prev) => ({ ...prev, status: value }))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="All Status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="All Status">All Status</SelectItem>
+                        <SelectItem value="connected">Connected</SelectItem>
+                        <SelectItem value="disconnected">Disconnected</SelectItem>
+                        <SelectItem value="office team">Office Team</SelectItem>
+                        <SelectItem value="bill dispute">Bill Dispute</SelectItem>
+                        <SelectItem value="pending">Pending</SelectItem>
+                        <SelectItem value="Paid">Paid</SelectItem>
+                        <SelectItem value="agency paid">Agency Paid</SelectItem>
+                        <SelectItem value="not found">Not Found</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
 
-            {/* Filter Button for Non-Admin */}
-            {userRole !== "test" && (
-              <Button
-                variant="outline"
-                onClick={() => setShowFilters(!showFilters)}
-                className="flex items-center space-x-2"
-              >
-                <Filter className="h-4 w-4" />
-                <span className="hidden sm:inline">Filters</span>
-              </Button>
-            )}
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">MRU</label>
+                    <Select
+                      value={filters.mru}
+                      onValueChange={(value) => setFilters((prev) => ({ ...prev, mru: value }))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="All MRUs" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="All MRUs">All MRUs</SelectItem>
+                        {mrus.map((mru) => (
+                          <SelectItem key={mru} value={mru}>
+                            {mru}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Base Class</label>
+                    <Select
+                      value={filters.baseClass}
+                      onValueChange={(value) => setFilters((prev) => ({ ...prev, baseClass: value }))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="All Classes" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="All Classes">All Classes</SelectItem>
+                        {baseClasses.map((bc) => (
+                          <SelectItem key={bc} value={bc}>
+                            {bc}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
 
-            {/* Clear Filters Button */}
-            {(Object.values(filters).some((f) => f !== "All Agencies" && f !== "All Status" && f !== "All Classes" && f !== "") ||
-              searchTerm ||
-              osdRange[0] !== 0 ||
-              osdRange[1] !== maxOsdValue ||
-              excludeFilters.excludeDeemedDisconnection ||
-              excludeFilters.excludeTemproryDisconnected ||
-              dateFilter.isActive ||
-              sortByOSD !== "none") && (
-              <Button variant="ghost" onClick={clearFilters} size="sm">
-                <X className="h-4 w-4 mr-1" />
-                <span className="hidden sm:inline">Clear</span>
-              </Button>
-            )}
-          </div>
-        </div>
+                {/* Sort */}
+                <div className="space-y-2 pt-4 border-t">
+                  <label className="text-sm font-medium">Sorting</label>
+                  <Button
+                    variant="outline"
+                    onClick={toggleOSDSort}
+                    className="w-full justify-between"
+                  >
+                    <span>Sort by Outstanding Dues</span>
+                    {getSortIcon()}
+                  </Button>
+                </div>
 
-        {/* OSD Range Slider - Always Visible */}
-        <div className="mb-4 p-4 bg-gray-50 rounded-lg">
-          <div className="flex items-center justify-between mb-2">
-            <label className="text-sm font-medium text-gray-700">Outstanding Dues Range</label>
-            <span className="text-sm text-gray-600">
-              ₹{osdRange[0].toLocaleString()} - ₹{osdRange[1].toLocaleString()}
-            </span>
-          </div>
-          <Slider
-            value={osdRange}
-            onValueChange={setOsdRange}
-            max={maxOsdValue}
-            min={0}
-            step={1000}
-            className="w-full"
-          />
-          <div className="flex justify-between text-xs text-gray-500 mt-1">
-            <span>₹0</span>
-            <span>₹{maxOsdValue.toLocaleString()}</span>
-          </div>
-        </div>
-
-        {/* Conditional Filters - Always visible for admin, toggleable for others */}
-        {showFilters && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 pt-4 border-t">
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-700">Agency</label>
-              <Select
-                value={filters.agency}
-                onValueChange={(value) => setFilters((prev) => ({ ...prev, agency: value }))}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="All Agencies" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="All Agencies">All Agencies</SelectItem>
-                  {agencies.map((agency) => (
-                    <SelectItem key={agency} value={agency}>
-                      {agency}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-700">Address</label>
-              <Input
-                placeholder="Filter by address"
-                value={filters.address}
-                onChange={(e) => setFilters((prev) => ({ ...prev, address: e.target.value }))}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-700">Name</label>
-              <Input
-                placeholder="Filter by name"
-                value={filters.name}
-                onChange={(e) => setFilters((prev) => ({ ...prev, name: e.target.value }))}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-700">Consumer ID</label>
-              <Input
-                placeholder="Search by ID"
-                value={filters.consumerId}
-                onChange={(e) => setFilters((prev) => ({ ...prev, consumerId: e.target.value }))}
-              />
-            </div> */}
-
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-700">Status</label>
-              <Select
-                value={filters.status}
-                onValueChange={(value) => setFilters((prev) => ({ ...prev, status: value }))}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="All Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="All Status">All Status</SelectItem>
-                  <SelectItem value="connected">Connected</SelectItem>
-                  <SelectItem value="disconnected">Disconnected</SelectItem>
-                  <SelectItem value="office team">Office Team</SelectItem>
-                  <SelectItem value="bill dispute">Bill Dispute</SelectItem>
-                  <SelectItem value="pending">Pending</SelectItem>
-                  <SelectItem value="Paid">Paid</SelectItem>
-                  <SelectItem value="agency paid">Agency Paid</SelectItem>
-                  <SelectItem value="not found">Not Found</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-{/* 6. Insert MRU Filter Here */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-700">MRU</label>
-              <Select
-                value={filters.mru}
-                onValueChange={(value) => setFilters((prev) => ({ ...prev, mru: value }))}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="All MRUs" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="All MRUs">All MRUs</SelectItem>
-                  {mrus.map((mru) => (
-                    <SelectItem key={mru} value={mru}>
-                      {mru}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        )}
-
-        <div className="flex justify-between items-center mt-4 text-sm text-gray-600">
-          <div className="flex items-center gap-2 flex-wrap">
-            Showing {startIndex + 1}-{Math.min(endIndex, sortedConsumers.length)} of {sortedConsumers.length} consumers
-            
-            {isCachedData ? (
-              <div className="flex items-center gap-1">
-                <Badge variant="secondary" className="text-[10px] h-5 px-1.5 gap-1 font-normal text-gray-500">
-                  <Database className="h-3 w-3" /> Cached
-                </Badge>
-                <Button variant="ghost" size="icon" className="h-5 w-5 text-gray-400 hover:text-red-500" onClick={clearCache} title="Clear Cache">
-                  <Trash2 className="h-3 w-3" />
+                {/* Clear Filters */}
+                <Button 
+                  variant="destructive" 
+                  className="w-full mt-8"
+                  onClick={() => {
+                    clearFilters();
+                  }}
+                >
+                  <X className="mr-2 h-4 w-4" /> Clear All Filters
                 </Button>
               </div>
-            ) : (
-              <Badge variant="outline" className="text-[10px] h-5 px-1.5 gap-1 font-normal bg-green-50 text-green-700 border-green-200">
-                <Cloud className="h-3 w-3" /> Live
-              </Badge>
-            )}
-            
-            {isBackgroundUpdating && (
-              <span className="flex items-center text-xs text-blue-600 animate-pulse ml-1">
-                <RefreshCw className="h-3 w-3 mr-1 animate-spin" /> Updating...
-              </span>
-            )}
+            </SheetContent>
+          </Sheet>
+        </div>
 
-            {sortByOSD !== "none" && (
-              <span className="ml-2 text-blue-600">
-                (sorted by OSD: {sortByOSD === "asc" ? "Low to High" : "High to Low"})
-              </span>
-            )}
-            {dateFilter.isActive && (
-              <span className="ml-2 text-blue-600">
-                (date range: {dateFilter.from ? format(dateFilter.from, 'MMM dd, yyyy') : ''} 
-                {dateFilter.to ? ` to ${format(dateFilter.to, 'MMM dd, yyyy')}` : ''})
-              </span>
-            )}
-          </div>
-          {(Object.values(filters).some((f) => f !== "All Agencies" && f !== "All Status" && f !== "") ||
-            searchTerm ||
-            osdRange[0] !== 0 ||
-            osdRange[1] !== maxOsdValue ||
-            dateFilter.isActive ||
-            excludeFilters.excludeDeemedDisconnection ||
-            excludeFilters.excludeTemproryDisconnected ||
-            sortByOSD !== "none") && <span className="text-blue-600">Filters active</span>}
+        {/* Summary Footer in Sticky Header */}
+        <div className="flex justify-between items-center mt-2 text-xs text-gray-500">
+           <div className="flex items-center gap-2">
+              <span>{sortedConsumers.length} consumers</span>
+              {isBackgroundUpdating && <RefreshCw className="h-3 w-3 animate-spin text-blue-500" />}
+           </div>
+           {(Object.values(filters).some((f) => f !== "All Agencies" && f !== "All Status" && f !== "All Classes" && f !== "All MRUs" && f !== "") ||
+              osdRange[0] !== 0 ||
+              osdRange[1] !== maxOsdValue ||
+              dateFilter.isActive ||
+              sortByOSD !== "none") && (
+              <span className="text-blue-600 font-medium">Filters Active</span>
+           )}
         </div>
       </div>
 
