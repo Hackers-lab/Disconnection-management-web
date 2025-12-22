@@ -15,7 +15,8 @@ import {
   Clock, 
   LayoutDashboard,
   MoreVertical, // New Icon for Mobile Menu
-  FileDown 
+  FileDown,
+  RefreshCw
 } from "lucide-react"
 import { useState } from "react"
 import {
@@ -34,6 +35,52 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { AppSidebar, ViewType } from "@/components/app-sidebar"
 import { useDashboard } from "@/components/dashboard-context"
+
+// IndexedDB Helper Functions to handle caching
+const DB_NAME = "DisconnectionAppDB"
+const STORE_NAME = "keyval"
+
+function openDB() {
+  return new Promise<IDBDatabase>((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME, 1)
+    request.onerror = () => reject(request.error)
+    request.onsuccess = () => resolve(request.result)
+    request.onupgradeneeded = (event) => {
+      const db = (event.target as IDBOpenDBRequest).result
+      if (!db.objectStoreNames.contains(STORE_NAME)) {
+        db.createObjectStore(STORE_NAME)
+      }
+    }
+  })
+}
+
+async function getFromCache<T>(key: string): Promise<T | null> {
+  try {
+    const db = await openDB()
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(STORE_NAME, "readonly")
+      const store = transaction.objectStore(STORE_NAME)
+      const request = store.get(key)
+      request.onerror = () => reject(request.error)
+      request.onsuccess = () => resolve(request.result)
+    })
+  } catch (error) {
+    console.warn(`Error reading ${key} from cache:`, error)
+    return null
+  }
+}
+
+async function saveToCache(key: string, data: any) {
+  try {
+    const db = await openDB()
+    const transaction = db.transaction(STORE_NAME, "readwrite")
+    const store = transaction.objectStore(STORE_NAME)
+    const request = store.put(data, key)
+    await new Promise((resolve, reject) => { request.onsuccess = resolve; request.onerror = reject; });
+  } catch (error) {
+    console.warn(`Error saving ${key} to cache:`, error)
+  }
+}
 
 interface HeaderProps {
   userRole: string
@@ -108,30 +155,64 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
     }
   };
 
-  const handleUpload = async () => {
-    try {
-      setLoading(true);
-      setAgencyLastUpdates([]);
-      setShowAgencyUpdates(true);
+  const handleGlobalRefresh = () => {
+    if (confirm("Sync fresh data from server? This will reload the page.")) {
+      sessionStorage.removeItem("consumers_synced_session")
+      window.location.reload()
+    }
+  }
 
-      const response = await fetch("/api/agency-last-updates")
-      if (response.ok) {
-        const data = await response.json()
-        const filteredData = (userRole === "admin" || userRole === "viewer" || userRole === "executive" || userRole === "agency")
-          ? data
-          : data.filter((agency: { name: string, lastUpdate: string }) => userAgencies.includes(agency.name))
-        setAgencyLastUpdates(filteredData)
+  const handleUpload = async () => {
+    const CACHE_KEY = "agency_updates_cache";
+    setShowAgencyUpdates(true);
+    setLoading(true);
+    setAgencyLastUpdates([]);
+
+    // 1. Try to load from cache first for instant UI
+    try {
+      const cachedData = await getFromCache<typeof agencyLastUpdates>(CACHE_KEY);
+      if (cachedData && cachedData.length > 0) {
+        console.log("✅ [Cache Hit] Loaded agency updates from IndexedDB");
+        setAgencyLastUpdates(cachedData);
+        setLoading(false); // Stop the main loader, UI is now populated
       }
     } catch (error) {
-      console.error("Error fetching agency updates:", error)
+      console.warn("Could not load agency updates from cache", error);
+    }
+
+    // 2. Always fetch from network to get the latest data
+    try {
+      console.log("🔄 [Network] Fetching fresh agency updates...");
+      const response = await fetch("/api/agency-last-updates");
+      if (!response.ok) throw new Error("API request failed");
+      
+      const data = await response.json();
+      
+      // Filter based on role
+      const filteredData = (userRole === "admin" || userRole === "viewer" || userRole === "executive" || userRole === "agency")
+          ? data
+          : data.filter((agency: { name: string, lastUpdate: string }) => userAgencies.includes(agency.name));
+
+      // 3. Update state and cache
+      setAgencyLastUpdates(filteredData);
+      await saveToCache(CACHE_KEY, filteredData);
+      console.log("✅ [Network] Updated agency updates and saved to cache.");
+
+    } catch (error) {
+      console.error("Error fetching fresh agency updates:", error);
+      // If the fetch fails, the user will still see the cached data if available
     } finally {
-      setLoading(false)
+      // Ensure loading is always turned off in the end
+      setLoading(false);
     }
   };
 
   // Helper variables for permissions
   const canSeeAgencyUpdates = userRole === "admin" || userRole === "executive" || userRole === "viewer" || userRole === "agency";
   const canDownloadDefaulters = canSeeAgencyUpdates;
+  const displayAgencyName = (userAgencies && userAgencies.length > 0)
+    ? (userAgencies.length === 1 ? userAgencies[0] : `${userAgencies[0]} (+${userAgencies.length - 1})`)
+    : null;
 
   return (
     <header className="bg-white shadow sticky top-0 z-50">
@@ -161,7 +242,7 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
             {/* User Info (Icon only on mobile, Text on desktop) */}
             <div className="flex items-center space-x-2 text-sm text-gray-600 bg-gray-50 px-2 py-1.5 rounded-full border">
               <User className="h-4 w-4" />
-              <span className="capitalize hidden sm:inline">{userRole}</span>
+              <span className="capitalize inline truncate max-w-[120px]">{displayAgencyName || userRole}</span>
             </div>
 
             {/* --- DESKTOP VIEW (Hidden on Mobile) --- */}
@@ -196,7 +277,7 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
                         onDownload && onDownload();
                       }}
                     >
-                      Download Report
+                      Download DC List
                     </button>
                     {canDownloadDefaulters && (
                     <button
@@ -232,6 +313,17 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
                 </Button>
               )}
 
+              {userRole === "admin" && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleGlobalRefresh}
+                  title="Sync Fresh Data"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                </Button>
+              )}
+
               <Button
                 variant="ghost"
                 size="sm"
@@ -263,13 +355,13 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
 
                   <DropdownMenuItem onClick={() => { onDownload && onDownload() }}>
                     <Download className="mr-2 h-4 w-4" />
-                    <span>Download Report</span>
+                    <span>Disconnection List</span>
                   </DropdownMenuItem>
 
                   {canDownloadDefaulters && (
                     <DropdownMenuItem onClick={() => { onDownloadDefaulters && onDownloadDefaulters() }}>
-                      <FileDown className="mr-2 h-4 w-4" />
-                      <span>Defaulter List</span>
+                      <Download className="mr-2 h-4 w-4" />
+                      <span>Top Defaulter List</span>
                     </DropdownMenuItem>
                   )}
 
@@ -284,6 +376,13 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
                     <DropdownMenuItem onClick={onAdminClick}>
                       <Settings className="mr-2 h-4 w-4" />
                       <span>Admin Settings</span>
+                    </DropdownMenuItem>
+                  )}
+
+                  {userRole === "admin" && (
+                    <DropdownMenuItem onClick={handleGlobalRefresh}>
+                      <RefreshCw className="mr-2 h-4 w-4" />
+                      <span>Sync Fresh Data</span>
                     </DropdownMenuItem>
                   )}
 
@@ -325,7 +424,7 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
 
           {/* Agency List */}
           {!loading && agencyLastUpdates.length > 0 && (
-            <div className="space-y-2 max-h-[60vh] overflow-y-auto pr-1">
+            <div className="space-y-1 max-h-[40vh] overflow-y-auto pr-1">
               {[...agencyLastUpdates]
                 .sort((a, b) => {
                   const dateA = parseDate(a.lastUpdate) || new Date(0);
@@ -342,7 +441,7 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
                   return (
                     <div
                       key={agency.name}
-                      className={`flex items-center justify-between p-3 rounded-lg transition-all duration-200 border ${getRowColor(agency.lastUpdate)}`}
+                      className={`flex items-center justify-between p-2 rounded-lg transition-all duration-200 border ${getRowColor(agency.lastUpdate)}`}
                     >
                       <div className="flex items-center space-x-3 min-w-0">
                         <div className="w-2 h-2 rounded-full bg-current opacity-60 flex-shrink-0"></div>

@@ -282,6 +282,11 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
         console.error("Cache load failed", e)
       }
 
+      // If cache was loaded successfully, stop here to prevent network refresh
+      // Check if we have already synced with the network in this browser session
+      const isSessionSynced = sessionStorage.getItem("consumers_synced_session")
+      if (cachedLoaded && isSessionSynced) return
+
       if (!cachedLoaded) setLoading(true)
       else setIsBackgroundUpdating(true)
       setError(null)
@@ -311,6 +316,7 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
 
         const data: ConsumerData[] = await consumersResponse.json()
         console.log("✅ [Network] Downloaded fresh data")
+        sessionStorage.setItem("consumers_synced_session", "true")
 
         // Handle Agencies
         let freshAgencies: string[] | null = null
