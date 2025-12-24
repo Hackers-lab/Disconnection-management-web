@@ -124,7 +124,7 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
   const [osdRange, setOsdRange] = useState([0, 50000])
   const [maxOsdValue, setMaxOsdValue] = useState(50000)
   const [showFilters, setShowFilters] = useState(userRole === "test")
-  const [sortByOSD, setSortByOSD] = useState<SortOrder>("none")
+  const [sortByOSD, setSortByOSD] = useState<SortOrder>("desc")
   const [dateFilter, setDateFilter] = useState<{
     from: Date | null
     to: Date | null
@@ -140,7 +140,7 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
     address: "",
     name: "",
     consumerId: "",
-    status: (userRole === "admin" || userRole === "executive" || userRole === "viewer") ? "All Status" : "connected",
+    status: "All Status",
     baseClass: "All Classes",
   })
   const [excludeFilters, setExcludeFilters] = useState({
@@ -481,6 +481,14 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
 
   // Apply OSD sorting
   const sortedConsumers = [...filteredConsumers].sort((a, b) => {
+    // 1. Connected First
+    const isConnectedA = (a.disconStatus || "").toLowerCase() === "connected"
+    const isConnectedB = (b.disconStatus || "").toLowerCase() === "connected"
+    
+    if (isConnectedA && !isConnectedB) return -1
+    if (!isConnectedA && isConnectedB) return 1
+
+    // 2. OSD Sort
     if (sortByOSD === "none") return 0
 
     const aOsd = Number.parseFloat(a.d2NetOS || "0")
@@ -599,7 +607,7 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
       excludeDeemedDisconnection: false,
       excludeTemproryDisconnected: false,
     })
-    setSortByOSD("none")
+    setSortByOSD("desc")
     setDateFilter({
       from: null,
       to: null,

@@ -134,14 +134,14 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
         // Convert Canvas to File
         canvas.toBlob(async (blob) => {
           if (blob) {
-            // Create file from blob (Quality 0.6 gives good compression ~100KB for 1024px)
+            // Create file from blob (Quality 0.8 gives better quality ~200KB for 1024px)
             const processedFile = new File([blob], imageFile.name, { type: "image/jpeg" })
             console.log(`Processed: ${(imageFile.size / 1024).toFixed(2)} KB -> ${(processedFile.size / 1024).toFixed(2)} KB`)
             resolve(processedFile)
           } else {
             resolve(imageFile)
           }
-        }, "image/jpeg", 0.6) // Reduced quality from 0.95 to 0.6 for instant compression
+        }, "image/jpeg", 0.8) // Increased quality to 0.8 for ~200KB target
       }
       
       img.onerror = () => resolve(imageFile)
