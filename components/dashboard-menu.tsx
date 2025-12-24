@@ -84,7 +84,7 @@ export function DashboardMenu({ onSelect, userRole }: DashboardMenuProps) {
   ]
 
   return (
-    <div className="p-8 max-w-7xl mx-auto">
+    <div className="p-4 md:p-8 max-w-7xl mx-auto">
       <div className="flex items-center mb-10">
         <div className="p-3 bg-blue-50 rounded-xl mr-4">
           <LayoutDashboard className="h-8 w-8 text-blue-600" />

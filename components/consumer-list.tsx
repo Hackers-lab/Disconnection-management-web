@@ -18,6 +18,11 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet"
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { format } from "date-fns"
 import {
   Search,
@@ -38,6 +43,13 @@ import {
   Cloud,
   RefreshCw,
   Trash2,
+  LayoutGrid,
+  List,
+  CheckCircle2,
+  Power,
+  Clock,
+  UserX,
+  HelpCircle,
 } from "lucide-react"
 import { ConsumerForm } from "./consumer-form"
 import { AdminPanel } from "./admin-panel"
@@ -107,8 +119,6 @@ async function saveToCache(key: string, data: any) {
   }
 }
 
-const ITEMS_PER_PAGE = 12
-
 type SortOrder = "none" | "asc" | "desc"
 
 const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
@@ -151,6 +161,15 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
   const [mrus, setMrus] = useState<string[]>([])
   const [isCachedData, setIsCachedData] = useState(false)
   const [isBackgroundUpdating, setIsBackgroundUpdating] = useState(false)
+  const [viewMode, setViewMode] = useState<"card" | "list">("card")
+  const [previewConsumer, setPreviewConsumer] = useState<ConsumerData | null>(null)
+
+  useEffect(() => {
+    const savedMode = localStorage.getItem("consumerListViewMode") as "card" | "list"
+    if (savedMode === "card" || savedMode === "list") {
+      setViewMode(savedMode)
+    }
+  }, [])
 
   const consumersRef = useRef<ConsumerData[]>(consumers)
   useEffect(() => {
@@ -509,16 +528,27 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
     return `https://${cleanUrl}`;
   };
 
+  const getStatusIcon = (status: string) => {
+    const s = (status || "").toLowerCase()
+    if (s === "connected") return <CheckCircle2 className="h-4 w-4 text-green-600" />
+    if (s === "disconnected") return <Power className="h-4 w-4 text-red-600" />
+    if (s === "pending" || s === "office team") return <Clock className="h-4 w-4 text-yellow-600" />
+    if (s === "bill dispute") return <AlertCircle className="h-4 w-4 text-orange-500" />
+    if (s.includes("deemed")) return <UserX className="h-4 w-4 text-red-500" />
+    return <HelpCircle className="h-4 w-4 text-gray-400" />
+  }
+
   // Pagination logic
-  const totalPages = Math.ceil(sortedConsumers.length / ITEMS_PER_PAGE)
-  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE
-  const endIndex = startIndex + ITEMS_PER_PAGE
+  const itemsPerPage = viewMode === "list" ? 100 : 12
+  const totalPages = Math.ceil(sortedConsumers.length / itemsPerPage)
+  const startIndex = (currentPage - 1) * itemsPerPage
+  const endIndex = startIndex + itemsPerPage
   const paginatedConsumers = sortedConsumers.slice(startIndex, endIndex)
 
   // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1)
-  }, [filters, searchTerm, osdRange, excludeFilters, sortByOSD])
+  }, [filters, searchTerm, osdRange, excludeFilters, sortByOSD, viewMode])
 
   const getStatusColor = (status: string) => {
     switch (status.toLowerCase()) {
@@ -880,6 +910,34 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
               </div>
             </SheetContent>
           </Sheet>
+
+          <div className="flex items-center border rounded-md bg-white ml-2 shrink-0">
+            <Button
+              variant="ghost"
+              size="icon"
+              className={`h-9 w-9 rounded-none rounded-l-md ${viewMode === "card" ? "bg-gray-100 text-blue-600" : "text-gray-500"}`}
+              onClick={() => {
+                setViewMode("card")
+                localStorage.setItem("consumerListViewMode", "card")
+              }}
+              title="Card View"
+            >
+              <LayoutGrid className="h-4 w-4" />
+            </Button>
+            <div className="w-px h-5 bg-gray-200" />
+            <Button
+              variant="ghost"
+              size="icon"
+              className={`h-9 w-9 rounded-none rounded-r-md ${viewMode === "list" ? "bg-gray-100 text-blue-600" : "text-gray-500"}`}
+              onClick={() => {
+                setViewMode("list")
+                localStorage.setItem("consumerListViewMode", "list")
+              }}
+              title="List View"
+            >
+              <List className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
 
         {/* Summary Footer in Sticky Header */}
@@ -899,115 +957,226 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
       </div>
 
       {/* Consumer Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {paginatedConsumers.map((consumer) => (
-          <Card key={consumer.consumerId} className="hover:shadow-md transition-shadow">
-            <CardHeader className="pb-3 break-words whitespace-normal">
-              <div className="flex items-start justify-between w-full">
-                <div className="min-w-0">
-                  <CardTitle className="text-lg break-words whitespace-normal">{consumer.name}</CardTitle>
-                  <p className="text-sm text-gray-600">{consumer.consumerId}</p>
-                </div>
-                <div className="flex flex-col items-end space-y-1">
-                  <div className="flex items-center gap-1">
-                    {consumer._syncStatus === 'syncing' && (
-                      <RefreshCw className="h-3 w-3 animate-spin text-blue-500" title="Syncing..." />
-                    )}
-                    {consumer._syncStatus === 'error' && (
-                      <AlertCircle className="h-3 w-3 text-red-500" title="Sync failed (saved locally)" />
-                    )}
-                    <Badge className={getStatusColor(consumer.disconStatus)}>{consumer.disconStatus}</Badge>
+      {viewMode === "card" ? (
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {paginatedConsumers.map((consumer) => (
+            <Card key={consumer.consumerId} className="hover:shadow-md transition-shadow">
+              <CardHeader className="pb-3 break-words whitespace-normal">
+                <div className="flex items-start justify-between w-full">
+                  <div className="min-w-0">
+                    <CardTitle className="text-lg break-words whitespace-normal">{consumer.name}</CardTitle>
+                    <p className="text-sm text-gray-600">{consumer.consumerId}</p>
                   </div>
-                  <Badge variant="outline" className="text-xs">
-                    {consumer.agency}
-                  </Badge>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-3 break-words whitespace-normal">
-              <div className="flex items-start space-x-2 min-w-0">
-                <MapPin className="h-4 w-4 text-gray-400 mt-0.5 flex-shrink-0" />
-                <p className="text-sm text-gray-600 break-words whitespace-normal">{consumer.address}</p>
-              </div>
-              {consumer.mobileNumber && (
-                <a href={`tel:${consumer.mobileNumber}`} className="flex items-center space-x-2 hover:underline">
-                  <Phone className="h-4 w-4 text-gray-400" />
-                  <p className="text-sm text-blue-600">{consumer.mobileNumber}</p>
-                </a>
-              )}
-
-              <div className="flex items-center space-x-2">
-                <IndianRupee className="h-4 w-4 text-gray-400" />
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-red-600">
-                    ₹{Number.parseFloat(consumer.d2NetOS || "0").toLocaleString()}
-                  </p>
-                  <p className="text-xs text-gray-500">Outstanding Dues</p>
-                </div>
-              </div>
-
-              {consumer.osDuedateRange && (
-                <div className="flex items-center space-x-2">
-                  <CalendarIcon className="h-4 w-4 text-gray-400" />
-                  <div className="flex-1">
-                    <p className="text-sm text-gray-600">{consumer.osDuedateRange}</p>
-                    <p className="text-xs text-gray-500">Due Date Range</p>
+                  <div className="flex flex-col items-end space-y-1">
+                    <div className="flex items-center gap-1">
+                      {consumer._syncStatus === 'syncing' && (
+                        <RefreshCw className="h-3 w-3 animate-spin text-blue-500" title="Syncing..." />
+                      )}
+                      {consumer._syncStatus === 'error' && (
+                        <AlertCircle className="h-3 w-3 text-red-500" title="Sync failed (saved locally)" />
+                      )}
+                      <Badge className={getStatusColor(consumer.disconStatus)}>{consumer.disconStatus}</Badge>
+                    </div>
+                    <Badge variant="outline" className="text-xs">
+                      {consumer.agency}
+                    </Badge>
                   </div>
                 </div>
-              )}
-
-              <div className="grid grid-cols-2 gap-2 text-xs text-gray-600">
-                <div>
-                  <span className="font-medium">Class:</span> {consumer.class}
+              </CardHeader>
+              <CardContent className="space-y-3 break-words whitespace-normal">
+                <div className="flex items-start space-x-2 min-w-0">
+                  <MapPin className="h-4 w-4 text-gray-400 mt-0.5 flex-shrink-0" />
+                  <p className="text-sm text-gray-600 break-words whitespace-normal">{consumer.address}</p>
                 </div>
-                <div>
-                  <span className="font-medium">Device:</span> {consumer.device}
-                </div>
-              </div>
-
-              {consumer.disconDate && (
-                <div className="text-xs text-red-600">
-                  <span className="font-medium">Last Updated:</span> {consumer.disconDate}
-                </div>
-              )}
-
-              {/* 👇 UPDATED IMAGE LINK SECTION 👇 */}
-              {(consumer.imageUrl || (consumer as any).image) && (
-                <div className="pt-2 pb-1 relative z-10"> {/* Added z-10 and spacing */}
-                  <a
-                    href={getValidUrl((consumer.imageUrl || (consumer as any).image) as string)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center space-x-2 text-xs font-medium text-blue-600 hover:text-blue-800 hover:underline transition-colors cursor-pointer"
-                    onClick={(e) => e.stopPropagation()} 
-                  >
-                    <ImageIcon className="h-3.5 w-3.5" />
-                    <span>View Uploaded Image</span>
+                {consumer.mobileNumber && (
+                  <a href={`tel:${consumer.mobileNumber}`} className="flex items-center space-x-2 hover:underline">
+                    <Phone className="h-4 w-4 text-gray-400" />
+                    <p className="text-sm text-blue-600">{consumer.mobileNumber}</p>
                   </a>
-                </div>
-              )}
-              {/* 👆 END UPDATED SECTION 👆 */}
+                )}
 
-              <Button onClick={() => setSelectedConsumer(consumer)} 
-              className={`w-full mt-4 ${
-                  ((consumer.disconStatus.toLowerCase() !== "connected" && userRole !== "admin" && userRole !== "executive") || userRole === "viewer")
-                    ? "bg-gray-100 text-gray-500 hover:bg-gray-100 cursor-not-allowed" 
-                    : ""
-                }`}
-                size="sm"
-                disabled={(consumer.disconStatus.toLowerCase() !== "connected" && userRole !== "admin" && userRole !== "executive") || userRole === "viewer"}
-              >
-                <Edit className={`h-4 w-4 mr-2 ${
-                    ((consumer.disconStatus.toLowerCase() !== "connected" && userRole !== "admin" && userRole !== "executive") || userRole === "viewer") 
-                      ? "text-gray-400" 
+                <div className="flex items-center space-x-2">
+                  <IndianRupee className="h-4 w-4 text-gray-400" />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-red-600">
+                      ₹{Number.parseFloat(consumer.d2NetOS || "0").toLocaleString()}
+                    </p>
+                    <p className="text-xs text-gray-500">Outstanding Dues</p>
+                  </div>
+                </div>
+
+                {consumer.osDuedateRange && (
+                  <div className="flex items-center space-x-2">
+                    <CalendarIcon className="h-4 w-4 text-gray-400" />
+                    <div className="flex-1">
+                      <p className="text-sm text-gray-600">{consumer.osDuedateRange}</p>
+                      <p className="text-xs text-gray-500">Due Date Range</p>
+                    </div>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-2 text-xs text-gray-600">
+                  <div>
+                    <span className="font-medium">Class:</span> {consumer.class}
+                  </div>
+                  <div>
+                    <span className="font-medium">Device:</span> {consumer.device}
+                  </div>
+                </div>
+
+                {consumer.disconDate && (
+                  <div className="text-xs text-red-600">
+                    <span className="font-medium">Last Updated:</span> {consumer.disconDate}
+                  </div>
+                )}
+
+                {/* 👇 UPDATED IMAGE LINK SECTION 👇 */}
+                {(consumer.imageUrl || (consumer as any).image) && (
+                  <div className="pt-2 pb-1 relative z-10"> {/* Added z-10 and spacing */}
+                    <a
+                      href={getValidUrl((consumer.imageUrl || (consumer as any).image) as string)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center space-x-2 text-xs font-medium text-blue-600 hover:text-blue-800 hover:underline transition-colors cursor-pointer"
+                      onClick={(e) => e.stopPropagation()} 
+                    >
+                      <ImageIcon className="h-3.5 w-3.5" />
+                      <span>View Uploaded Image</span>
+                    </a>
+                  </div>
+                )}
+                {/* 👆 END UPDATED SECTION 👆 */}
+
+                <Button onClick={() => setSelectedConsumer(consumer)} 
+                className={`w-full mt-4 ${
+                    ((consumer.disconStatus.toLowerCase() !== "connected" && userRole !== "admin" && userRole !== "executive") || userRole === "viewer")
+                      ? "bg-gray-100 text-gray-500 hover:bg-gray-100 cursor-not-allowed" 
                       : ""
-                  }`} />
-                Update Status
-              </Button>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+                  }`}
+                  size="sm"
+                  disabled={(consumer.disconStatus.toLowerCase() !== "connected" && userRole !== "admin" && userRole !== "executive") || userRole === "viewer"}
+                >
+                  <Edit className={`h-4 w-4 mr-2 ${
+                      ((consumer.disconStatus.toLowerCase() !== "connected" && userRole !== "admin" && userRole !== "executive") || userRole === "viewer") 
+                        ? "text-gray-400" 
+                        : ""
+                    }`} />
+                  Update Status
+                </Button>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      ) : (
+        <>
+          {/* Desktop Table View (Hidden on Mobile) */}
+          <div className="hidden md:block bg-white rounded-lg shadow-sm border overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm text-left">
+                <thead className="bg-gray-50 text-gray-700 font-medium border-b">
+                  <tr>
+                    <th className="px-4 py-3 whitespace-nowrap">ID / Name</th>
+                    <th className="px-4 py-3 whitespace-nowrap">Address</th>
+                    <th className="px-4 py-3 whitespace-nowrap">Mobile</th>
+                    <th className="px-4 py-3 whitespace-nowrap text-right">OSD</th>
+                    <th className="px-4 py-3 whitespace-nowrap text-center">Status</th>
+                    <th className="px-4 py-3 whitespace-nowrap text-center">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {paginatedConsumers.map((consumer) => (
+                    <tr key={consumer.consumerId} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-4 py-3">
+                        <div className="font-medium text-gray-900">{consumer.consumerId}</div>
+                        <div className="text-xs text-gray-500 truncate max-w-[150px]" title={consumer.name}>{consumer.name}</div>
+                      </td>
+                      <td className="px-4 py-3 max-w-[200px]">
+                        <div className="truncate text-gray-600" title={consumer.address}>{consumer.address}</div>
+                        <div className="text-xs text-gray-400">{consumer.agency}</div>
+                      </td>
+                      <td className="px-4 py-3 text-gray-600 whitespace-nowrap">
+                        {consumer.mobileNumber ? (
+                           <a href={`tel:${consumer.mobileNumber}`} className="hover:text-blue-600 hover:underline">{consumer.mobileNumber}</a>
+                        ) : "-"}
+                      </td>
+                      <td className="px-4 py-3 text-right whitespace-nowrap">
+                        <div className="font-medium text-red-600">₹{Number.parseFloat(consumer.d2NetOS || "0").toLocaleString()}</div>
+                        <div className="text-xs text-gray-500">{consumer.agency}</div>
+                      </td>
+                      <td className="px-4 py-3 text-center whitespace-nowrap">
+                         <Badge className={`${getStatusColor(consumer.disconStatus)} whitespace-nowrap`}>{consumer.disconStatus}</Badge>
+                      </td>
+                      <td className="px-4 py-3 text-center whitespace-nowrap">
+                        <Button 
+                          onClick={() => setSelectedConsumer(consumer)} 
+                          size="sm"
+                          className="h-8 bg-blue-600 hover:bg-blue-700 text-white"
+                          disabled={(consumer.disconStatus.toLowerCase() !== "connected" && userRole !== "admin" && userRole !== "executive") || userRole === "viewer"}
+                        >
+                          Update
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Mobile List View (Hidden on Desktop) */}
+          <div className="md:hidden space-y-2">
+            {paginatedConsumers.map((consumer) => (
+              <div 
+                key={consumer.consumerId} 
+                onClick={() => setPreviewConsumer(consumer)}
+                className={`bg-white p-2 rounded-lg shadow-sm border active:bg-gray-50 transition-colors ${
+                  ((consumer.disconStatus.toLowerCase() !== "connected" && userRole !== "admin" && userRole !== "executive") || userRole === "viewer")
+                    ? "opacity-90" 
+                    : "cursor-pointer"
+                }`}
+              >
+                <div className="flex justify-between items-start">
+                  <div className="flex items-center gap-2 min-w-0 flex-1 mr-2">
+                     <div className="shrink-0">{getStatusIcon(consumer.disconStatus)}</div>
+                     <div className="font-semibold text-sm text-gray-900 shrink-0">{consumer.consumerId}</div>
+                     <div className="text-xs text-gray-500 flex items-center gap-1 min-w-0">
+                        <span className="truncate">{consumer.name}</span>
+                        {consumer.mobileNumber && (
+                           <a href={`tel:${consumer.mobileNumber}`} onClick={(e) => e.stopPropagation()} className="shrink-0 p-1">
+                              <Phone className="h-3 w-3 text-blue-600" />
+                           </a>
+                        )}
+                     </div>
+                  </div>
+                  <div className="text-xs font-bold text-red-600 whitespace-nowrap shrink-0 mt-0.5">
+                     ₹{Number.parseFloat(consumer.d2NetOS || "0").toLocaleString()}
+                  </div>
+                </div>
+                
+                <div className="flex justify-between items-center mt-0.5 pl-6">
+                  <div className="text-xs text-gray-600 truncate mr-2">
+                    {consumer.address}
+                  </div>
+                  <Button 
+                    size="icon" 
+                    variant="ghost" 
+                    className="h-6 w-6 text-blue-600 shrink-0 -mr-2"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (!((consumer.disconStatus.toLowerCase() !== "connected" && userRole !== "admin" && userRole !== "executive") || userRole === "viewer")) {
+                        setSelectedConsumer(consumer)
+                      }
+                    }}
+                    disabled={((consumer.disconStatus.toLowerCase() !== "connected" && userRole !== "admin" && userRole !== "executive") || userRole === "viewer")}
+                  >
+                    <Edit className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
 
       {/* Pagination */}
       {totalPages > 1 && (
@@ -1080,6 +1249,90 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
           <p className="text-gray-500">No consumer data available.</p>
         </div>
       )}
+
+      {/* Mobile PIP View Dialog */}
+      <Dialog open={!!previewConsumer} onOpenChange={(open) => !open && setPreviewConsumer(null)}>
+        <DialogContent className="max-w-sm p-0 overflow-hidden rounded-lg">
+          <DialogTitle className="sr-only">Consumer Details</DialogTitle>
+          {previewConsumer && (
+            <Card className="border-0 shadow-none">
+              <CardHeader className="pb-3 bg-gray-50 border-b">
+                <div className="flex items-start justify-between w-full">
+                  <div className="min-w-0">
+                    <CardTitle className="text-lg break-words whitespace-normal">{previewConsumer.name}</CardTitle>
+                    <p className="text-sm text-gray-600">{previewConsumer.consumerId}</p>
+                  </div>
+                  <div className="flex flex-col items-end space-y-1">
+                    <Badge className={getStatusColor(previewConsumer.disconStatus)}>{previewConsumer.disconStatus}</Badge>
+                    <Badge variant="outline" className="text-xs">
+                      {previewConsumer.agency}
+                    </Badge>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4 pt-4">
+                <div className="flex items-start space-x-2">
+                  <MapPin className="h-4 w-4 text-gray-400 mt-0.5 shrink-0" />
+                  <p className="text-sm text-gray-600">{previewConsumer.address}</p>
+                </div>
+                
+                {previewConsumer.mobileNumber && (
+                  <div className="flex items-center space-x-2">
+                    <Phone className="h-4 w-4 text-gray-400" />
+                    <a href={`tel:${previewConsumer.mobileNumber}`} className="text-sm text-blue-600 hover:underline">
+                      {previewConsumer.mobileNumber}
+                    </a>
+                  </div>
+                )}
+
+                <div className="flex items-center space-x-2">
+                  <IndianRupee className="h-4 w-4 text-gray-400" />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-red-600">
+                      ₹{Number.parseFloat(previewConsumer.d2NetOS || "0").toLocaleString()}
+                    </p>
+                    <p className="text-xs text-gray-500">Outstanding Dues</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-xs text-gray-600 bg-gray-50 p-2 rounded">
+                  <div><span className="font-medium">Class:</span> {previewConsumer.baseClass}</div>
+                  <div><span className="font-medium">Device:</span> {previewConsumer.device}</div>
+                  <div className="col-span-2"><span className="font-medium">Due:</span> {previewConsumer.osDuedateRange}</div>
+                </div>
+
+                {(previewConsumer.imageUrl || (previewConsumer as any).image) && (
+                  <div className="pt-2">
+                    <a
+                      href={getValidUrl((previewConsumer.imageUrl || (previewConsumer as any).image) as string)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center space-x-2 text-xs font-medium text-blue-600 hover:underline"
+                    >
+                      <ImageIcon className="h-3.5 w-3.5" />
+                      <span>View Uploaded Image</span>
+                    </a>
+                  </div>
+                )}
+
+                <Button 
+                  className="w-full" 
+                  onClick={() => {
+                    setPreviewConsumer(null);
+                    if (!((previewConsumer.disconStatus.toLowerCase() !== "connected" && userRole !== "admin" && userRole !== "executive") || userRole === "viewer")) {
+                      setSelectedConsumer(previewConsumer);
+                    }
+                  }}
+                  disabled={(previewConsumer.disconStatus.toLowerCase() !== "connected" && userRole !== "admin" && userRole !== "executive") || userRole === "viewer"}
+                >
+                  <Edit className="h-4 w-4 mr-2" />
+                  Update Status
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 })
