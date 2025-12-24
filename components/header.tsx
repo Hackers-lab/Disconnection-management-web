@@ -16,7 +16,8 @@ import {
   LayoutDashboard,
   MoreVertical, // New Icon for Mobile Menu
   FileDown,
-  RefreshCw
+  RefreshCw,
+  FileSpreadsheet
 } from "lucide-react"
 import { useState } from "react"
 import {
@@ -307,6 +308,17 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
                 </Button>
               )}
 
+              {userRole === "admin" && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => window.open("/api/sheet-redirect", "_blank")}
+                  title="Edit DC List"
+                >
+                  <FileSpreadsheet className="h-4 w-4" />
+                </Button>
+              )}
+
               {userRole === "admin" && onAdminClick && (
                 <Button variant="ghost" size="sm" onClick={onAdminClick} title="Admin Panel">
                   <Settings className="h-4 w-4" />
@@ -371,6 +383,13 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
                       <span>Agency Updates</span>
                     </DropdownMenuItem>
                   )}
+
+                {userRole === "admin" && (
+                  <DropdownMenuItem onClick={() => window.open("/api/sheet-redirect", "_blank")}>
+                    <FileSpreadsheet className="mr-2 h-4 w-4" />
+                    <span>Edit DC List</span>
+                  </DropdownMenuItem>
+                )}
 
                   {userRole === "admin" && onAdminClick && (
                     <DropdownMenuItem onClick={onAdminClick}>
