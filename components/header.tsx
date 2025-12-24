@@ -148,6 +148,7 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
 
   // --- Actions ---
   const handleLogout = async () => {
+    if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
     try {
       setLoggingOut(true);
       await logout();
@@ -157,6 +158,7 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
   };
 
   const handleGlobalRefresh = () => {
+    if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
     if (confirm("Sync fresh data from server? This will reload the page.")) {
       sessionStorage.removeItem("consumers_synced_session")
       window.location.reload()
@@ -164,6 +166,7 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
   }
 
   const handleUpload = async () => {
+    if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
     const CACHE_KEY = "agency_updates_cache";
     setShowAgencyUpdates(true);
     setLoading(true);
@@ -230,7 +233,10 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
             />
             <div 
               className="flex items-center space-x-2 cursor-pointer hover:opacity-80 transition-opacity"
-              onClick={() => setActiveView("home")}
+              onClick={() => {
+                if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
+                setActiveView("home")
+              }}
             >
               <HomeIcon className="h-6 w-6 text-blue-600" />
               <span className="text-xl font-semibold text-gray-900 hidden xs:inline">Report</span>
@@ -251,7 +257,10 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => setActiveView("home")}
+                onClick={() => {
+                    if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
+                    setActiveView("home")
+                }}
                 title="Home Dashboard"
               >
                 <LayoutDashboard className="h-4 w-4" />
@@ -262,7 +271,10 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
                 <Button 
                   variant="ghost" 
                   size="sm" 
-                  onClick={() => setShowDownloadMenu(!showDownloadMenu)}
+                  onClick={() => {
+                    if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
+                    setShowDownloadMenu(!showDownloadMenu)
+                  }}
                   title="Download Options"
                 >
                   <Download className="h-4 w-4" />
@@ -274,6 +286,7 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
                       type="button"
                       className="block w-full text-left px-4 py-2 hover:bg-blue-50 text-sm"
                       onClick={() => {
+                        if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
                         setShowDownloadMenu(false);
                         onDownload && onDownload();
                       }}
@@ -285,6 +298,7 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
                       type="button"
                       className="block w-full text-left px-4 py-2 hover:bg-blue-50 text-sm"
                       onClick={() => {
+                        if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
                         setShowDownloadMenu(false);
                         onDownloadDefaulters && onDownloadDefaulters();
                       }}
@@ -312,7 +326,10 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => window.open("/api/sheet-redirect", "_blank")}
+                  onClick={() => {
+                    if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
+                    window.open("/api/sheet-redirect", "_blank")
+                  }}
                   title="Edit DC List"
                 >
                   <FileSpreadsheet className="h-4 w-4" />
@@ -320,7 +337,10 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
               )}
 
               {userRole === "admin" && onAdminClick && (
-                <Button variant="ghost" size="sm" onClick={onAdminClick} title="Admin Panel">
+                <Button variant="ghost" size="sm" onClick={() => {
+                    if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
+                    onAdminClick()
+                }} title="Admin Panel">
                   <Settings className="h-4 w-4" />
                 </Button>
               )}
@@ -352,7 +372,9 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
             <div className="md:hidden">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="icon" className="h-9 w-9">
+                  <Button variant="outline" size="icon" className="h-9 w-9" onClick={() => {
+                    if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
+                  }}>
                     <MoreVertical className="h-5 w-5" />
                   </Button>
                 </DropdownMenuTrigger>
@@ -360,18 +382,27 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
                   <DropdownMenuLabel>Actions</DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   
-                  <DropdownMenuItem onClick={() => setActiveView("home")}>
+                  <DropdownMenuItem onClick={() => {
+                    if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
+                    setActiveView("home")
+                  }}>
                     <LayoutDashboard className="mr-2 h-4 w-4" />
                     <span>Dashboard</span>
                   </DropdownMenuItem>
 
-                  <DropdownMenuItem onClick={() => { onDownload && onDownload() }}>
+                  <DropdownMenuItem onClick={() => { 
+                    if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
+                    onDownload && onDownload() 
+                  }}>
                     <Download className="mr-2 h-4 w-4" />
                     <span>Disconnection List</span>
                   </DropdownMenuItem>
 
                   {canDownloadDefaulters && (
-                    <DropdownMenuItem onClick={() => { onDownloadDefaulters && onDownloadDefaulters() }}>
+                    <DropdownMenuItem onClick={() => { 
+                        if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
+                        onDownloadDefaulters && onDownloadDefaulters() 
+                    }}>
                       <Download className="mr-2 h-4 w-4" />
                       <span>Top Defaulter List</span>
                     </DropdownMenuItem>
@@ -385,14 +416,20 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
                   )}
 
                 {userRole === "admin" && (
-                  <DropdownMenuItem onClick={() => window.open("/api/sheet-redirect", "_blank")}>
+                  <DropdownMenuItem onClick={() => {
+                    if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
+                    window.open("/api/sheet-redirect", "_blank")
+                  }}>
                     <FileSpreadsheet className="mr-2 h-4 w-4" />
                     <span>Edit DC List</span>
                   </DropdownMenuItem>
                 )}
 
                   {userRole === "admin" && onAdminClick && (
-                    <DropdownMenuItem onClick={onAdminClick}>
+                    <DropdownMenuItem onClick={() => {
+                        if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
+                        onAdminClick()
+                    }}>
                       <Settings className="mr-2 h-4 w-4" />
                       <span>Admin Settings</span>
                     </DropdownMenuItem>

@@ -182,6 +182,7 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
 
   // --- 3. CAMERA LOGIC ---
   const startCamera = async () => {
+    if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: "environment" }, // Use back camera
@@ -203,6 +204,7 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
   }
 
   const capturePhoto = () => {
+    if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
     const video = videoRef.current
     if (!video) return
 
@@ -223,6 +225,7 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
   }
 
   const stopCamera = () => {
+    if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
     const stream = mediaStreamRef.current || (videoRef.current && (videoRef.current.srcObject as MediaStream))
     if (stream) {
       const tracks = stream.getTracks()
@@ -235,6 +238,7 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
   }
 
   const handleStatusUpdate = (status: string) => {
+    if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
     const now = new Date();
     const formattedDate = now.toLocaleDateString("en-GB").replace(/\//g, "-");
     setFormData((prev) => ({ ...prev, disconStatus: status, disconDate: formattedDate }));
@@ -242,6 +246,7 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
+    if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
     e.preventDefault();
     if (!statusChanged && !formData.reading && !formData.notes && !formData.imageUrl) {
         if(formData.disconStatus === consumer.disconStatus) {
@@ -262,7 +267,10 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
       
       {/* Header */}
       <div className="flex items-center gap-2 mb-2">
-        <Button variant="ghost" size="icon" onClick={onCancel}>
+        <Button variant="ghost" size="icon" onClick={() => {
+          if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
+          onCancel()
+        }}>
           <ArrowLeft className="h-5 w-5" />
         </Button>
         <h1 className="text-xl font-bold text-gray-900">Update Consumer</h1>
@@ -403,7 +411,10 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
                             type="button" 
                             variant="outline"
                             className="h-12 border-2 border-slate-300 text-slate-700 hover:border-slate-800 hover:bg-slate-50"
-                            onClick={() => fileInputRef.current?.click()}
+                            onClick={() => {
+                                if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
+                                fileInputRef.current?.click()
+                            }}
                             disabled={uploading}
                         >
                             <Upload className="h-5 w-5 mr-2" /> Gallery
@@ -516,7 +527,10 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
         <Button 
             variant="outline" 
             className="flex-1 h-12 border-gray-300 text-gray-700" 
-            onClick={onCancel}
+            onClick={() => {
+                if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
+                onCancel()
+            }}
         >
             Cancel
         </Button>

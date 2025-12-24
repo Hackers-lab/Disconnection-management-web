@@ -570,6 +570,7 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
 
 
   const handleUpdateConsumer = async (updatedConsumer: ConsumerData) => {
+    if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
     // 1. Optimistic Update: Mark as syncing and update local state/cache immediately
     const syncingConsumer = { ...updatedConsumer, _syncStatus: 'syncing' as const };
     
@@ -622,6 +623,7 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
   }
 
   const clearFilters = () => {
+    if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
     setFilters({
       agency: "All Agencies",
       address: "",
@@ -647,6 +649,7 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
   }
 
   const toggleOSDSort = () => {
+    if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
     if (sortByOSD === "none") setSortByOSD("desc")
     else if (sortByOSD === "desc") setSortByOSD("asc")
     else setSortByOSD("none")
@@ -917,6 +920,7 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
               size="icon"
               className={`h-9 w-9 rounded-none rounded-l-md ${viewMode === "card" ? "bg-gray-100 text-blue-600" : "text-gray-500"}`}
               onClick={() => {
+                if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
                 setViewMode("card")
                 localStorage.setItem("consumerListViewMode", "card")
               }}
@@ -930,6 +934,7 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
               size="icon"
               className={`h-9 w-9 rounded-none rounded-r-md ${viewMode === "list" ? "bg-gray-100 text-blue-600" : "text-gray-500"}`}
               onClick={() => {
+                if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
                 setViewMode("list")
                 localStorage.setItem("consumerListViewMode", "list")
               }}
@@ -1047,7 +1052,10 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
                 )}
                 {/* 👆 END UPDATED SECTION 👆 */}
 
-                <Button onClick={() => setSelectedConsumer(consumer)} 
+                <Button onClick={() => {
+                    if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
+                    setSelectedConsumer(consumer)
+                }} 
                 className={`w-full mt-4 ${
                     ((consumer.disconStatus.toLowerCase() !== "connected" && userRole !== "admin" && userRole !== "executive") || userRole === "viewer")
                       ? "bg-gray-100 text-gray-500 hover:bg-gray-100 cursor-not-allowed" 
@@ -1108,7 +1116,10 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
                       </td>
                       <td className="px-4 py-3 text-center whitespace-nowrap">
                         <Button 
-                          onClick={() => setSelectedConsumer(consumer)} 
+                          onClick={() => {
+                            if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
+                            setSelectedConsumer(consumer)
+                          }} 
                           size="sm"
                           className="h-8 bg-blue-600 hover:bg-blue-700 text-white"
                           disabled={(consumer.disconStatus.toLowerCase() !== "connected" && userRole !== "admin" && userRole !== "executive") || userRole === "viewer"}
@@ -1128,7 +1139,10 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
             {paginatedConsumers.map((consumer) => (
               <div 
                 key={consumer.consumerId} 
-                onClick={() => setPreviewConsumer(consumer)}
+                onClick={() => {
+                    if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
+                    setPreviewConsumer(consumer)
+                }}
                 className={`bg-white p-2 rounded-lg shadow-sm border active:bg-gray-50 transition-colors ${
                   ((consumer.disconStatus.toLowerCase() !== "connected" && userRole !== "admin" && userRole !== "executive") || userRole === "viewer")
                     ? "opacity-90" 
@@ -1163,6 +1177,7 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
                     className="h-6 w-6 text-blue-600 shrink-0 -mr-2"
                     onClick={(e) => {
                       e.stopPropagation();
+                        if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
                       if (!((consumer.disconStatus.toLowerCase() !== "connected" && userRole !== "admin" && userRole !== "executive") || userRole === "viewer")) {
                         setSelectedConsumer(consumer)
                       }
@@ -1188,7 +1203,10 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+              onClick={() => {
+                if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
+                setCurrentPage(Math.max(1, currentPage - 1))
+              }}
               disabled={currentPage === 1}
             >
               <ChevronLeft className="h-4 w-4" />
@@ -1213,7 +1231,10 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
                     key={pageNum}
                     variant={currentPage === pageNum ? "default" : "outline"}
                     size="sm"
-                    onClick={() => setCurrentPage(pageNum)}
+                    onClick={() => {
+                        if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
+                        setCurrentPage(pageNum)
+                    }}
                     className="w-8 h-8 p-0"
                   >
                     {pageNum}
@@ -1225,7 +1246,10 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+              onClick={() => {
+                if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
+                setCurrentPage(Math.min(totalPages, currentPage + 1))
+              }}
               disabled={currentPage === totalPages}
             >
               <span className="hidden sm:inline">Next</span>
@@ -1318,6 +1342,7 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
                 <Button 
                   className="w-full" 
                   onClick={() => {
+                    if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
                     setPreviewConsumer(null);
                     if (!((previewConsumer.disconStatus.toLowerCase() !== "connected" && userRole !== "admin" && userRole !== "executive") || userRole === "viewer")) {
                       setSelectedConsumer(previewConsumer);

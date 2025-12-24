@@ -105,7 +105,10 @@ export function DashboardMenu({ onSelect, userRole }: DashboardMenuProps) {
             <Card 
               key={module.id} 
               className={`group relative cursor-pointer transition-all duration-300 hover:shadow-xl hover:-translate-y-1 border border-gray-200 ${module.borderColor} overflow-hidden`}
-              onClick={() => onSelect(module.id as ViewType)}
+              onClick={() => {
+                if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
+                onSelect(module.id as ViewType)
+              }}
             >
               <div className={`absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity duration-300`}>
                  <Icon className={`h-24 w-24 ${module.color}`} />
