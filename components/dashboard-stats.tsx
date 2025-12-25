@@ -62,10 +62,21 @@ interface AgencyReport {
 
 export function DashboardStats({ consumers, loading = false, onStatusSelect }: DashboardStatsProps) {
   const [isSliderOpen, setIsSliderOpen] = useState(false)
+  const [selectedAgency, setSelectedAgency] = useState("All")
+  const [selectedClass, setSelectedClass] = useState("All")
+
+  const agencies = ["All", ...Array.from(new Set(consumers.map((c) => c.agency || "Unknown"))).sort()]
+  const classes = ["All", ...Array.from(new Set(consumers.map((c) => (c as any).class || "Unknown"))).sort()]
+
+  const filteredConsumers = consumers.filter((consumer) => {
+    const agencyMatch = selectedAgency === "All" || (consumer.agency || "Unknown") === selectedAgency
+    const classMatch = selectedClass === "All" || ((consumer as any).class || "Unknown") === selectedClass
+    return agencyMatch && classMatch
+  })
 
   // Calculate statistics
   const stats: Stats = {
-    total: consumers.length,
+    total: filteredConsumers.length,
     connected: 0,
     connectedAmount: 0,
     disconnected: 0,
@@ -87,7 +98,7 @@ export function DashboardStats({ consumers, loading = false, onStatusSelect }: D
 
   const agencyReport: Record<string, AgencyReport> = {}
 
-  consumers.forEach((consumer) => {
+  filteredConsumers.forEach((consumer) => {
     const status = consumer.disconStatus.toLowerCase()
     const outstanding = Number.parseFloat(consumer.d2NetOS || "0")
     const agency = consumer.agency || "Unknown"
@@ -321,6 +332,36 @@ export function DashboardStats({ consumers, loading = false, onStatusSelect }: D
 
       {isSliderOpen && (
         <div className="space-y-6">
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:gap-4">
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-gray-500 ml-1">Agency</label>
+              <select
+                value={selectedAgency}
+                onChange={(e) => setSelectedAgency(e.target.value)}
+                className="flex h-9 w-full sm:min-w-[200px] items-center justify-between rounded-md border border-gray-300 bg-white px-2 text-xs sm:text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-gray-400"
+              >
+                {agencies.map((agency) => (
+                  <option key={agency} value={agency}>
+                    {agency}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-gray-500 ml-1">Class</label>
+              <select
+                value={selectedClass}
+                onChange={(e) => setSelectedClass(e.target.value)}
+                className="flex h-9 w-full sm:min-w-[200px] items-center justify-between rounded-md border border-gray-300 bg-white px-2 text-xs sm:text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-gray-400"
+              >
+                {classes.map((cls) => (
+                  <option key={cls} value={cls}>
+                    {cls}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 mb-4">
             {statCards.map((stat, index) => (
               <Card 
@@ -330,14 +371,14 @@ export function DashboardStats({ consumers, loading = false, onStatusSelect }: D
               >
                 <CardContent className="p-3">
                   <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-xs font-medium text-gray-600 mb-1">{stat.title}</p>
-                      <p className="text-lg font-bold text-gray-900">{stat.value}</p>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-medium text-gray-600 mb-1 truncate">{stat.title}</p>
+                      <p className="text-lg font-bold text-gray-900 truncate" title={stat.value}>{stat.value}</p>
                       {stat.amount !== null && (
-                        <p className="text-xs font-medium text-gray-500">₹{stat.amount.toLocaleString()}</p>
+                        <p className="text-xs font-medium text-gray-500 truncate">₹{stat.amount.toLocaleString()}</p>
                       )}
                     </div>
-                    <div className={`p-1.5 rounded-lg ${stat.bgColor}`}>
+                    <div className={`p-1.5 rounded-lg ${stat.bgColor} shrink-0 ml-2`}>
                       <stat.icon className={`h-4 w-4 ${stat.color}`} />
                     </div>
                   </div>
@@ -346,7 +387,7 @@ export function DashboardStats({ consumers, loading = false, onStatusSelect }: D
             ))}
           </div>
 
-          <div className="bg-white rounded-lg border overflow-hidden shadow-md text-[1px] font-sans">
+          <div className="bg-white rounded-lg border overflow-x-auto shadow-md text-[1px] font-sans">
             <Table className="compact-table">
               <TableHeader className="bg-white-50">
                 {/* Main Header Row */}

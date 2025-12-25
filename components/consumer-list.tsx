@@ -14,6 +14,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import {
   Sheet,
   SheetContent,
+  SheetDescription,
   SheetHeader,
   SheetTitle,
   SheetTrigger,
@@ -22,6 +23,7 @@ import {
   Dialog,
   DialogContent,
   DialogTitle,
+  DialogDescription,
 } from "@/components/ui/dialog"
 import { format } from "date-fns"
 import {
@@ -736,8 +738,14 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
               placeholder="Search id, name, address..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10"
+              className="pl-10 pr-8"
             />
+            {searchTerm && (
+              <X
+                className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-red-500 cursor-pointer hover:text-red-700"
+                onClick={() => setSearchTerm("")}
+              />
+            )}
           </div>
 
           <Sheet>
@@ -748,7 +756,7 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
                   osdRange[0] !== 0 ||
                   osdRange[1] !== maxOsdValue ||
                   dateFilter.isActive ||
-                  sortByOSD !== "none") && (
+                  sortByOSD !== "desc") && (
                   <span className="absolute -top-1 -right-1 h-3 w-3 bg-blue-600 rounded-full border-2 border-white" />
                 )}
               </Button>
@@ -756,6 +764,9 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
             <SheetContent className="w-[300px] sm:w-[400px] overflow-y-auto">
               <SheetHeader className="mb-6">
                 <SheetTitle>Filters & Sort</SheetTitle>
+                <SheetDescription>
+                  Filter consumers by agency, status, and other criteria.
+                </SheetDescription>
               </SheetHeader>
               
               <div className="space-y-6 pb-20">
@@ -955,8 +966,14 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
               osdRange[0] !== 0 ||
               osdRange[1] !== maxOsdValue ||
               dateFilter.isActive ||
-              sortByOSD !== "none") && (
-              <span className="text-blue-600 font-medium">Filters Active</span>
+              sortByOSD !== "desc") && (
+              <div className="flex items-center gap-1">
+                <span className="text-blue-600 font-medium">Filters Active</span>
+                <X
+                  className="h-4 w-4 text-red-500 cursor-pointer hover:text-red-700"
+                  onClick={clearFilters}
+                />
+              </div>
            )}
         </div>
       </div>
@@ -965,14 +982,14 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
       {viewMode === "card" ? (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {paginatedConsumers.map((consumer) => (
-            <Card key={consumer.consumerId} className="hover:shadow-md transition-shadow">
+            <Card key={consumer.consumerId} className="hover:shadow-md transition-shadow overflow-hidden max-w-full">
               <CardHeader className="pb-3 break-words whitespace-normal">
-                <div className="flex items-start justify-between w-full">
-                  <div className="min-w-0">
-                    <CardTitle className="text-lg break-words whitespace-normal">{consumer.name}</CardTitle>
+                <div className="flex items-start justify-between w-full gap-2">
+                  <div className="min-w-0 flex-1">
+                    <CardTitle className="text-lg break-words whitespace-normal line-clamp-2 leading-tight">{consumer.name}</CardTitle>
                     <p className="text-sm text-gray-600">{consumer.consumerId}</p>
                   </div>
-                  <div className="flex flex-col items-end space-y-1">
+                  <div className="flex flex-col items-end space-y-1 shrink-0">
                     <div className="flex items-center gap-1">
                       {consumer._syncStatus === 'syncing' && (
                         <RefreshCw className="h-3 w-3 animate-spin text-blue-500" title="Syncing..." />
@@ -982,7 +999,7 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
                       )}
                       <Badge className={getStatusColor(consumer.disconStatus)}>{consumer.disconStatus}</Badge>
                     </div>
-                    <Badge variant="outline" className="text-xs">
+                    <Badge variant="outline" className="text-xs max-w-[120px] truncate block">
                       {consumer.agency}
                     </Badge>
                   </div>
@@ -991,7 +1008,7 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
               <CardContent className="space-y-3 break-words whitespace-normal">
                 <div className="flex items-start space-x-2 min-w-0">
                   <MapPin className="h-4 w-4 text-gray-400 mt-0.5 flex-shrink-0" />
-                  <p className="text-sm text-gray-600 break-words whitespace-normal">{consumer.address}</p>
+                  <p className="text-sm text-gray-600 line-clamp-2" title={consumer.address}>{consumer.address}</p>
                 </div>
                 {consumer.mobileNumber && (
                   <a href={`tel:${consumer.mobileNumber}`} className="flex items-center space-x-2 hover:underline">
@@ -1155,11 +1172,6 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
                      <div className="font-semibold text-sm text-gray-900 shrink-0">{consumer.consumerId}</div>
                      <div className="text-xs text-gray-500 flex items-center gap-1 min-w-0">
                         <span className="truncate">{consumer.name}</span>
-                        {consumer.mobileNumber && (
-                           <a href={`tel:${consumer.mobileNumber}`} onClick={(e) => e.stopPropagation()} className="shrink-0 p-1">
-                              <Phone className="h-3 w-3 text-blue-600" />
-                           </a>
-                        )}
                      </div>
                   </div>
                   <div className="text-xs font-bold text-red-600 whitespace-nowrap shrink-0 mt-0.5">
@@ -1171,22 +1183,30 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
                   <div className="text-xs text-gray-600 truncate mr-2">
                     {consumer.address}
                   </div>
-                  <Button 
-                    size="icon" 
-                    variant="ghost" 
-                    className="h-6 w-6 text-blue-600 shrink-0 -mr-2"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                        if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
-                      if (!((consumer.disconStatus.toLowerCase() !== "connected" && userRole !== "admin" && userRole !== "executive") || userRole === "viewer")) {
-                        setSelectedConsumer(consumer)
-                      }
-                    }}
-                    disabled={((consumer.disconStatus.toLowerCase() !== "connected" && userRole !== "admin" && userRole !== "executive") || userRole === "viewer")}
-                  >
-                    <Edit className="h-4 w-4" />
-                  </Button>
+                  <div className="flex items-center -mr-2">
+                    {consumer.mobileNumber && (
+                       <a href={`tel:${consumer.mobileNumber}`} onClick={(e) => e.stopPropagation()} className="p-1 text-blue-600 mr-1">
+                          <Phone className="h-4 w-4" />
+                       </a>
+                    )}
+                    <Button 
+                      size="icon" 
+                      variant="ghost" 
+                      className="h-6 w-6 text-blue-600 shrink-0"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                          if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
+                        if (!((consumer.disconStatus.toLowerCase() !== "connected" && userRole !== "admin" && userRole !== "executive") || userRole === "viewer")) {
+                          setSelectedConsumer(consumer)
+                        }
+                      }}
+                      disabled={((consumer.disconStatus.toLowerCase() !== "connected" && userRole !== "admin" && userRole !== "executive") || userRole === "viewer")}
+                    >
+                      <Edit className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
+                <div className="h-[2px] bg-gray-200 w-full mt-2 rounded-full" />
               </div>
             ))}
           </div>
@@ -1195,7 +1215,7 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
 
       {/* Pagination */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-between bg-white p-4 rounded-lg shadow-sm border">
+        <div className="flex flex-col sm:flex-row gap-4 items-center justify-between bg-white p-4 rounded-lg shadow-sm border">
           <div className="text-sm text-gray-600">
             Page {currentPage} of {totalPages} ({sortedConsumers.length} total consumers)
           </div>
@@ -1278,6 +1298,9 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
       <Dialog open={!!previewConsumer} onOpenChange={(open) => !open && setPreviewConsumer(null)}>
         <DialogContent className="max-w-sm p-0 overflow-hidden rounded-lg">
           <DialogTitle className="sr-only">Consumer Details</DialogTitle>
+          <DialogDescription className="sr-only">
+            Details of the selected consumer
+          </DialogDescription>
           {previewConsumer && (
             <Card className="border-0 shadow-none">
               <CardHeader className="pb-3 bg-gray-50 border-b">
