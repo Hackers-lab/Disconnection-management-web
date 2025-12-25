@@ -163,8 +163,7 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedConsumer, setSelectedConsumer] = useState<ConsumerData | null>(null)
   const [currentPage, setCurrentPage] = useState(1)
-  const [osdRange, setOsdRange] = useState([0, 50000])
-  const [maxOsdValue, setMaxOsdValue] = useState(50000)
+  const [minOsd, setMinOsd] = useState(0)
   const [showFilters, setShowFilters] = useState(userRole === "test")
   const [isFilterOpen, setIsFilterOpen] = useState(false)
   const [sortByOSD, setSortByOSD] = useState<SortOrder>("desc")
@@ -272,15 +271,10 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
       }
       setAgencies(agencyList)
 
-      // Calculate max OSD value for slider
-      const osdValues = data.map((c) => Number.parseFloat(c.d2NetOS || "0")).filter((v) => !isNaN(v))
-      const maxOsd = Math.max(...osdValues, 50000)
-      const calculatedMax = Math.ceil(maxOsd / 1000) * 1000
-      setMaxOsdValue(calculatedMax)
       
       // Only reset the range slider on initial load, not during background updates
       if (!isBackgroundUpdate) {
-        setOsdRange([0, calculatedMax])
+        setMinOsd(0)
       }
 
       // Filter consumers based on user role and agencies (case-insensitive)
@@ -510,7 +504,7 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
 
     // OSD range filter
     const consumerOsd = Number.parseFloat(consumer.d2NetOS || "0")
-    const matchesOsdRange = consumerOsd >= osdRange[0] && consumerOsd <= osdRange[1]
+    const matchesOsd = consumerOsd >= minOsd
 
     // Exclude filters
     const excludeDeemedDisconnection =
@@ -530,7 +524,7 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
       matchesName &&
       matchesConsumerId &&
       matchesStatus &&
-      matchesOsdRange &&
+      matchesOsd &&
       matchesDateRange &&
       excludeDeemedDisconnection &&
       excludeTemproryDisconnected
@@ -587,7 +581,7 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
   // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1)
-  }, [filters, searchTerm, osdRange, excludeFilters, sortByOSD, viewMode])
+  }, [filters, searchTerm, minOsd, excludeFilters, sortByOSD, viewMode])
 
   const getStatusColor = (status: string) => {
     switch (status.toLowerCase()) {
@@ -673,7 +667,7 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
       baseClass: "All Classes",
     })
     setSearchTerm("")
-    setOsdRange([0, maxOsdValue])
+    setMinOsd(0)
     setExcludeFilters({
       excludeDeemedDisconnection: false,
       excludeTemproryDisconnected: false,
@@ -790,8 +784,7 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
               <Button variant="outline" size="icon" className="relative shrink-0">
                 <Filter className="h-4 w-4" />
                 {(Object.values(filters).some((f) => f !== "All Agencies" && f !== "All Status" && f !== "All Classes" && f !== "All MRUs" && f !== "") ||
-                  osdRange[0] !== 0 ||
-                  osdRange[1] !== maxOsdValue ||
+                  minOsd > 0 ||
                   dateFilter.isActive ||
                   sortByOSD !== "desc") && (
                   <span className="absolute -top-1 -right-1 h-3 w-3 bg-blue-600 rounded-full border-2 border-white" />
@@ -806,22 +799,32 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
                 </SheetDescription>
               </SheetHeader>
               
-              <div className="space-y-6 pb-20">
+              <div className="space-y-4 pb-20">
                 {/* OSD Range */}
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <label className="text-sm font-medium">Outstanding Dues</label>
-                    <span className="text-xs text-muted-foreground">
-                      ₹{osdRange[0].toLocaleString()} - ₹{osdRange[1].toLocaleString()}
-                    </span>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-4">
+                    <label className="text-sm font-medium whitespace-nowrap">Min Outstanding</label>
+                    <div className="relative flex-1 max-w-[120px]">
+                      <span className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-500">₹</span>
+                      <Input
+                        type="number"
+                        value={minOsd || ""}
+                        onChange={(e) => setMinOsd(Number(e.target.value))}
+                        className="h-8 pl-5 pr-6"
+                        placeholder="0"
+                      />
+                      {minOsd > 0 && (
+                        <X
+                          className="absolute right-2 top-1/2 -translate-y-1/2 h-3 w-3 text-red-500 cursor-pointer hover:text-red-700"
+                          onClick={() => setMinOsd(0)}
+                        />
+                      )}
+                    </div>
                   </div>
-                  <Slider
-                    value={osdRange}
-                    onValueChange={setOsdRange}
-                    max={maxOsdValue}
-                    min={0}
-                    step={1000}
-                  />
+                  <div className="flex gap-2 justify-end">
+                    <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setMinOsd(3000)}>{`>= 3k`}</Button>
+                    <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setMinOsd(5000)}>{`>= 5k`}</Button>
+                  </div>
                 </div>
 
                 {/* Date Filter */}
@@ -847,12 +850,64 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
                       />
                     </div>
                   </div>
+                  <div className="flex gap-2 justify-end">
+                    <Button 
+                      size="sm" 
+                      variant="outline" 
+                      className="h-7 text-xs" 
+                      onClick={() => {
+                        setDateFilter({
+                          from: null,
+                          to: null,
+                          isActive: false
+                        });
+                      }}
+                    >
+                      All
+                    </Button>
+                    <Button 
+                      size="sm" 
+                      variant="outline" 
+                      className="h-7 text-xs" 
+                      onClick={() => {
+                        const now = new Date();
+                        const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+                        setDateFilter({
+                          from: new Date(todayStr),
+                          to: new Date(todayStr),
+                          isActive: true
+                        });
+                      }}
+                    >
+                      Today
+                    </Button>
+                    <Button 
+                      size="sm" 
+                      variant="outline" 
+                      className="h-7 text-xs" 
+                      onClick={() => {
+                        const now = new Date();
+                        const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+                        const past = new Date(now);
+                        past.setDate(now.getDate() - 7);
+                        const pastStr = `${past.getFullYear()}-${String(past.getMonth() + 1).padStart(2, '0')}-${String(past.getDate()).padStart(2, '0')}`;
+                        setDateFilter({
+                          from: new Date(pastStr),
+                          to: new Date(todayStr),
+                          isActive: true
+                        });
+                      }}
+                    >
+                      Last 7d
+                    </Button>
+                  </div>
                 </div>
 
                 {/* Dropdowns */}
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Agency</label>
+                <div className="space-y-3">
+                  <div className="grid grid-cols-3 items-center gap-2">
+                    <label className="text-sm font-medium col-span-1">Agency</label>
+                    <div className="col-span-2">
                     <Select
                       value={filters.agency}
                       onValueChange={(value) => setFilters((prev) => ({ ...prev, agency: value }))}
@@ -869,10 +924,12 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
                         ))}
                       </SelectContent>
                     </Select>
+                    </div>
                   </div>
 
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Status</label>
+                  <div className="grid grid-cols-3 items-center gap-2">
+                    <label className="text-sm font-medium col-span-1">Status</label>
+                    <div className="col-span-2">
                     <Select
                       value={filters.status}
                       onValueChange={(value) => setFilters((prev) => ({ ...prev, status: value }))}
@@ -892,10 +949,12 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
                         <SelectItem value="not found">Not Found</SelectItem>
                       </SelectContent>
                     </Select>
+                    </div>
                   </div>
 
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">MRU</label>
+                  <div className="grid grid-cols-3 items-center gap-2">
+                    <label className="text-sm font-medium col-span-1">MRU</label>
+                    <div className="col-span-2">
                     <Select
                       value={filters.mru}
                       onValueChange={(value) => setFilters((prev) => ({ ...prev, mru: value }))}
@@ -912,10 +971,12 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
                         ))}
                       </SelectContent>
                     </Select>
+                    </div>
                   </div>
                   
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Base Class</label>
+                  <div className="grid grid-cols-3 items-center gap-2">
+                    <label className="text-sm font-medium col-span-1">Base Class</label>
+                    <div className="col-span-2">
                     <Select
                       value={filters.baseClass}
                       onValueChange={(value) => setFilters((prev) => ({ ...prev, baseClass: value }))}
@@ -932,6 +993,7 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
                         ))}
                       </SelectContent>
                     </Select>
+                    </div>
                   </div>
                 </div>
 
@@ -1000,8 +1062,7 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
               {isBackgroundUpdating && <RefreshCw className="h-3 w-3 animate-spin text-blue-500" />}
            </div>
            {(Object.values(filters).some((f) => f !== "All Agencies" && f !== "All Status" && f !== "All Classes" && f !== "All MRUs" && f !== "") ||
-              osdRange[0] !== 0 ||
-              osdRange[1] !== maxOsdValue ||
+              minOsd > 0 ||
               dateFilter.isActive ||
               sortByOSD !== "desc") && (
               <div className="flex items-center gap-1">
