@@ -123,6 +123,36 @@ async function saveToCache(key: string, data: any) {
 
 type SortOrder = "none" | "asc" | "desc"
 
+function useBackNavigation(isOpen: boolean, onClose: () => void) {
+  const onCloseRef = useRef(onClose)
+  useEffect(() => {
+    onCloseRef.current = onClose
+  }, [onClose])
+
+  const isBackRef = useRef(false)
+
+  useEffect(() => {
+    if (isOpen) {
+      isBackRef.current = false
+      window.history.pushState(null, "", window.location.href)
+
+      const onPopState = () => {
+        isBackRef.current = true
+        onCloseRef.current()
+      }
+
+      window.addEventListener("popstate", onPopState)
+
+      return () => {
+        window.removeEventListener("popstate", onPopState)
+        if (!isBackRef.current) {
+          window.history.back()
+        }
+      }
+    }
+  }, [isOpen])
+}
+
 const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
   (props, ref) => {
   const { userRole, userAgencies, onAdminClick, showAdminPanel, onCloseAdminPanel } = props
@@ -136,6 +166,7 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
   const [osdRange, setOsdRange] = useState([0, 50000])
   const [maxOsdValue, setMaxOsdValue] = useState(50000)
   const [showFilters, setShowFilters] = useState(userRole === "test")
+  const [isFilterOpen, setIsFilterOpen] = useState(false)
   const [sortByOSD, setSortByOSD] = useState<SortOrder>("desc")
   const [dateFilter, setDateFilter] = useState<{
     from: Date | null
@@ -165,6 +196,12 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
   const [isBackgroundUpdating, setIsBackgroundUpdating] = useState(false)
   const [viewMode, setViewMode] = useState<"card" | "list">("card")
   const [previewConsumer, setPreviewConsumer] = useState<ConsumerData | null>(null)
+
+  // Handle back button navigation for modals/overlays
+  useBackNavigation(isFilterOpen, () => setIsFilterOpen(false))
+  useBackNavigation(!!selectedConsumer, () => setSelectedConsumer(null))
+  useBackNavigation(!!previewConsumer, () => setPreviewConsumer(null))
+  useBackNavigation(showAdminPanel, onCloseAdminPanel)
 
   useEffect(() => {
     const savedMode = localStorage.getItem("consumerListViewMode") as "card" | "list"
@@ -748,7 +785,7 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
             )}
           </div>
 
-          <Sheet>
+          <Sheet open={isFilterOpen} onOpenChange={setIsFilterOpen}>
             <SheetTrigger asChild>
               <Button variant="outline" size="icon" className="relative shrink-0">
                 <Filter className="h-4 w-4" />

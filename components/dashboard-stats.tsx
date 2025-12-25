@@ -3,7 +3,7 @@
 import { Card, CardContent } from "@/components/ui/card"
 import { Users, Power, Clock, CheckCircle, AlertCircle, TrendingUp, ChevronDown, ChevronUp, HelpCircle } from "lucide-react"
 import type { ConsumerData } from "@/lib/google-sheets"
-import { useState } from "react"
+import { useState, useEffect, useRef } from "react"
 import {
   Table,
   TableBody,
@@ -60,10 +60,42 @@ interface AgencyReport {
   performance: number
 }
 
+function useBackNavigation(isOpen: boolean, onClose: () => void) {
+  const onCloseRef = useRef(onClose)
+  useEffect(() => {
+    onCloseRef.current = onClose
+  }, [onClose])
+
+  const isBackRef = useRef(false)
+
+  useEffect(() => {
+    if (isOpen) {
+      isBackRef.current = false
+      window.history.pushState(null, "", window.location.href)
+
+      const onPopState = () => {
+        isBackRef.current = true
+        onCloseRef.current()
+      }
+
+      window.addEventListener("popstate", onPopState)
+
+      return () => {
+        window.removeEventListener("popstate", onPopState)
+        if (!isBackRef.current) {
+          window.history.back()
+        }
+      }
+    }
+  }, [isOpen])
+}
+
 export function DashboardStats({ consumers, loading = false, onStatusSelect }: DashboardStatsProps) {
   const [isSliderOpen, setIsSliderOpen] = useState(false)
   const [selectedAgency, setSelectedAgency] = useState("All")
   const [selectedClass, setSelectedClass] = useState("All")
+
+  useBackNavigation(isSliderOpen, () => setIsSliderOpen(false))
 
   const agencies = ["All", ...Array.from(new Set(consumers.map((c) => c.agency || "Unknown"))).sort()]
   const classes = ["All", ...Array.from(new Set(consumers.map((c) => (c as any).class || "Unknown"))).sort()]
@@ -387,115 +419,115 @@ export function DashboardStats({ consumers, loading = false, onStatusSelect }: D
             ))}
           </div>
 
-          <div className="bg-white rounded-lg border overflow-x-auto shadow-md text-[1px] font-sans">
+          <div className="bg-white rounded-lg border overflow-x-auto shadow-md text-[10px] font-sans">
             <Table className="compact-table">
               <TableHeader className="bg-white-50">
                 {/* Main Header Row */}
-                <TableRow className="border-b h-1">
-                  <TableHead className="w-[100px] border-r" rowSpan={2}>Agency</TableHead>
-                  <TableHead className="text-center border-r px-0.1" colSpan={2}>Total</TableHead>
-                  <TableHead className="text-center border-r px-0.1" colSpan={2}>Disconnected</TableHead>
-                  <TableHead className="text-center border-r px-0.1" colSpan={2}>Paid</TableHead>
-                  <TableHead className="text-center border-r px-0.1" colSpan={2}>Office Team</TableHead>
-                  <TableHead className="text-center border-r px-0.1" colSpan={2}>Bill Dispute</TableHead>
-                  <TableHead className="text-center border-r px-0.1" colSpan={2}>Not Found</TableHead>
-                  <TableHead className="text-center border-r px-0.1" colSpan={2}>Not Attended</TableHead>
-                  <TableHead className="text-center w-[80px] px-0.1" rowSpan={2}>Performance</TableHead>
+                <TableRow className="border-b h-8">
+                  <TableHead className="w-[100px] border-r sticky left-0 bg-white z-20 py-1 h-8 text-[10px]" rowSpan={2}>Agency</TableHead>
+                  <TableHead className="text-center border-r px-1 py-1 h-8 text-[10px]" colSpan={2}>Total</TableHead>
+                  <TableHead className="text-center border-r px-1 py-1 h-8 text-[10px]" colSpan={2}>Disconnected</TableHead>
+                  <TableHead className="text-center border-r px-1 py-1 h-8 text-[10px]" colSpan={2}>Paid</TableHead>
+                  <TableHead className="text-center border-r px-1 py-1 h-8 text-[10px]" colSpan={2}>Office Team</TableHead>
+                  <TableHead className="text-center border-r px-1 py-1 h-8 text-[10px]" colSpan={2}>Bill Dispute</TableHead>
+                  <TableHead className="text-center border-r px-1 py-1 h-8 text-[10px]" colSpan={2}>Not Found</TableHead>
+                  <TableHead className="text-center border-r px-1 py-1 h-8 text-[10px]" colSpan={2}>Not Attended</TableHead>
+                  <TableHead className="text-center w-[80px] px-1 py-1 h-8 text-[10px]" rowSpan={2}>Performance</TableHead>
                 </TableRow>
                 
                 {/* Sub-header Row */}
-                <TableRow className="border-b h-1">
+                <TableRow className="border-b h-8">
                   {/* Total */}
-                  <TableHead className="text-center border-r bg-gray-100 px-0.1 w-[40px]">Count</TableHead>
-                  <TableHead className="text-center border-r bg-white-100 px-0.1 w-[40px]">Amount</TableHead>
+                  <TableHead className="text-center border-r bg-gray-100 px-1 py-1 h-8 text-[10px] w-[40px]">Count</TableHead>
+                  <TableHead className="text-center border-r bg-white-100 px-1 py-1 h-8 text-[10px] w-[40px]">Amount</TableHead>
                   
                   {/* Disconnected */}
-                  <TableHead className="text-center border-r bg-grey px-0.1 w-[40px]">Count</TableHead>
-                  <TableHead className="text-center border-r bg-white px-0.1 w-[40px]">Amount</TableHead>
+                  <TableHead className="text-center border-r bg-grey px-1 py-1 h-8 text-[10px] w-[40px]">Count</TableHead>
+                  <TableHead className="text-center border-r bg-white px-1 py-1 h-8 text-[10px] w-[40px]">Amount</TableHead>
                   
                   {/* Paid */}
-                  <TableHead className="text-center border-r bg-gray-100 px-0.1 w-[40px]">Count</TableHead>
-                  <TableHead className="text-center border-r bg-white-100 px-0.1 w-[40px]">Amount</TableHead>
+                  <TableHead className="text-center border-r bg-gray-100 px-1 py-1 h-8 text-[10px] w-[40px]">Count</TableHead>
+                  <TableHead className="text-center border-r bg-white-100 px-1 py-1 h-8 text-[10px] w-[40px]">Amount</TableHead>
                   
                   {/* Office Team */}
-                  <TableHead className="text-center border-r bg-gray px-0.1 w-[40px]">Count</TableHead>
-                  <TableHead className="text-center border-r bg-white px-0.1 w-[40px]">Amount</TableHead>
+                  <TableHead className="text-center border-r bg-gray px-1 py-1 h-8 text-[10px] w-[40px]">Count</TableHead>
+                  <TableHead className="text-center border-r bg-white px-1 py-1 h-8 text-[10px] w-[40px]">Amount</TableHead>
                   
                   {/* Bill Dispute */}
-                  <TableHead className="text-center border-r bg-gray-100 px-0.1 w-[40px]">Count</TableHead>
-                  <TableHead className="text-center border-r bg-white-100 px-0.1 w-[40px]">Amount</TableHead>
+                  <TableHead className="text-center border-r bg-gray-100 px-1 py-1 h-8 text-[10px] w-[40px]">Count</TableHead>
+                  <TableHead className="text-center border-r bg-white-100 px-1 py-1 h-8 text-[10px] w-[40px]">Amount</TableHead>
                   
                   {/* Not Found */}
-                  <TableHead className="text-center border-r bg-gray-50 px-0.1 w-[40px]">Count</TableHead>
-                  <TableHead className="text-center border-r bg-white px-0.1 w-[40px]">Amount</TableHead>
+                  <TableHead className="text-center border-r bg-gray-50 px-1 py-1 h-8 text-[10px] w-[40px]">Count</TableHead>
+                  <TableHead className="text-center border-r bg-white px-1 py-1 h-8 text-[10px] w-[40px]">Amount</TableHead>
 
                   {/* Not Attended */}
-                  <TableHead className="text-center border-r bg-gray px-0.1 w-[40px]">Count</TableHead>
-                  <TableHead className="text-center px-0.1 bg-white w-[40px]">Amount</TableHead>
+                  <TableHead className="text-center border-r bg-gray px-1 py-1 h-8 text-[10px] w-[40px]">Count</TableHead>
+                  <TableHead className="text-center px-1 bg-white py-1 h-8 text-[10px] w-[40px]">Amount</TableHead>
                 </TableRow>
               </TableHeader>
               
               <TableBody>
                 {agencyReportData.map((agency) => (
-                  <TableRow key={agency.name} className="hover:bg-gray-50 border-b h-1">
+                  <TableRow key={agency.name} className="group hover:bg-gray-50 border-b h-8">
                     {/* Agency Name */}
-                    <TableCell className="font-medium border-r px-2 sticky left-0 text-xs">
+                    <TableCell className="font-medium border-r px-2 py-1 sticky left-0 text-[10px] bg-white group-hover:bg-gray-50 z-10 h-8">
                       {agency.name}
                     </TableCell>
                     
                     {/* Total */}
-                    <TableCell className="text-center border-r px-0.1 bg-gray-50">{agency.total}</TableCell>
-                    <TableCell className="text-center border-r px-0.1 bg-white-50">₹{agency.totalAmount.toLocaleString()}</TableCell>
+                    <TableCell className="text-center border-r px-1 py-1 h-8 bg-gray-50">{agency.total}</TableCell>
+                    <TableCell className="text-center border-r px-1 py-1 h-8 bg-white-50">₹{agency.totalAmount.toLocaleString()}</TableCell>
                     
                     {/* Disconnected */}
-                    <TableCell className="text-center border-r px-0.1 bg-gray-50">{agency.disconnected}</TableCell>
-                    <TableCell className="text-center border-r px-0.1 bg-white">₹{agency.disconnectedAmount.toLocaleString()}</TableCell>
+                    <TableCell className="text-center border-r px-1 py-1 h-8 bg-gray-50">{agency.disconnected}</TableCell>
+                    <TableCell className="text-center border-r px-1 py-1 h-8 bg-white">₹{agency.disconnectedAmount.toLocaleString()}</TableCell>
                     
                     {/* Paid */}
-                    <TableCell className="text-center border-r px-0.1 bg-gray-50">{agency.paid}</TableCell>
-                    <TableCell className="text-center border-r px-0.1 bg-white-50">₹{agency.paidAmount.toLocaleString()}</TableCell>
+                    <TableCell className="text-center border-r px-1 py-1 h-8 bg-gray-50">{agency.paid}</TableCell>
+                    <TableCell className="text-center border-r px-1 py-1 h-8 bg-white-50">₹{agency.paidAmount.toLocaleString()}</TableCell>
                     
                     {/* Office Team */}
-                    <TableCell className="text-center border-r px-0.1 bg-gray-50">{agency.officeTeam}</TableCell>
-                    <TableCell className="text-center border-r px-0.1 bg-white">₹{agency.officeTeamAmount.toLocaleString()}</TableCell>
+                    <TableCell className="text-center border-r px-1 py-1 h-8 bg-gray-50">{agency.officeTeam}</TableCell>
+                    <TableCell className="text-center border-r px-1 py-1 h-8 bg-white">₹{agency.officeTeamAmount.toLocaleString()}</TableCell>
                     
                     {/* Bill Dispute */}
-                    <TableCell className="text-center border-r px-0.1 bg-gray-50">{agency.billDispute}</TableCell>
-                    <TableCell className="text-center border-r px-0.1 bg-white-50">₹{agency.billDisputeAmount.toLocaleString()}</TableCell>
+                    <TableCell className="text-center border-r px-1 py-1 h-8 bg-gray-50">{agency.billDispute}</TableCell>
+                    <TableCell className="text-center border-r px-1 py-1 h-8 bg-white-50">₹{agency.billDisputeAmount.toLocaleString()}</TableCell>
                     
                     {/* Not Found */}
-                    <TableCell className="text-center border-r px-0.1 bg-gray-50">{agency.notFound}</TableCell>
-                    <TableCell className="text-center border-r px-0.1 bg-white">₹{agency.notFoundAmount.toLocaleString()}</TableCell>
+                    <TableCell className="text-center border-r px-1 py-1 h-8 bg-gray-50">{agency.notFound}</TableCell>
+                    <TableCell className="text-center border-r px-1 py-1 h-8 bg-white">₹{agency.notFoundAmount.toLocaleString()}</TableCell>
 
                     {/* Not Attended */}
-                    <TableCell className="text-center border-r px-0.1 bg-gray-50">{agency.notAttended}</TableCell>
-                    <TableCell className="text-center border-r px-0.1 bg-white">₹{agency.notAttendedAmount.toLocaleString()}</TableCell>
+                    <TableCell className="text-center border-r px-1 py-1 h-8 bg-gray-50">{agency.notAttended}</TableCell>
+                    <TableCell className="text-center border-r px-1 py-1 h-8 bg-white">₹{agency.notAttendedAmount.toLocaleString()}</TableCell>
                     
                     {/* Performance */}
-                    <TableCell className={`text-center border-r px-0.1 font-medium ${getPerformanceColor(agency.performance)} bg-gray-50`}>
+                    <TableCell className={`text-center border-r px-1 py-1 h-8 font-medium ${getPerformanceColor(agency.performance)} bg-gray-50`}>
                       {(agency.performance).toFixed(1)}%
                     </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
               <TableFooter className="bg-gray-100 font-medium">
-                <TableRow className="border-b h-1">
-                  <TableCell className="border-r px-2 sticky left-0 text-xs">Total</TableCell>
-                  <TableCell className="text-center border-r px-0.1">{totalStats.total}</TableCell>
-                  <TableCell className="text-center border-r px-0.1">₹{totalStats.totalAmount.toLocaleString()}</TableCell>
-                  <TableCell className="text-center border-r px-0.1">{totalStats.disconnected}</TableCell>
-                  <TableCell className="text-center border-r px-0.1">₹{totalStats.disconnectedAmount.toLocaleString()}</TableCell>
-                  <TableCell className="text-center border-r px-0.1">{totalStats.paid}</TableCell>
-                  <TableCell className="text-center border-r px-0.1">₹{totalStats.paidAmount.toLocaleString()}</TableCell>
-                  <TableCell className="text-center border-r px-0.1">{totalStats.officeTeam}</TableCell>
-                  <TableCell className="text-center border-r px-0.1">₹{totalStats.officeTeamAmount.toLocaleString()}</TableCell>
-                  <TableCell className="text-center border-r px-0.1">{totalStats.billDispute}</TableCell>
-                  <TableCell className="text-center border-r px-0.1">₹{totalStats.billDisputeAmount.toLocaleString()}</TableCell>
-                  <TableCell className="text-center border-r px-0.1">{totalStats.notFound}</TableCell>
-                  <TableCell className="text-center border-r px-0.1">₹{totalStats.notFoundAmount.toLocaleString()}</TableCell>
-                  <TableCell className="text-center border-r px-0.1">{totalStats.notAttended}</TableCell>
-                  <TableCell className="text-center border-r px-0.1">₹{totalStats.notAttendedAmount.toLocaleString()}</TableCell>
-                  <TableCell className={`text-center border-r px-0.1 ${getPerformanceColor(totalPerformance)}`}>
+                <TableRow className="border-b h-8">
+                  <TableCell className="border-r px-2 py-1 sticky left-0 text-[10px] bg-gray-100 z-10 h-8">Total</TableCell>
+                  <TableCell className="text-center border-r px-1 py-1 h-8">{totalStats.total}</TableCell>
+                  <TableCell className="text-center border-r px-1 py-1 h-8">₹{totalStats.totalAmount.toLocaleString()}</TableCell>
+                  <TableCell className="text-center border-r px-1 py-1 h-8">{totalStats.disconnected}</TableCell>
+                  <TableCell className="text-center border-r px-1 py-1 h-8">₹{totalStats.disconnectedAmount.toLocaleString()}</TableCell>
+                  <TableCell className="text-center border-r px-1 py-1 h-8">{totalStats.paid}</TableCell>
+                  <TableCell className="text-center border-r px-1 py-1 h-8">₹{totalStats.paidAmount.toLocaleString()}</TableCell>
+                  <TableCell className="text-center border-r px-1 py-1 h-8">{totalStats.officeTeam}</TableCell>
+                  <TableCell className="text-center border-r px-1 py-1 h-8">₹{totalStats.officeTeamAmount.toLocaleString()}</TableCell>
+                  <TableCell className="text-center border-r px-1 py-1 h-8">{totalStats.billDispute}</TableCell>
+                  <TableCell className="text-center border-r px-1 py-1 h-8">₹{totalStats.billDisputeAmount.toLocaleString()}</TableCell>
+                  <TableCell className="text-center border-r px-1 py-1 h-8">{totalStats.notFound}</TableCell>
+                  <TableCell className="text-center border-r px-1 py-1 h-8">₹{totalStats.notFoundAmount.toLocaleString()}</TableCell>
+                  <TableCell className="text-center border-r px-1 py-1 h-8">{totalStats.notAttended}</TableCell>
+                  <TableCell className="text-center border-r px-1 py-1 h-8">₹{totalStats.notAttendedAmount.toLocaleString()}</TableCell>
+                  <TableCell className={`text-center border-r px-1 py-1 h-8 ${getPerformanceColor(totalPerformance)}`}>
                     {totalPerformance.toFixed(1)}%
                   </TableCell>
                 </TableRow>
