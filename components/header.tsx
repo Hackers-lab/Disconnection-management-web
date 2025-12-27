@@ -479,16 +479,14 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
               .meta { font-size: 10px; margin-bottom: 20px; color: #555; }
               .meta div { margin-bottom: 3px; }
               
-              /* Light Table Borders */
-              table { width: 100%; border-collapse: collapse; font-size: 10px; margin-bottom: 20px; }
-              th, td { border: 1px solid #e2e8f0; padding: 8px 4px; vertical-align: top; color: #444; }
-              th { text-align: left; background-color: #f8fafb; font-weight: 700; text-transform: uppercase; color: #1a1a1a; white-space: nowrap; }
+              /* Clean Table Styles (Matching Summary) */
+              table { width: 100%; border-collapse: collapse; font-size: 10px; margin-bottom: 20px; border-top: 2px solid #000; }
+              th { text-align: left; border: none; border-bottom: 1px solid #ccc; background: transparent; padding: 8px 4px; font-weight: 700; text-transform: uppercase; color: #000; white-space: nowrap; }
+              td { border: none; border-bottom: 1px solid #eee; padding: 8px 4px; vertical-align: top; color: #444; }
               
               .text-right { text-align: right; }
               .summary-section { margin-top: 30px; page-break-inside: avoid; }
-              .summary-table { width: auto; min-width: 50%; border-top: 2px solid #000; }
-              .summary-table th { border: none; border-bottom: 1px solid #ccc; background: transparent; padding: 6px; }
-              .summary-table td { border: none; border-bottom: 1px solid #eee; font-weight: 500; padding: 6px; }
+              .summary-table { width: auto; min-width: 50%; }
               
               .footer { margin-top: 60px; display: flex; justify-content: space-between; align-items: flex-end; font-size: 10px; color: #666; }
               .stamp-area { text-align: center; }
