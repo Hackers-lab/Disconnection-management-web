@@ -1,8 +1,9 @@
 "use client"
 
 
-import React, { useImperativeHandle, useRef } from "react"  
+import React, { useImperativeHandle, useRef, useMemo, useTransition } from "react"  
 import { useState, useEffect } from "react"
+import dynamic from "next/dynamic"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -53,11 +54,15 @@ import {
   UserX,
   HelpCircle,
 } from "lucide-react"
-import { ConsumerForm } from "./consumer-form"
-import { AdminPanel } from "./admin-panel"
 import { DashboardStats } from "./dashboard-stats"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import type { ConsumerData } from "@/lib/google-sheets"
+
+// Dynamically import heavy components to reduce initial bundle size
+const ConsumerForm = dynamic(() => import("./consumer-form").then((mod) => mod.ConsumerForm), {
+  loading: () => <div className="flex justify-center p-10"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div></div>
+})
+const AdminPanel = dynamic(() => import("./admin-panel").then((mod) => mod.AdminPanel))
 
 interface ConsumerListProps {
   userRole: string
@@ -158,6 +163,7 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
   const { userRole, userAgencies, onAdminClick, showAdminPanel, onCloseAdminPanel } = props
   const [consumers, setConsumers] = useState<ConsumerData[]>([])
   const [agencies, setAgencies] = useState<string[]>([])
+  const [isPending, startTransition] = useTransition()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState("")
@@ -219,6 +225,9 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
     const AGENCY_CACHE_KEY = "agencies_data_cache"
 
     async function processData(data: ConsumerData[], preloadedAgencies: string[] | null = null, isBackgroundUpdate = false) {
+      // Yield to main thread to prevent UI blocking during heavy processing
+      await new Promise(resolve => setTimeout(resolve, 0));
+
       // Merge local pending/error states with incoming network data to prevent "Silent Reversion"
       if (isBackgroundUpdate) {
         data = data.map(newC => {
@@ -308,7 +317,10 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
       ).sort()
       setMrus(uniqueMrus)
 
-      setConsumers(filteredData)
+      // Use transition to keep UI responsive during state update
+      startTransition(() => {
+        setConsumers(filteredData)
+      })
     }
 
     async function loadData() {
@@ -421,7 +433,7 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
   }
 
   // Advanced filtering logic
-  const filteredConsumers = consumers.filter((consumer) => {
+  const filteredConsumers = useMemo(() => consumers.filter((consumer) => {
     // Basic search term filter
     // Date range filter  
     function normalizeDate(dateValue: string | Date | null | undefined): string | null {
@@ -529,10 +541,10 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
       excludeDeemedDisconnection &&
       excludeTemproryDisconnected
     )
-  })
+  }), [consumers, searchTerm, filters, minOsd, excludeFilters, dateFilter])
 
   // Apply OSD sorting
-  const sortedConsumers = [...filteredConsumers].sort((a, b) => {
+  const sortedConsumers = useMemo(() => [...filteredConsumers].sort((a, b) => {
     // 1. Connected First
     const isConnectedA = (a.disconStatus || "").toLowerCase() === "connected"
     const isConnectedB = (b.disconStatus || "").toLowerCase() === "connected"
@@ -549,7 +561,7 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
     if (sortByOSD === "asc") return aOsd - bOsd
     if (sortByOSD === "desc") return bOsd - aOsd
     return 0
-  })
+  }), [filteredConsumers, sortByOSD])
 
     // Helper to ensure links work even if "https://" is missing in the sheet
   const getValidUrl = (url: string | undefined) => {
