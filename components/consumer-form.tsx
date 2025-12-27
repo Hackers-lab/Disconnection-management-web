@@ -248,12 +248,22 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
   const handleSubmit = async (e: React.FormEvent) => {
     if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
     e.preventDefault();
-    if (!statusChanged && !formData.reading && !formData.notes && !formData.imageUrl) {
-        if(formData.disconStatus === consumer.disconStatus) {
-             alert("Please select a status or add details before saving.");
-             return;
-        }
+
+    if (userRole !== "admin") {
+      if (!formData.imageUrl) {
+        alert("Please upload the image first.")
+        return
+      }
+      if ((formData.disconStatus === "disconnected" || formData.disconStatus === "bill dispute") && !formData.reading) {
+        alert("Meter reading is required.")
+        return
+      }
+      if ((formData.disconStatus === "bill dispute" || formData.disconStatus === "office team") && !formData.notes) {
+        alert("Remarks are required for Bill Dispute or Office Team status.")
+        return
+      }
     }
+
     const updatedConsumer: ConsumerData = {
       ...consumer,
       ...formData,
@@ -382,7 +392,9 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
 
             {/* Image Upload with Live Camera */}
             <div className="space-y-3 pt-2 border-t">
-                <Label className="text-xs font-bold text-gray-500 uppercase">Evidence (Auto-Watermarked)</Label>
+                <Label className="text-xs font-bold text-gray-500 uppercase">
+                  Evidence (Auto-Watermarked) {userRole !== "admin" && <span className="text-red-500">*</span>}
+                </Label>
                 
                 {/* Hidden File Input for Gallery */}
                 <input 
@@ -469,7 +481,7 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
             {/* Notes & Reading */}
             <div className="space-y-4 pt-2 border-t">
                 <div className="space-y-2">
-                    <Label>Meter Reading</Label>
+                    <Label>Meter Reading {userRole !== "admin" && (formData.disconStatus === "disconnected" || formData.disconStatus === "bill dispute") && <span className="text-red-500">*</span>}</Label>
                     <Input 
                         placeholder="Enter reading..." 
                         value={formData.reading} 
@@ -477,7 +489,7 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
                     />
                 </div>
                 <div className="space-y-2">
-                    <Label>Remarks</Label>
+                    <Label>Remarks {userRole !== "admin" && (formData.disconStatus === "bill dispute" || formData.disconStatus === "office team") && <span className="text-red-500">*</span>}</Label>
                     <Textarea 
                         placeholder="Any additional notes..." 
                         value={formData.notes} 
