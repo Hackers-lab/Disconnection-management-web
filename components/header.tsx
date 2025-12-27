@@ -710,17 +710,9 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-56">
-                  <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                  <DropdownMenuLabel>Downloads</DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   
-                  <DropdownMenuItem onClick={() => {
-                    if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
-                    setActiveView("home")
-                  }}>
-                    <LayoutDashboard className="mr-2 h-4 w-4" />
-                    <span>Dashboard</span>
-                  </DropdownMenuItem>
-
                   <DropdownMenuItem onClick={() => { 
                     if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
                     onDownload && onDownload() 
@@ -740,42 +732,50 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
                   )}
 
                   <DropdownMenuItem onClick={() => setShowReportDialog(true)}>
-                    <FileDown className="mr-2 h-4 w-4" />
+                    <Download className="mr-2 h-4 w-4" />
                     <span>Daily Report</span>
                   </DropdownMenuItem>
 
                   {canSeeAgencyUpdates && (
-                    <DropdownMenuItem onClick={handleUpload}>
-                      <List className="mr-2 h-4 w-4" />
-                      <span>Agency Updates</span>
-                    </DropdownMenuItem>
-                  )}
-
-                {userRole === "admin" && (
-                  <DropdownMenuItem onClick={() => {
-                    if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
-                    window.open("/api/sheet-redirect", "_blank")
-                  }}>
-                    <FileSpreadsheet className="mr-2 h-4 w-4" />
-                    <span>Edit DC List</span>
-                  </DropdownMenuItem>
-                )}
-
-                  {userRole === "admin" && onAdminClick && (
-                    <DropdownMenuItem onClick={() => {
-                        if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
-                        onAdminClick()
-                    }}>
-                      <Settings className="mr-2 h-4 w-4" />
-                      <span>Admin Settings</span>
-                    </DropdownMenuItem>
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuLabel>Updates</DropdownMenuLabel>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onClick={handleUpload}>
+                        <List className="mr-2 h-4 w-4" />
+                        <span>Agency Updates</span>
+                      </DropdownMenuItem>
+                    </>
                   )}
 
                   {userRole === "admin" && (
-                    <DropdownMenuItem onClick={handleGlobalRefresh}>
-                      <RefreshCw className="mr-2 h-4 w-4" />
-                      <span>Sync Fresh Data</span>
-                    </DropdownMenuItem>
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuLabel>Admin</DropdownMenuLabel>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onClick={() => {
+                        if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
+                        window.open("/api/sheet-redirect", "_blank")
+                      }}>
+                        <FileSpreadsheet className="mr-2 h-4 w-4" />
+                        <span>Edit DC List</span>
+                      </DropdownMenuItem>
+
+                      {onAdminClick && (
+                        <DropdownMenuItem onClick={() => {
+                            if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
+                            onAdminClick()
+                        }}>
+                          <Settings className="mr-2 h-4 w-4" />
+                          <span>Admin Settings</span>
+                        </DropdownMenuItem>
+                      )}
+
+                      <DropdownMenuItem onClick={handleGlobalRefresh}>
+                        <RefreshCw className="mr-2 h-4 w-4" />
+                        <span>Sync Fresh Data</span>
+                      </DropdownMenuItem>
+                    </>
                   )}
 
                   <DropdownMenuSeparator />

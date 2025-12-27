@@ -58,6 +58,11 @@ import { DashboardStats } from "./dashboard-stats"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import type { ConsumerData } from "@/lib/google-sheets"
 
+// Extend ConsumerData type to include sync status
+interface ConsumerDataWithSync extends ConsumerData {
+  _syncStatus?: 'syncing' | 'error'
+}
+
 // Dynamically import heavy components to reduce initial bundle size
 const ConsumerForm = dynamic(() => import("./consumer-form").then((mod) => mod.ConsumerForm), {
   loading: () => <div className="flex justify-center p-10"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div></div>
@@ -237,16 +242,6 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
           }
           return newC
         })
-      }
-
-      // Debug: Check for image property existence to help troubleshoot missing images
-      if (data.length > 0 && !isBackgroundUpdate) {
-        const sampleWithImage = data.find(c => c.imageUrl || (c as any).image);
-        if (sampleWithImage) {
-           console.log("📸 Image found in data for consumer:", sampleWithImage.consumerId);
-        } else {
-           console.log("⚠️ No 'imageUrl' or 'image' property found in data. Available keys:", Object.keys(data[0]));
-        }
       }
 
       // Extract unique baseClasses (ignore empty/null)
