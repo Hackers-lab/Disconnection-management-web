@@ -226,6 +226,11 @@ export default function DashboardClient({ role, agencies }: DashboardClientProps
     } else if (officeCode === "6612104") {
       heading = "Chanchal";
     }
+      else if (officeCode === "6612102") {
+      heading = "Samsi";
+    } else if (officeCode === "6612105") { 
+      heading = "Malatipur";
+    }
 
     const sections: { title: string; page: number }[] = [];
 

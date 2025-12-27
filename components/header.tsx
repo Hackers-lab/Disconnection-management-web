@@ -368,6 +368,19 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
              return parse(a.disconDate) - parse(b.disconDate)
           })
           
+          // Determine Office Name (CCC) based on offCode
+          const officeCode = items.length > 0 ? items[0].offCode : "";
+          let heading = "";
+          if (officeCode === "6612107") {
+            heading = "Kushida";
+          } else if (officeCode === "6612104") {
+            heading = "Chanchal";
+          } else if (officeCode === "6612102") {
+            heading = "Samsi";
+          } else if (officeCode === "6612105") { 
+            heading = "Malatipur";
+          }
+
           const { stats, total } = generateSummary(items)
           const desc = agencyDescriptions[agencyName] || "Disconnection & Recovery Services"
           const isLast = index === agencyKeys.length - 1
@@ -387,6 +400,7 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
                   <div class="report-title">DAILY DISCONNECTION REPORT</div>
                   <h1>${agencyName}</h1>
                   <h2>${desc}</h2>
+                  ${heading ? `<h3>Under ${heading} CCC</h3>` : ''}
                 </div>
                 
                 <div class="meta">
@@ -475,6 +489,7 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
               .header { text-align: center; margin-bottom: 40px; }
               .header h1 { font-size: 24px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; margin: 10px 0 0; color: #000; }
               .header h2 { font-size: 12px; font-weight: 500; text-transform: uppercase; letter-spacing: 2px; margin: 5px 0 0; color: #666; }
+              .header h3 { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; margin: 4px 0 0; color: #444; }
               .report-title { text-align: center; font-size: 16px; font-weight: 700; text-transform: uppercase; text-decoration: underline; text-underline-offset: 4px; margin: 0; letter-spacing: 1px; border: none; padding: 0; }
               .meta { font-size: 10px; margin-bottom: 20px; color: #555; }
               .meta div { margin-bottom: 3px; }
