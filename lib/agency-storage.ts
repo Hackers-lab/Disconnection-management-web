@@ -3,6 +3,11 @@ import { google } from "googleapis"
 const SHEET_ID = process.env.USERS_SHEET!
 const AGENCY_SHEET_NAME = "Agencies" // Change if your sheet name is different
 
+// Simple in-memory cache to reduce Google Sheets API calls
+let agenciesCache: any[] | null = null
+let lastCacheTime = 0
+const CACHE_TTL = 24 * 60 * 60 * 1000 // 24 hours (effectively server session)
+
 async function getSheetsClient() {
   const auth = new google.auth.GoogleAuth({
     credentials: {
@@ -15,6 +20,11 @@ async function getSheetsClient() {
 }
 
 export async function getAgencies() {
+  // Return cached data if valid
+  if (agenciesCache && (Date.now() - lastCacheTime < CACHE_TTL)) {
+    return agenciesCache
+  }
+
   const sheets = await getSheetsClient()
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId: SHEET_ID,
@@ -24,7 +34,7 @@ export async function getAgencies() {
   // Get all rows, including empty ones, to track real row numbers
   // Use sheets.spreadsheets.values.get to get all rows, then filter in-place
   let realRow = 2
-  return rows
+  const processed = rows
     .map(row => {
       const agency = row[0]
         ? {
@@ -39,6 +49,11 @@ export async function getAgencies() {
       return agency
     })
     .filter(Boolean)
+
+  // Update cache
+  agenciesCache = processed
+  lastCacheTime = Date.now()
+  return processed
 }
 
 export async function addAgency({ name, description, isActive }: { name: string; description: string; isActive: boolean }) {
@@ -53,6 +68,7 @@ export async function addAgency({ name, description, isActive }: { name: string;
       values: [[newId, name, description, isActive ? "true" : "false"]],
     },
   })
+  agenciesCache = null // Invalidate cache on write
   return { id: newId, name, description, isActive }
 }
 
@@ -69,6 +85,7 @@ export async function updateAgency({ id, name, description, isActive }: { id: st
       values: [[id, name, description, isActive ? "true" : "false"]],
     },
   })
+  agenciesCache = null // Invalidate cache on write
   return { id, name, description, isActive }
 }
 
@@ -81,5 +98,6 @@ export async function deleteAgency(id: string) {
     spreadsheetId: SHEET_ID,
     range: `${AGENCY_SHEET_NAME}!A${agency._sheetRow}:D${agency._sheetRow}`,
   })
+  agenciesCache = null // Invalidate cache on write
   return agency
 }
