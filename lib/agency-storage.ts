@@ -31,7 +31,7 @@ export async function getAgencies() {
             id: row[0],
             name: row[1],
             description: row[2],
-            isActive: row[3] === "true" || row[3] === true,
+            isActive: String(row[3]).toLowerCase() === "true" || row[3] === true,
             _sheetRow: realRow, // Track the actual sheet row number
           }
         : null

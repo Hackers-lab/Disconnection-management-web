@@ -17,15 +17,19 @@ import {
   MoreVertical, // New Icon for Mobile Menu
   FileDown,
   RefreshCw,
-  FileSpreadsheet
+  FileSpreadsheet,
+  FileText
 } from "lucide-react"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -36,6 +40,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { AppSidebar, ViewType } from "@/components/app-sidebar"
 import { useDashboard } from "@/components/dashboard-context"
+import { getAgencyDescription } from "@/app/actions/agency-details"
 
 // IndexedDB Helper Functions to handle caching
 const DB_NAME = "DisconnectionAppDB"
@@ -102,6 +107,14 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
   const [loading, setLoading] = useState(false)
   const [showDownloadMenu, setShowDownloadMenu] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [showReportDialog, setShowReportDialog] = useState(false)
+  const [reportDateRange, setReportDateRange] = useState({
+    from: new Date().toISOString().split('T')[0],
+    to: new Date().toISOString().split('T')[0]
+  })
+  const [reportAgency, setReportAgency] = useState<string>("All Agencies")
+  const [availableAgencies, setAvailableAgencies] = useState<string[]>(["All Agencies"])
+  const [cachedAgencyDescription, setCachedAgencyDescription] = useState<string | null>(null)
 
   // --- Date helpers ---
   const parseDate = (dateStr: string) => {
@@ -145,6 +158,34 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
     if (sameDay(d, yesterday)) return "bg-yellow-200 text-yellow-800";
     return "bg-red-200 text-red-800";
   };
+
+  // Fetch agencies for admin report selector
+  useEffect(() => {
+    if (userRole === "admin" && showReportDialog) {
+      const loadAgencies = async () => {
+        // 1. Try Cache first for immediate display
+        try {
+          const cached = await getFromCache<string[]>("agencies_data_cache")
+          if (cached && Array.isArray(cached)) {
+            setAvailableAgencies(["All Agencies", ...cached])
+          }
+        } catch (e) { /* ignore cache error */ }
+
+        // 2. Fetch Fresh from API
+        try {
+          const res = await fetch("/api/admin/agencies")
+          if (res.ok) {
+            const data = await res.json()
+            if (Array.isArray(data)) {
+              const names = data.filter((a: any) => a.isActive === true || String(a.isActive).toLowerCase() === 'true').map((a: any) => a.name)
+              setAvailableAgencies(["All Agencies", ...names])
+            }
+          }
+        } catch (e) { console.warn("Failed to fetch agencies", e) }
+      }
+      loadAgencies()
+    }
+  }, [userRole, showReportDialog])
 
   // --- Actions ---
   const handleLogout = async () => {
@@ -210,6 +251,285 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
       setLoading(false);
     }
   };
+
+  const handleGenerateReport = async () => {
+    if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
+    setLoading(true)
+    try {
+      // Fetch Agency Description
+      const targetAgency = userRole === "admin" ? reportAgency : (userAgencies.length === 1 ? userAgencies[0] : "All Agencies")
+      const agencyDescriptions: Record<string, string> = {}
+      
+      if (targetAgency === "All Agencies") {
+          try {
+             const res = await fetch("/api/admin/agencies")
+             if (res.ok) {
+                 const data = await res.json()
+                 data.forEach((a: any) => {
+                     if (a.name) agencyDescriptions[a.name] = a.description || "Disconnection & Recovery Services"
+                 })
+             }
+          } catch (e) { console.warn("Could not fetch agency descriptions", e) }
+      } else {
+          try {
+              const desc = await getAgencyDescription(targetAgency)
+              if (desc) agencyDescriptions[targetAgency] = desc
+          } catch (e) { console.warn(e) }
+      }
+
+      const cachedData = await getFromCache<any[]>("consumers_data_cache") || []
+      
+      const fromDate = new Date(reportDateRange.from)
+      fromDate.setHours(0, 0, 0, 0)
+      const toDate = new Date(reportDateRange.to)
+      toDate.setHours(23, 59, 59, 999)
+
+      const filtered = cachedData.filter(item => {
+        // Agency Check
+        if (targetAgency !== "All Agencies" && item.agency !== targetAgency) return false
+        if (userRole !== "admin" && targetAgency === "All Agencies") {
+             if (userAgencies.length > 0 && !userAgencies.includes(item.agency)) return false
+        }
+        
+        if (!item.disconDate) return false
+        
+        // Parse Date (DD-MM-YYYY or YYYY-MM-DD)
+        let d = null
+        if (item.disconDate.match(/^\d{2}-\d{2}-\d{4}$/)) {
+            const [day, month, year] = item.disconDate.split('-').map(Number)
+            d = new Date(year, month - 1, day)
+        } else if (item.disconDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
+            d = new Date(item.disconDate)
+        }
+        
+        if (!d || isNaN(d.getTime())) return false
+        
+        return d >= fromDate && d <= toDate
+      }).sort((a, b) => {
+         // Sort Old to New
+         const parse = (dateStr: string) => {
+             if (dateStr.match(/^\d{2}-\d{2}-\d{4}$/)) {
+                 const [day, month, year] = dateStr.split('-').map(Number)
+                 return new Date(year, month - 1, day).getTime()
+             }
+             return new Date(dateStr).getTime()
+         }
+         return parse(a.disconDate) - parse(b.disconDate)
+      })
+
+      if (filtered.length === 0) {
+          alert("No records found for this date range.")
+          setLoading(false)
+          return
+      }
+
+      // Group by Agency
+      const groupedData: Record<string, any[]> = {}
+      filtered.forEach(item => {
+          const agency = item.agency || "Unknown Agency"
+          if (!groupedData[agency]) groupedData[agency] = []
+          groupedData[agency].push(item)
+      })
+
+      const agencyKeys = Object.keys(groupedData).sort()
+
+      // Helper for summary
+      const generateSummary = (items: any[]) => {
+          const stats: Record<string, { count: number; amount: number }> = {}
+          let total = 0
+          items.forEach(item => {
+            const status = item.disconStatus || "Unknown"
+            if (!stats[status]) stats[status] = { count: 0, amount: 0 }
+            const amount = parseFloat(String(item.d2NetOS || "0").replace(/,/g, "")) || 0
+            stats[status].count++
+            stats[status].amount += amount
+            total += amount
+          })
+          return { stats, total }
+      }
+
+      // Print Window
+      const printWindow = window.open('', '_blank')
+      if (!printWindow) {
+          alert("Pop-up blocked. Please allow pop-ups.")
+          setLoading(false)
+          return
+      }
+
+      const reportContent = agencyKeys.map((agencyName, index) => {
+          const items = groupedData[agencyName].sort((a, b) => {
+             const parse = (dateStr: string) => {
+                 if (dateStr.match(/^\d{2}-\d{2}-\d{4}$/)) {
+                     const [day, month, year] = dateStr.split('-').map(Number)
+                     return new Date(year, month - 1, day).getTime()
+                 }
+                 return new Date(dateStr).getTime()
+             }
+             return parse(a.disconDate) - parse(b.disconDate)
+          })
+          
+          const { stats, total } = generateSummary(items)
+          const desc = agencyDescriptions[agencyName] || "Disconnection & Recovery Services"
+          const isLast = index === agencyKeys.length - 1
+
+          const formatDate = (d: string) => {
+             if (!d) return ""
+             if (d.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                 const [y, m, day] = d.split('-')
+                 return `${day}.${m}.${y}`
+             }
+             return d.replace(/-/g, '.')
+          }
+
+          return `
+            <div class="report-page ${!isLast ? 'page-break' : ''}">
+                <div class="header">
+                  <div class="report-title">DAILY DISCONNECTION REPORT</div>
+                  <h1>${agencyName}</h1>
+                  <h2>${desc}</h2>
+                </div>
+                
+                <div class="meta">
+                  <div><strong>Date Range:</strong> ${formatDate(reportDateRange.from)} to ${formatDate(reportDateRange.to)}</div>
+                  <div><strong>Total Records:</strong> ${items.length}</div>
+                </div>
+
+                <table>
+                  <thead>
+                    <tr>
+                      <th style="width: 30px;">#</th>
+                      <th>Consumer ID</th>
+                      <th>Name</th>
+                      <th style="text-align: right;">OSD (₹)</th>
+                      <th>Status</th>
+                      <th style="width: 70px;">Date</th>
+                      <th>Remarks</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${items.map((item, i) => `
+                      <tr>
+                        <td>${i + 1}</td>
+                        <td>${item.consumerId}</td>
+                        <td>${item.name}</td>
+                        <td style="text-align: right;">${Number(item.d2NetOS).toLocaleString()}</td>
+                        <td>${item.disconStatus}</td>
+                        <td>${formatDate(item.disconDate)}</td>
+                        <td>${item.notes || ''}</td>
+                      </tr>
+                    `).join('')}
+                  </tbody>
+                </table>
+
+                <div class="summary-section">
+                  <h3 style="font-size: 11px; margin-bottom: 10px; text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px;">Status Summary</h3>
+                  <table class="summary-table">
+                    <thead>
+                      <tr>
+                        <th>Metric</th>
+                        ${Object.keys(stats).sort().map(status => `<th class="text-right" style="text-transform: capitalize;">${status}</th>`).join('')}
+                        <th class="text-right" style="font-weight: 800;">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td><strong>Count</strong></td>
+                        ${Object.keys(stats).sort().map(status => `
+                          <td class="text-right">${stats[status].count}</td>
+                        `).join('')}
+                        <td class="text-right" style="font-weight: 800;">${items.length}</td>
+                      </tr>
+                      <tr>
+                        <td><strong>Amount</strong></td>
+                        ${Object.keys(stats).sort().map(status => `
+                          <td class="text-right">${stats[status].amount.toLocaleString()}</td>
+                        `).join('')}
+                        <td class="text-right" style="font-weight: 800;">${total.toLocaleString()}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <div class="footer">
+                  <div>
+                    <p>Generated on: ${new Date().toLocaleString()}</p>
+                  </div>
+                  <div class="stamp-area">
+                    <div class="stamp-box">Stamp</div>
+                    <p><strong>Authorised Signatory</strong></p>
+                  </div>
+                </div>
+            </div>
+          `
+      }).join('')
+
+      printWindow.document.write(`
+        <html>
+          <head>
+            <title>Daily Disconnection Report</title>
+            <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+            <style>
+              body { font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; padding: 40px; color: #333; }
+              .report-page { margin-bottom: 40px; }
+              .page-break { page-break-after: always; }
+              .header { text-align: center; margin-bottom: 40px; }
+              .header h1 { font-size: 24px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; margin: 10px 0 0; color: #000; }
+              .header h2 { font-size: 12px; font-weight: 500; text-transform: uppercase; letter-spacing: 2px; margin: 5px 0 0; color: #666; }
+              .report-title { text-align: center; font-size: 16px; font-weight: 700; text-transform: uppercase; text-decoration: underline; text-underline-offset: 4px; margin: 0; letter-spacing: 1px; border: none; padding: 0; }
+              .meta { font-size: 10px; margin-bottom: 20px; color: #555; }
+              .meta div { margin-bottom: 3px; }
+              
+              /* Light Table Borders */
+              table { width: 100%; border-collapse: collapse; font-size: 10px; margin-bottom: 20px; }
+              th, td { border: 1px solid #e2e8f0; padding: 8px 4px; vertical-align: top; color: #444; }
+              th { text-align: left; background-color: #f8fafb; font-weight: 700; text-transform: uppercase; color: #1a1a1a; white-space: nowrap; }
+              
+              .text-right { text-align: right; }
+              .summary-section { margin-top: 30px; page-break-inside: avoid; }
+              .summary-table { width: auto; min-width: 50%; border-top: 2px solid #000; }
+              .summary-table th { border: none; border-bottom: 1px solid #ccc; background: transparent; padding: 6px; }
+              .summary-table td { border: none; border-bottom: 1px solid #eee; font-weight: 500; padding: 6px; }
+              
+              .footer { margin-top: 60px; display: flex; justify-content: space-between; align-items: flex-end; font-size: 10px; color: #666; }
+              .stamp-area { text-align: center; }
+              .stamp-box { width: 120px; height: 60px; border: 1px dashed #ccc; margin-bottom: 5px; display: flex; align-items: center; justify-content: center; color: #ccc; font-size: 9px; }
+              @media print {
+                @page { size: A4 portrait; margin: 10mm; }
+                .no-print { display: none; }
+                .page-break { page-break-after: always; }
+              }
+            </style>
+          </head>
+          <body>
+            <div id="report-content">
+              ${reportContent}
+            </div>
+            <script>
+              window.onload = function() { 
+                const element = document.getElementById('report-content');
+                const opt = {
+                  margin: 10,
+                  filename: 'Daily_Disconnection_Report.pdf',
+                  image: { type: 'jpeg', quality: 0.98 },
+                  html2canvas: { scale: 2 },
+                  jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+                };
+                html2pdf().set(opt).from(element).save();
+              }
+            </script>
+          </body>
+        </html>
+      `)
+      printWindow.document.close()
+
+    } catch (e) {
+      console.error(e)
+      alert("Failed to generate report")
+    } finally {
+      setLoading(false)
+      setShowReportDialog(false)
+    }
+  }
 
   // Helper variables for permissions
   const canSeeAgencyUpdates = userRole === "admin" || userRole === "executive" || userRole === "viewer" || userRole === "agency";
@@ -292,6 +612,17 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
                       }}
                     >
                       Download DC List
+                    </button>
+                    <button
+                      type="button"
+                      className="block w-full text-left px-4 py-2 hover:bg-blue-50 text-sm"
+                      onClick={() => {
+                        if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
+                        setShowDownloadMenu(false);
+                        setShowReportDialog(true);
+                      }}
+                    >
+                      Daily Report (PDF)
                     </button>
                     {canDownloadDefaulters && (
                     <button
@@ -407,6 +738,11 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
                       <span>Top Defaulter List</span>
                     </DropdownMenuItem>
                   )}
+
+                  <DropdownMenuItem onClick={() => setShowReportDialog(true)}>
+                    <FileDown className="mr-2 h-4 w-4" />
+                    <span>Daily Report</span>
+                  </DropdownMenuItem>
 
                   {canSeeAgencyUpdates && (
                     <DropdownMenuItem onClick={handleUpload}>
@@ -535,6 +871,46 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
               Close
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Daily Report Dialog */}
+      <Dialog open={showReportDialog} onOpenChange={setShowReportDialog}>
+        <DialogContent className="max-w-md rounded-xl">
+            <DialogHeader>
+                <DialogTitle>Generate Daily Report</DialogTitle>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+                {userRole === "admin" && (
+                  <div className="space-y-2">
+                    <Label>Select Agency</Label>
+                    <Select value={reportAgency} onValueChange={setReportAgency}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select Agency" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {availableAgencies.map((agency) => (
+                          <SelectItem key={agency} value={agency}>{agency}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                        <Label>From Date</Label>
+                        <Input type="date" value={reportDateRange.from} onChange={(e) => setReportDateRange({...reportDateRange, from: e.target.value})} />
+                    </div>
+                    <div className="space-y-2">
+                        <Label>To Date</Label>
+                        <Input type="date" value={reportDateRange.to} onChange={(e) => setReportDateRange({...reportDateRange, to: e.target.value})} />
+                    </div>
+                </div>
+                <Button onClick={handleGenerateReport} disabled={loading} className="w-full bg-blue-600 hover:bg-blue-700">
+                    {loading ? "Generating..." : "Print Report"}
+                </Button>
+            </div>
         </DialogContent>
       </Dialog>
 
