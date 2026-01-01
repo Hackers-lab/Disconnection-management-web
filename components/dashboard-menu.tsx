@@ -15,7 +15,7 @@ import {
   RadioTower
 } from "lucide-react"
 import { ViewType } from "@/components/app-sidebar"
-import { getFromCache } from "@/lib/indexed-db"
+import { getFromCache, saveToCache } from "@/lib/indexed-db"
 
 interface DashboardMenuProps {
   onSelect: (module: ViewType) => void
@@ -36,7 +36,8 @@ export function DashboardMenu({ onSelect, userRole, userAgencies = [] }: Dashboa
       color: "text-red-600",
       bgColor: "bg-red-50",
       borderColor: "hover:border-red-200",
-      allowed: ["all"]
+      allowed: ["all"],
+      status: "live"
     },
     {
       id: "reconnection",
@@ -46,7 +47,8 @@ export function DashboardMenu({ onSelect, userRole, userAgencies = [] }: Dashboa
       color: "text-blue-600",
       bgColor: "bg-blue-50",
       borderColor: "hover:border-blue-200",
-      allowed: ["admin", "executive", "agency"]
+      allowed: ["admin", "executive", "agency"],
+      status: "soon"
     },
     {
       id: "deemed",
@@ -56,7 +58,8 @@ export function DashboardMenu({ onSelect, userRole, userAgencies = [] }: Dashboa
       color: "text-orange-600",
       bgColor: "bg-orange-50",
       borderColor: "hover:border-orange-200",
-      allowed: ["admin", "executive", "agency"]
+      allowed: ["admin", "executive", "agency"],
+      status: "live"
     },
     {
       id: "dtr",
@@ -66,7 +69,8 @@ export function DashboardMenu({ onSelect, userRole, userAgencies = [] }: Dashboa
       color: "text-orange-600",
       bgColor: "bg-orange-50",
       borderColor: "hover:border-orange-200",
-      allowed: ["admin", "executive", "agency"]
+      allowed: ["admin", "executive", "agency"],
+      status: "soon"
     },
     {
       id: "nsc",
@@ -76,7 +80,8 @@ export function DashboardMenu({ onSelect, userRole, userAgencies = [] }: Dashboa
       color: "text-green-600",
       bgColor: "bg-green-50",
       borderColor: "hover:border-green-200",
-      allowed: ["admin", "executive"]
+      allowed: ["admin", "executive"],
+      status: "soon"
     },
     {
       id: "admin",
@@ -86,7 +91,8 @@ export function DashboardMenu({ onSelect, userRole, userAgencies = [] }: Dashboa
       color: "text-gray-600",
       bgColor: "bg-gray-50",
       borderColor: "hover:border-gray-300",
-      allowed: ["admin"]
+      allowed: ["admin"],
+      status: "active"
     }
   ]
 
@@ -94,8 +100,20 @@ export function DashboardMenu({ onSelect, userRole, userAgencies = [] }: Dashboa
     async function loadPendingCount() {
       try {
         // Disconnection Count
-        const data = await getFromCache<ConsumerData[]>("consumers_data_cache")
-        if (!data) return
+        let data = await getFromCache<ConsumerData[]>("consumers_data_cache")
+        
+        // Auto-fetch if cache is empty (ensures count shows on first login)
+        if (!data || data.length === 0) {
+          try {
+            const res = await fetch("/api/consumers/base")
+            if (res.ok) {
+              data = await res.json()
+              if (data) await saveToCache("consumers_data_cache", data)
+            }
+          } catch (err) { console.error("Auto-fetch consumers failed", err) }
+        }
+
+        if (!data) data = []
 
         const count = data.filter(c => {
           // Count only "Connected" status (Pending Disconnection)
@@ -115,7 +133,19 @@ export function DashboardMenu({ onSelect, userRole, userAgencies = [] }: Dashboa
         setPendingCount(count)
 
         // Deemed Visit Count
-        const ddData = await getFromCache<DeemedVisitData[]>("dd_data_cache")
+        let ddData = await getFromCache<DeemedVisitData[]>("dd_data_cache")
+        
+        // Auto-fetch if cache is empty
+        if (!ddData || ddData.length === 0) {
+          try {
+            const res = await fetch("/api/dd/base")
+            if (res.ok) {
+              ddData = await res.json()
+              if (ddData) await saveToCache("dd_data_cache", ddData)
+            }
+          } catch (err) { console.error("Auto-fetch DD failed", err) }
+        }
+
         if (ddData) {
           const ddCount = ddData.filter(d => {
             const isPending = (d.disconStatus || "").toLowerCase() === "deemed disconnected"
@@ -197,6 +227,18 @@ export function DashboardMenu({ onSelect, userRole, userAgencies = [] }: Dashboa
                 <div className="hidden md:flex items-center text-sm font-medium text-blue-600 opacity-0 transform translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300">
                   Access Module <ArrowRight className="ml-2 h-4 w-4" />
                 </div>
+
+                {/* LIVE / Coming Soon Indicators */}
+                {module.status === "live" && (
+                  <div className="absolute bottom-2 right-2 md:bottom-3 md:right-3">
+                    <span className="text-[9px] font-extrabold text-green-600 tracking-widest animate-pulse drop-shadow-[0_0_6px_rgba(34,197,94,0.8)]">LIVE</span>
+                  </div>
+                )}
+                {module.status === "soon" && (
+                  <div className="absolute bottom-2 right-2 md:bottom-3 md:right-3">
+                    <span className="text-[8px] font-bold text-gray-400 tracking-wider bg-gray-100 px-1.5 py-0.5 rounded-full border border-gray-200">COMING SOON</span>
+                  </div>
+                )}
               </CardContent>
             </Card>
           )

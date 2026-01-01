@@ -29,7 +29,7 @@ export async function fetchDDData(): Promise<DeemedVisitData[]> {
   }
 
   try {
-    const res = await fetch(url, { next: { revalidate: 300 } })
+    const res = await fetch(url, { next: { revalidate: 10 } })
     if (!res.ok) throw new Error(`Failed to fetch CSV: ${res.statusText}`)
     
     const text = await res.text()

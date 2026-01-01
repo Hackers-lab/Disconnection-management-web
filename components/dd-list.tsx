@@ -60,6 +60,7 @@ interface DDListProps {
 export function DDList({ userRole, userAgencies }: DDListProps) {
   const [consumers, setConsumers] = useState<DeemedVisitData[]>([])
   const [loading, setLoading] = useState(true)
+  const [isSyncing, setIsSyncing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState("")
   const [isPending, startTransition] = useTransition()
@@ -262,6 +263,40 @@ export function DDList({ userRole, userAgencies }: DDListProps) {
     if ((consumer.disconStatus || "Deemed Disconnected").toLowerCase() !== "deemed disconnected") return true
     
     return false
+  }
+
+  // --- Manual Sync Handler ---
+  const handleSync = async () => {
+    if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
+    setIsSyncing(true)
+    try {
+      // Force fetch base data
+      const res = await fetch("/api/dd/base", { cache: 'no-store' })
+      if (!res.ok) throw new Error("Failed to fetch data")
+      const data = await res.json()
+      
+      // Update Cache
+      const today = new Date().toISOString().split("T")[0]
+      await saveToCache("dd_data_cache", data)
+      await saveToCache("dd_base_date", today)
+      
+      // Update State
+      setConsumers(data)
+      consumersRef.current = data
+      
+      // Re-calculate base classes
+      const uniqueBaseClasses = Array.from(
+        new Set(
+          data.map((c: DeemedVisitData) => (c.baseClass || "").toUpperCase().trim()).filter((bc: string) => bc !== "")
+        )
+      ).sort()
+      setBaseClasses(uniqueBaseClasses as string[])
+      
+    } catch (e) {
+      console.error("Sync failed", e)
+    } finally {
+      setIsSyncing(false)
+    }
   }
 
   // Helper to ensure links work even if "https://" is missing
@@ -504,8 +539,18 @@ export function DDList({ userRole, userAgencies }: DDListProps) {
             </Button>
           </div>
         </div>
-        <div className="mt-2 text-xs text-gray-500">
-          {filteredConsumers.length} records found
+        <div className="mt-2 flex justify-start items-center gap-4 text-xs text-gray-500">
+          <span>{filteredConsumers.length} records found</span>
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            className="h-6 px-2 text-xs hover:bg-gray-100 text-blue-600"
+            onClick={handleSync}
+            disabled={isSyncing}
+          >
+            <RefreshCw className={`h-3 w-3 mr-1 ${isSyncing ? "animate-spin" : ""}`} />
+            {isSyncing ? "Syncing..." : "Sync Now"}
+          </Button>
         </div>
       </div>
 
