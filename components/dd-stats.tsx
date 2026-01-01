@@ -186,7 +186,7 @@ export function DDStats({ consumers, loading = false }: DDStatsProps) {
             <CardContent className="p-3 flex items-center justify-between">
                <div className="flex items-center gap-2">
                  <TrendingUp className="h-4 w-4 text-purple-600" />
-                 <span className="text-sm font-medium text-gray-700">Total Portfolio Value</span>
+                 <span className="text-sm font-medium text-gray-700">Total OSD</span>
                </div>
                <span className="text-lg font-bold text-purple-700">₹{stats.totalTarget.toLocaleString()}</span>
             </CardContent>

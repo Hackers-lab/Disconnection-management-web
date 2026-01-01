@@ -288,9 +288,10 @@ export function DDForm({ consumer, onSave, onCancel, userRole }: DDFormProps) {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="Deemed Disconnected">Deemed Disconnected (Default)</SelectItem>
-                  <SelectItem value="Physically LIVE">Physically LIVE</SelectItem>
-                  <SelectItem value="DISCONNECTED BUT enjoying power from nearest house">DISCONNECTED BUT enjoying power from nearest house</SelectItem>
-                  <SelectItem value="Not found">Not found</SelectItem>
+                  <SelectItem value="Connected (Meter Running)">Connected (Meter Running)</SelectItem>
+                  <SelectItem value="Disconnected">Disconnected</SelectItem>
+                  <SelectItem value="Disconnected (Using Neighbor Source)">Disconnected (Using Neighbor Source)</SelectItem>
+                  <SelectItem value="Consumer Not Found">Consumer Not Found</SelectItem>
                   <SelectItem value="Premises Locked">Premises Locked</SelectItem>
                   <SelectItem value="Permanently Disconnected">Permanently Disconnected</SelectItem>
                 </SelectContent>
