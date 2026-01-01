@@ -163,6 +163,10 @@ function useBackNavigation(isOpen: boolean, onClose: () => void) {
   }, [isOpen])
 }
 
+// Global variable to track last sync time across unmounts/remounts (SPA navigation)
+let globalLastSyncTime = 0
+const SYNC_COOLDOWN_MS = 60000 // 60 seconds cooldown
+
 const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
   (props, ref) => {
   const { userRole, userAgencies, onAdminClick, showAdminPanel, onCloseAdminPanel } = props
@@ -224,10 +228,14 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
   useEffect(() => {
     consumersRef.current = consumers
   }, [consumers])
+
+  // Memoize agencies key to prevent unnecessary effect triggers on array reference changes
+  const agenciesKey = useMemo(() => JSON.stringify(userAgencies), [userAgencies])
           
   useEffect(() => {
     const CACHE_KEY = "consumers_data_cache"
     const AGENCY_CACHE_KEY = "agencies_data_cache"
+    const BASE_DATE_KEY = "consumers_base_date"
 
     async function processData(data: ConsumerData[], preloadedAgencies: string[] | null = null, isBackgroundUpdate = false) {
       // Yield to main thread to prevent UI blocking during heavy processing
@@ -319,85 +327,107 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
     }
 
     async function loadData() {
-      // Try to load from cache first
+      setLoading(true)
+      setError(null)
+
       let cachedLoaded = false
+      let currentData: ConsumerData[] = []
+
       try {
-        // Use IndexedDB instead of localStorage
-        const cachedConsumers = await getFromCache<ConsumerData[]>(CACHE_KEY)
+        // 1. Check IndexedDB for Base Data
+        currentData = await getFromCache<ConsumerData[]>(CACHE_KEY) || []
+        const cachedDate = await getFromCache<string>(BASE_DATE_KEY)
+        const today = new Date().toISOString().split("T")[0]
         
         let cachedAgencies: string[] | null = null
         if (userRole === "admin" || userRole === "viewer") {
           cachedAgencies = await getFromCache<string[]>(AGENCY_CACHE_KEY)
         }
 
-        if (cachedConsumers && Array.isArray(cachedConsumers) && cachedConsumers.length > 0) {
+        // Initial render with cached data if available (Optimistic UI)
+        if (currentData.length > 0) {
           console.log("✅ [Cache Hit] Loaded from IndexedDB")
-          await processData(cachedConsumers, cachedAgencies, false)
+          await processData(currentData, cachedAgencies, false)
           setLoading(false)
           cachedLoaded = true
           setIsCachedData(true)
         }
-      } catch (e) {
-        console.error("Cache load failed", e)
-      }
 
-      // If cache was loaded successfully, stop here to prevent network refresh
-      // Check if we have already synced with the network in this browser session
-      const isSessionSynced = sessionStorage.getItem("consumers_synced_session")
-      if (cachedLoaded && isSessionSynced) return
+        // 2. Determine if we need to fetch Base (Missing or Stale)
+        const needsBaseFetch = !currentData.length || cachedDate !== today
 
-      if (!cachedLoaded) setLoading(true)
-      else setIsBackgroundUpdating(true)
-      setError(null)
-
-      try {
-        console.log("🔄 [Network] Fetching fresh data...")
-        // Load consumers
-        const promises: Promise<Response>[] = [
-          fetch("/api/consumers", {
-            method: "GET",
-            headers: { "Content-Type": "application/json" },
-            cache: "no-store",
-          })
-        ]
-
-        // Parallel fetch for agencies if admin
-        if (userRole === "admin" || userRole === "viewer") {
-          promises.push(fetch("/api/admin/agencies"))
+        // 3. Check Cooldown (Prevent double-fetch or rapid re-fetch on navigation)
+        const now = Date.now()
+        if (cachedLoaded && !needsBaseFetch && (now - globalLastSyncTime < SYNC_COOLDOWN_MS)) {
+          console.log("⏳ Sync skipped (cooldown active)")
+          setLoading(false)
+          return
         }
 
-        const responses = await Promise.all(promises)
-        const consumersResponse = responses[0]
-
-        if (!consumersResponse.ok) {
-          throw new Error(`API Error: ${consumersResponse.status}`)
+        if (needsBaseFetch) {
+          if (!cachedLoaded) setLoading(true)
+          else setIsBackgroundUpdating(true)
+          
+          console.log("⬇️ Fetching Base Data (Full Download)...")
+          const baseResponse = await fetch("/api/consumers/base")
+          
+          if (!baseResponse.ok) throw new Error(`Base API Error: ${baseResponse.status}`)
+          
+          const baseData: ConsumerData[] = await baseResponse.json()
+          currentData = baseData
+          
+          // Save Base to Cache
+          await saveToCache(CACHE_KEY, baseData)
+          await saveToCache(BASE_DATE_KEY, today)
+          
+          globalLastSyncTime = Date.now() // Update sync time
+          
+          // Update UI with fresh base
+          await processData(baseData, cachedAgencies, cachedLoaded)
         }
 
-        const data: ConsumerData[] = await consumersResponse.json()
-        console.log("✅ [Network] Downloaded fresh data")
-        sessionStorage.setItem("consumers_synced_session", "true")
-
-        // Handle Agencies
-        let freshAgencies: string[] | null = null
-        if (userRole === "admin" || userRole === "viewer") {
-          if (responses[1] && responses[1].ok) {
-            const agencyData = await responses[1].json()
-            freshAgencies = agencyData.filter((a: any) => a.isActive).map((a: any) => a.name)
-            // Cache agencies
-            await saveToCache(AGENCY_CACHE_KEY, freshAgencies)
+        // 4. ALWAYS fetch Patch (Delta Sync)
+        if (cachedLoaded && !needsBaseFetch) setIsBackgroundUpdating(true)
+        globalLastSyncTime = Date.now() // Mark sync start
+        
+        console.log("🩹 Fetching Patch Data (Delta Sync)...")
+        const patchResponse = await fetch("/api/consumers/patch")
+        
+        if (patchResponse.ok) {
+          const patchData: ConsumerData[] = await patchResponse.json()
+          
+          if (patchData.length > 0) {
+            console.log(`🔀 Merging ${patchData.length} patch updates...`)
+            
+            // 5. Merge Patch into Base
+            // Create a map for faster lookup/upsert
+            const dataMap = new Map(currentData.map(c => [c.consumerId, c]))
+            
+            patchData.forEach(patchItem => {
+              dataMap.set(patchItem.consumerId, patchItem)
+            })
+            
+            const mergedData = Array.from(dataMap.values())
+            
+            // 6. Update State and Cache
+            await saveToCache(CACHE_KEY, mergedData)
+            await processData(mergedData, cachedAgencies, true)
+          } else {
+            console.log("✨ No new patches found")
           }
         }
 
-        // Update cache
-        try {
-          await saveToCache(CACHE_KEY, data)
-        } catch (e) {
-          console.warn("Cache save failed", e)
+        // Handle Agencies Refresh (Admin/Viewer) 
+        // Only fetch if missing from cache OR if we just did a full Base sync (daily refresh)
+        if ((userRole === "admin" || userRole === "viewer") && (!cachedAgencies || needsBaseFetch)) {
+           const agenciesRes = await fetch("/api/admin/agencies")
+           if (agenciesRes.ok) {
+             const agencyData = await agenciesRes.json()
+             const freshAgencies = agencyData.filter((a: any) => a.isActive).map((a: any) => a.name)
+             await saveToCache(AGENCY_CACHE_KEY, freshAgencies)
+             setAgencies(freshAgencies)
+          }
         }
-
-        // Process fresh data (pass true if we already loaded cache to avoid resetting UI state like slider)
-        await processData(data, freshAgencies, cachedLoaded)
-        setIsCachedData(false)
 
       } catch (error) {
         console.error("💥 Error loading data:", error)
@@ -411,7 +441,7 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
     }
 
     loadData()
-  }, [userRole, userAgencies])
+  }, [userRole, agenciesKey]) // Use stable key instead of array reference
 
   const clearCache = async () => {
     if (confirm("Are you sure you want to clear the cache and reload?")) {
