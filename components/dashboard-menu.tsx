@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import type { ConsumerData } from "@/lib/google-sheets"
+import type { DeemedVisitData } from "@/lib/dd-service"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { 
   Zap,             // Disconnection
@@ -24,6 +25,7 @@ interface DashboardMenuProps {
 
 export function DashboardMenu({ onSelect, userRole, userAgencies = [] }: DashboardMenuProps) {
   const [pendingCount, setPendingCount] = useState<number>(0)
+  const [ddPendingCount, setDdPendingCount] = useState<number>(0)
   
   const modules = [
     {
@@ -91,6 +93,7 @@ export function DashboardMenu({ onSelect, userRole, userAgencies = [] }: Dashboa
   useEffect(() => {
     async function loadPendingCount() {
       try {
+        // Disconnection Count
         const data = await getFromCache<ConsumerData[]>("consumers_data_cache")
         if (!data) return
 
@@ -110,6 +113,23 @@ export function DashboardMenu({ onSelect, userRole, userAgencies = [] }: Dashboa
         }).length
 
         setPendingCount(count)
+
+        // Deemed Visit Count
+        const ddData = await getFromCache<DeemedVisitData[]>("dd_data_cache")
+        if (ddData) {
+          const ddCount = ddData.filter(d => {
+            const isPending = (d.disconStatus || "").toLowerCase() === "deemed disconnected"
+            if (!isPending) return false
+
+            if (userRole === "admin" || userRole === "viewer") return true
+            
+            const agency = (d.agency || "").trim().toUpperCase()
+            const safeAgencies = userAgencies || []
+            const userAgenciesUpper = safeAgencies.map(a => a.trim().toUpperCase())
+            return userAgenciesUpper.includes(agency)
+          }).length
+          setDdPendingCount(ddCount)
+        }
       } catch (e) {
         console.error("Failed to load pending count", e)
       }
@@ -129,7 +149,7 @@ export function DashboardMenu({ onSelect, userRole, userAgencies = [] }: Dashboa
         </div>
       </div>
       
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-6">
         {modules.map((module) => {
           if (module.allowed[0] !== "all" && !module.allowed.includes(userRole)) return null
 
@@ -146,28 +166,35 @@ export function DashboardMenu({ onSelect, userRole, userAgencies = [] }: Dashboa
             >
               {/* Pending Disconnection Badge */}
               {module.id === "disconnection" && pendingCount > 0 && (
-                <div className="absolute top-4 right-4 z-20 flex items-center justify-center bg-red-600 text-white text-xs font-bold px-3 py-1 rounded-full shadow-lg animate-in fade-in zoom-in duration-300 border-2 border-white">
-                  {pendingCount} Pending
+                <div className="absolute top-2 right-2 md:top-4 md:right-4 z-20 flex items-center justify-center bg-red-600 text-white text-[10px] md:text-xs font-bold px-1.5 py-0.5 md:px-3 md:py-1 rounded-full shadow-lg animate-in fade-in zoom-in duration-300 border-2 border-white">
+                  {pendingCount} <span className="hidden sm:inline ml-1">Pending</span>
                 </div>
               )}
 
-              <div className={`absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity duration-300`}>
-                 <Icon className={`h-24 w-24 ${module.color}`} />
+              {/* Deemed Visit Pending Badge */}
+              {module.id === "deemed" && ddPendingCount > 0 && (
+                <div className="absolute top-2 right-2 md:top-4 md:right-4 z-20 flex items-center justify-center bg-red-600 text-white text-[10px] md:text-xs font-bold px-1.5 py-0.5 md:px-3 md:py-1 rounded-full shadow-lg animate-in fade-in zoom-in duration-300 border-2 border-white">
+                  {ddPendingCount} <span className="hidden sm:inline ml-1">Pending</span>
+                </div>
+              )}
+
+              <div className={`absolute top-0 right-0 p-2 md:p-4 opacity-10 group-hover:opacity-20 transition-opacity duration-300`}>
+                 <Icon className={`h-16 w-16 md:h-24 md:w-24 ${module.color}`} />
               </div>
 
-              <CardHeader className="relative pb-2">
-                <div className={`w-12 h-12 rounded-xl ${module.bgColor} flex items-center justify-center mb-4 transition-transform duration-300 group-hover:scale-110`}>
-                  <Icon className={`h-6 w-6 ${module.color}`} />
+              <CardHeader className="relative pb-2 p-3 md:p-6">
+                <div className={`w-10 h-10 md:w-12 md:h-12 rounded-lg md:rounded-xl ${module.bgColor} flex items-center justify-center mb-2 md:mb-4 transition-transform duration-300 group-hover:scale-110`}>
+                  <Icon className={`h-5 w-5 md:h-6 md:w-6 ${module.color}`} />
                 </div>
-                <CardTitle className="text-xl font-semibold text-gray-900 group-hover:text-blue-600 transition-colors">
+                <CardTitle className="text-sm md:text-xl font-semibold text-gray-900 group-hover:text-blue-600 transition-colors">
                   {module.title}
                 </CardTitle>
               </CardHeader>
-              <CardContent className="relative">
-                <p className="text-sm text-gray-500 mb-4 line-clamp-2">
+              <CardContent className="relative p-3 pt-0 md:p-6 md:pt-0">
+                <p className="text-xs md:text-sm text-gray-500 mb-2 md:mb-4 line-clamp-2">
                   {module.description}
                 </p>
-                <div className="flex items-center text-sm font-medium text-blue-600 opacity-0 transform translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300">
+                <div className="hidden md:flex items-center text-sm font-medium text-blue-600 opacity-0 transform translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300">
                   Access Module <ArrowRight className="ml-2 h-4 w-4" />
                 </div>
               </CardContent>

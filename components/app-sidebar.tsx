@@ -11,7 +11,9 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from "@/components/ui/sheet"
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { getFromCache } from "@/lib/indexed-db"
+import { Badge } from "@/components/ui/badge"
 
 // Define the available views
 export type ViewType = "disconnection" | "reconnection" | "deemed" | "nsc" | "admin" | "home"
@@ -21,10 +23,48 @@ interface AppSidebarProps {
   setActiveView: (view: ViewType | "home") => void
   userRole: string
   isMobile?: boolean
+  agencies?: string[]
 }
 
-export function AppSidebar({ activeView, setActiveView, userRole, isMobile = false }: AppSidebarProps) {
+export function AppSidebar({ activeView, setActiveView, userRole, isMobile = false, agencies = [] }: AppSidebarProps) {
   const [open, setOpen] = useState(false)
+  const [ddPendingCount, setDdPendingCount] = useState(0)
+  const [disconnectionPendingCount, setDisconnectionPendingCount] = useState(0)
+
+  // Fetch pending counts
+  useEffect(() => {
+    async function fetchCount() {
+      try {
+        // DD Count
+        const data = await getFromCache<any[]>("dd_data_cache")
+        if (data) {
+          const count = data.filter(d => {
+            const isPending = (d.disconStatus || "").toLowerCase() === "deemed disconnected"
+            if (!isPending) return false
+            if (userRole === "admin" || userRole === "viewer") return true
+            return agencies.map(a => a.toUpperCase()).includes((d.agency || "").toUpperCase())
+          }).length
+          setDdPendingCount(count)
+        }
+
+        // Disconnection Count
+        const consumerData = await getFromCache<ConsumerData[]>("consumers_data_cache")
+        if (consumerData) {
+          const count = consumerData.filter(c => {
+            const isConnected = (c.disconStatus || "").toLowerCase() === "connected"
+            if (!isConnected) return false
+            if (userRole === "admin" || userRole === "viewer") return true
+            return agencies.map(a => a.toUpperCase()).includes((c.agency || "").toUpperCase())
+          }).length
+          setDisconnectionPendingCount(count)
+        }
+      } catch (e) {
+        console.error("Failed to load DD count", e)
+      }
+    }
+    fetchCount()
+    // Optional: Set up an interval or listen to a custom event if real-time updates are critical
+  }, [activeView, userRole, agencies]) // Re-check when view changes
 
   const menuItems = [
     { 
@@ -86,11 +126,19 @@ export function AppSidebar({ activeView, setActiveView, userRole, isMobile = fal
           <Button
             key={item.id}
             variant={isActive ? "secondary" : "ghost"}
-            className={`justify-start ${isActive ? "bg-blue-100 text-blue-700" : "text-gray-600"}`}
+            className={`justify-between ${isActive ? "bg-blue-100 text-blue-700" : "text-gray-600"}`}
             onClick={() => handleSelect(item.id)}
           >
-            <Icon className="mr-2 h-4 w-4" />
-            {item.label}
+            <div className="flex items-center">
+              <Icon className="mr-2 h-4 w-4" />
+              {item.label}
+            </div>
+            {item.id === "disconnection" && disconnectionPendingCount > 0 && (
+              <Badge variant="destructive" className="h-5 px-1.5 text-[10px]">{disconnectionPendingCount}</Badge>
+            )}
+            {item.id === "deemed" && ddPendingCount > 0 && (
+              <Badge variant="destructive" className="h-5 px-1.5 text-[10px]">{ddPendingCount}</Badge>
+            )}
           </Button>
         )
       })}

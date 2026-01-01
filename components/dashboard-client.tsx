@@ -7,6 +7,7 @@ import { DashboardProvider } from "@/components/dashboard-context"
 import { DashboardMenu } from "@/components/dashboard-menu" 
 import { ConsumerList } from "@/components/consumer-list"
 import { AdminPanel } from "@/components/admin-panel"
+import { DDList } from "@/components/dd-list"
 import { ConsumerData } from "@/lib/google-sheets"
 import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
@@ -758,10 +759,7 @@ export default function DashboardClient({ role, agencies }: DashboardClientProps
         )}
 
         {activeView === "deemed" && (
-           <div className="flex flex-col items-center justify-center h-64 border-2 border-dashed rounded-lg bg-gray-50 text-gray-500">
-             <h3 className="text-xl font-medium">Deemed Disconnection</h3>
-             <p className="mt-2">This feature is coming soon.</p>
-           </div>
+           <DDList userRole={role} userAgencies={agencies} />
         )}
 
         {activeView === "nsc" && (
