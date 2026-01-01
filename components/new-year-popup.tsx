@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import Image from "next/image"
-import { X } from "lucide-react"
+import { X, MessageCircle } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 
-export function NewYearPopup() {
+export function NewYearPopup({ userId }: { userId?: string }) {
   const [isOpen, setIsOpen] = useState(false)
 
   useEffect(() => {
@@ -79,6 +79,17 @@ export function NewYearPopup() {
               <p className="text-center text-lg font-medium text-white/90 italic drop-shadow-md max-w-[85%] leading-relaxed">
                 &quot;May the coming year bring you success, joy, and prosperity in all your endeavors.&quot;
               </p>
+              <Button
+                onClick={() => {
+                  const message = `Happy New Year 2026! 🎊\n\nWishing you a prosperous year ahead filled with success, good health, and new achievements. May this year bring you closer to your professional and personal goals.\n\nSent through: Disconnection Management App :)`
+                  const text = encodeURIComponent(message)
+                  window.open(`https://wa.me/918092273459?text=${text}`, "_blank")
+                }}
+                className="bg-green-600 hover:bg-green-700 text-white border-none rounded-full px-6 shadow-lg hover:shadow-green-900/50 transition-all duration-300"
+              >
+                <MessageCircle className="mr-2 h-4 w-4" />
+                Wish Me Back
+              </Button>
             </div>
 
             <div className="flex flex-col items-end space-y-1 text-right">

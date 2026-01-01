@@ -12,7 +12,7 @@ export default async function DashboardPage() {
 
   return (
     <>
-      <NewYearPopup />
+      <NewYearPopup userId={session.userId} />
       <DashboardClient role={session.role} agencies={session.agencies} />
     </>
   )
