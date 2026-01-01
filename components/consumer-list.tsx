@@ -165,7 +165,7 @@ function useBackNavigation(isOpen: boolean, onClose: () => void) {
 
 // Global variable to track last sync time across unmounts/remounts (SPA navigation)
 let globalLastSyncTime = 0
-const SYNC_COOLDOWN_MS = 60000 // 60 seconds cooldown
+const SYNC_COOLDOWN_MS = 10000 // 10 seconds cooldown
 
 const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
   (props, ref) => {
@@ -210,6 +210,7 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
   const [isBackgroundUpdating, setIsBackgroundUpdating] = useState(false)
   const [viewMode, setViewMode] = useState<"card" | "list">("card")
   const [previewConsumer, setPreviewConsumer] = useState<ConsumerData | null>(null)
+  const [refreshKey, setRefreshKey] = useState(0)
 
   // Handle back button navigation for modals/overlays
   useBackNavigation(isFilterOpen, () => setIsFilterOpen(false))
@@ -327,7 +328,8 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
     }
 
     async function loadData() {
-      setLoading(true)
+      if (consumersRef.current.length === 0) setLoading(true)
+      else setIsBackgroundUpdating(true)
       setError(null)
 
       let cachedLoaded = false
@@ -441,7 +443,7 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
     }
 
     loadData()
-  }, [userRole, agenciesKey]) // Use stable key instead of array reference
+  }, [userRole, agenciesKey, refreshKey]) // Use stable key instead of array reference
 
   const clearCache = async () => {
     if (confirm("Are you sure you want to clear the cache and reload?")) {
@@ -455,6 +457,12 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
         console.error("Failed to clear cache", e)
       }
     }
+  }
+
+  const handleManualRefresh = () => {
+    if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
+    globalLastSyncTime = 0
+    setRefreshKey((prev) => prev + 1)
   }
 
   // Advanced filtering logic
@@ -1096,7 +1104,17 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
         <div className="flex justify-between items-center mt-2 text-xs text-gray-500">
            <div className="flex items-center gap-2">
               <span>{sortedConsumers.length} consumers</span>
-              {isBackgroundUpdating && <RefreshCw className="h-3 w-3 animate-spin text-blue-500" />}
+              {isBackgroundUpdating ? (
+                <RefreshCw className="h-3 w-3 animate-spin text-blue-500" />
+              ) : (
+                <button
+                  onClick={handleManualRefresh}
+                  className="hover:bg-gray-100 p-0.5 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  title="Refresh Patch Data"
+                >
+                  <RefreshCw className="h-3 w-3 text-gray-400 hover:text-blue-600" />
+                </button>
+              )}
            </div>
            {(Object.values(filters).some((f) => f !== "All Agencies" && f !== "All Status" && f !== "All Classes" && f !== "All MRUs" && f !== "") ||
               minOsd > 0 ||

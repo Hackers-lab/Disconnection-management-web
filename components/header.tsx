@@ -208,26 +208,70 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
 
   const handleUpload = async () => {
     if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
-    const CACHE_KEY = "agency_updates_cache";
     setShowAgencyUpdates(true);
     setLoading(true);
     setAgencyLastUpdates([]);
 
-    // 1. Try to load from cache first for instant UI
+    // 1. Try to calculate from consumers_data_cache (Local Base+Patch Data)
     try {
-      const cachedData = await getFromCache<typeof agencyLastUpdates>(CACHE_KEY);
-      if (cachedData && cachedData.length > 0) {
-        console.log("✅ [Cache Hit] Loaded agency updates from IndexedDB");
-        setAgencyLastUpdates(cachedData);
-        setLoading(false); // Stop the main loader, UI is now populated
+      const consumers = await getFromCache<any[]>("consumers_data_cache");
+      
+      if (consumers && Array.isArray(consumers) && consumers.length > 0) {
+        console.log("✅ [Local DB] Calculating agency updates from consumers_data_cache");
+        
+        const statsMap = new Map<string, { lastUpdateTs: number, count: number, dateStr: string }>();
+
+        consumers.forEach(item => {
+            if (!item.agency) return;
+            const agency = item.agency;
+            
+            // Parse Date
+            let ts = 0;
+            if (item.disconDate) {
+                if (item.disconDate.match(/^\d{2}-\d{2}-\d{4}$/)) {
+                     const [day, month, year] = item.disconDate.split('-').map(Number);
+                     ts = new Date(year, month - 1, day).getTime();
+                } else if (item.disconDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                     ts = new Date(item.disconDate).getTime();
+                }
+            }
+
+            if (ts > 0 && !isNaN(ts)) {
+                const current = statsMap.get(agency);
+                if (!current) {
+                    statsMap.set(agency, { lastUpdateTs: ts, count: 1, dateStr: item.disconDate });
+                } else {
+                    if (ts > current.lastUpdateTs) {
+                        statsMap.set(agency, { lastUpdateTs: ts, count: 1, dateStr: item.disconDate });
+                    } else if (ts === current.lastUpdateTs) {
+                        current.count++;
+                    }
+                }
+            }
+        });
+
+        const derivedUpdates = Array.from(statsMap.entries()).map(([name, data]) => ({
+            name,
+            lastUpdate: data.dateStr,
+            lastUpdateCount: data.count
+        }));
+
+        // Filter based on role
+        const filteredData = (userRole === "admin" || userRole === "viewer" || userRole === "executive" || userRole === "agency")
+          ? derivedUpdates
+          : derivedUpdates.filter((agency) => userAgencies.includes(agency.name));
+
+        setAgencyLastUpdates(filteredData);
+        setLoading(false);
+        return; // Stop here, do not fetch from API
       }
     } catch (error) {
-      console.warn("Could not load agency updates from cache", error);
+      console.warn("Could not calculate updates from local cache", error);
     }
 
-    // 2. Always fetch from network to get the latest data
+    // 2. Fallback to Network if local cache is empty
     try {
-      console.log("🔄 [Network] Fetching fresh agency updates...");
+      console.log("🔄 [Network] Local cache empty, fetching fresh agency updates...");
       const response = await fetch("/api/agency-last-updates");
       if (!response.ok) throw new Error("API request failed");
       
@@ -238,14 +282,11 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
           ? data
           : data.filter((agency: { name: string, lastUpdate: string }) => userAgencies.includes(agency.name));
 
-      // 3. Update state and cache
+      // 3. Update state
       setAgencyLastUpdates(filteredData);
-      await saveToCache(CACHE_KEY, filteredData);
-      console.log("✅ [Network] Updated agency updates and saved to cache.");
 
     } catch (error) {
       console.error("Error fetching fresh agency updates:", error);
-      // If the fetch fails, the user will still see the cached data if available
     } finally {
       // Ensure loading is always turned off in the end
       setLoading(false);

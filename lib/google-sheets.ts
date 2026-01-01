@@ -172,7 +172,7 @@ export async function fetchConsumerData(): Promise<ConsumerData[]> {
       {
         // OPTIMIZATION: Cache the CSV from Google for 60 seconds.
         // This reduces the Patch API time from ~3.6s to ~100ms.
-        next: { revalidate: 60 },
+        next: { revalidate: 10 },
         headers: {
           "User-Agent": "Mozilla/5.0 (compatible; NextJS-App/1.0)",
         },
