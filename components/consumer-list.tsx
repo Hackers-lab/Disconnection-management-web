@@ -57,6 +57,7 @@ import {
 import { DashboardStats } from "./dashboard-stats"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import type { ConsumerData } from "@/lib/google-sheets"
+import { getFromCache, saveToCache, clearAllCache } from "@/lib/indexed-db"
 
 // Extend ConsumerData type to include sync status
 interface ConsumerDataWithSync extends ConsumerData {
@@ -80,55 +81,6 @@ interface ConsumerListProps {
 }
 interface ConsumerListRef {  // <-- Add this interface
   getCurrentConsumers: () => ConsumerData[]
-}
-
-// IndexedDB Helper Functions to handle large datasets (>5MB)
-const DB_NAME = "DisconnectionAppDB"
-const STORE_NAME = "keyval"
-
-function openDB() {
-  return new Promise<IDBDatabase>((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, 1)
-    request.onerror = () => reject(request.error)
-    request.onsuccess = () => resolve(request.result)
-    request.onupgradeneeded = (event) => {
-      const db = (event.target as IDBOpenDBRequest).result
-      if (!db.objectStoreNames.contains(STORE_NAME)) {
-        db.createObjectStore(STORE_NAME)
-      }
-    }
-  })
-}
-
-async function getFromCache<T>(key: string): Promise<T | null> {
-  try {
-    const db = await openDB()
-    return new Promise((resolve, reject) => {
-      const transaction = db.transaction(STORE_NAME, "readonly")
-      const store = transaction.objectStore(STORE_NAME)
-      const request = store.get(key)
-      request.onerror = () => reject(request.error)
-      request.onsuccess = () => resolve(request.result)
-    })
-  } catch (error) {
-    console.warn(`Error reading ${key} from cache:`, error)
-    return null
-  }
-}
-
-async function saveToCache(key: string, data: any) {
-  try {
-    const db = await openDB()
-    return new Promise<void>((resolve, reject) => {
-      const transaction = db.transaction(STORE_NAME, "readwrite")
-      const store = transaction.objectStore(STORE_NAME)
-      const request = store.put(data, key)
-      request.onerror = () => reject(request.error)
-      request.onsuccess = () => resolve()
-    })
-  } catch (error) {
-    console.warn(`Error saving ${key} to cache:`, error)
-  }
 }
 
 type SortOrder = "none" | "asc" | "desc"
@@ -448,11 +400,8 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
   const clearCache = async () => {
     if (confirm("Are you sure you want to clear the cache and reload?")) {
       try {
-        const db = await openDB()
-        const transaction = db.transaction(STORE_NAME, "readwrite")
-        const store = transaction.objectStore(STORE_NAME)
-        const request = store.clear()
-        request.onsuccess = () => window.location.reload()
+        await clearAllCache()
+        window.location.reload()
       } catch (e) {
         console.error("Failed to clear cache", e)
       }

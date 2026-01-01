@@ -734,7 +734,7 @@ export default function DashboardClient({ role, agencies }: DashboardClientProps
         {/* VIEW SWITCHING LOGIC */}
         
         {activeView === "home" && (
-          <DashboardMenu onSelect={setActiveView} userRole={role} />
+          <DashboardMenu onSelect={setActiveView} userRole={role} userAgencies={agencies} />
         )}
 
         {activeView === "disconnection" && (

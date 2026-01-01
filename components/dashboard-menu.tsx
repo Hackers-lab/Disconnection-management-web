@@ -1,5 +1,7 @@
 "use client"
 
+import { useEffect, useState } from "react"
+import type { ConsumerData } from "@/lib/google-sheets"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { 
   Zap,             // Disconnection
@@ -12,13 +14,16 @@ import {
   RadioTower
 } from "lucide-react"
 import { ViewType } from "@/components/app-sidebar"
+import { getFromCache } from "@/lib/indexed-db"
 
 interface DashboardMenuProps {
   onSelect: (module: ViewType) => void
   userRole: string
+  userAgencies?: string[]
 }
 
-export function DashboardMenu({ onSelect, userRole }: DashboardMenuProps) {
+export function DashboardMenu({ onSelect, userRole, userAgencies = [] }: DashboardMenuProps) {
+  const [pendingCount, setPendingCount] = useState<number>(0)
   
   const modules = [
     {
@@ -83,6 +88,35 @@ export function DashboardMenu({ onSelect, userRole }: DashboardMenuProps) {
     }
   ]
 
+  useEffect(() => {
+    async function loadPendingCount() {
+      try {
+        const data = await getFromCache<ConsumerData[]>("consumers_data_cache")
+        if (!data) return
+
+        const count = data.filter(c => {
+          // Count only "Connected" status (Pending Disconnection)
+          const isConnected = (c.disconStatus || "").toLowerCase() === "connected"
+          if (!isConnected) return false
+
+          // Role based filtering
+          if (userRole === "admin" || userRole === "viewer") return true
+          
+          // For Agency/Executive: Filter by their assigned agencies
+          const consumerAgency = (c.agency || "").trim().toUpperCase()
+          const safeAgencies = userAgencies || []
+          const userAgenciesUpper = safeAgencies.map(a => a.trim().toUpperCase())
+          return userAgenciesUpper.includes(consumerAgency)
+        }).length
+
+        setPendingCount(count)
+      } catch (e) {
+        console.error("Failed to load pending count", e)
+      }
+    }
+    loadPendingCount()
+  }, [userRole, userAgencies])
+
   return (
     <div className="p-4 md:p-8 max-w-7xl mx-auto">
       <div className="flex items-center mb-10">
@@ -110,6 +144,13 @@ export function DashboardMenu({ onSelect, userRole }: DashboardMenuProps) {
                 onSelect(module.id as ViewType)
               }}
             >
+              {/* Pending Disconnection Badge */}
+              {module.id === "disconnection" && pendingCount > 0 && (
+                <div className="absolute top-4 right-4 z-20 flex items-center justify-center bg-red-600 text-white text-xs font-bold px-3 py-1 rounded-full shadow-lg animate-in fade-in zoom-in duration-300 border-2 border-white">
+                  {pendingCount} Pending
+                </div>
+              )}
+
               <div className={`absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity duration-300`}>
                  <Icon className={`h-24 w-24 ${module.color}`} />
               </div>
