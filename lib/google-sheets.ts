@@ -167,12 +167,15 @@ export async function fetchConsumerData(): Promise<ConsumerData[]> {
     const csvUrl = process.env.DISCONNECTION_CSV
     if (!csvUrl) throw new Error("DISCONNECTION_CSV env variable not set")
 
+    const separator = csvUrl.includes("?") ? "&" : "?"
+    const freshUrl = `${csvUrl}${separator}t=${Date.now()}`
+
     const response = await fetch(
       csvUrl,
       {
         // OPTIMIZATION: Cache the CSV from Google for 60 seconds.
         // This reduces the Patch API time from ~3.6s to ~100ms.
-        next: { revalidate: 10 },
+        next: { revalidate: 0 },
         headers: {
           "User-Agent": "Mozilla/5.0 (compatible; NextJS-App/1.0)",
         },
