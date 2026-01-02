@@ -6,8 +6,11 @@ export async function GET() {
   
   return NextResponse.json(data, {
     headers: {
-      "Cache-Control": "public, s-maxage=86400, stale-while-revalidate=3600",
-      "CDN-Cache-Control": "public, s-maxage=86400, stale-while-revalidate=3600",
+      // CHANGE THIS: Disable aggressive caching
+      "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+      "CDN-Cache-Control": "no-store",
+      "Pragma": "no-cache",
+      "Expires": "0",
     },
   })
 }
