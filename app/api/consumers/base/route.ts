@@ -9,13 +9,15 @@ export async function GET() {
     // Fetch full consumer data
     const data = await fetchConsumerData()
 
-    // Return data with aggressive caching headers (24 hours)
+    // Return data with NO caching so updates appear immediately
     return NextResponse.json(data, {
       status: 200,
       headers: {
-        "Cache-Control": "public, s-maxage=86400, stale-while-revalidate=3600",
-        "CDN-Cache-Control": "public, s-maxage=86400",
-        "Vercel-CDN-Cache-Control": "public, s-maxage=86400",
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        "CDN-Cache-Control": "no-store",
+        "Vercel-CDN-Cache-Control": "no-store",
+        "Pragma": "no-cache",
+        "Expires": "0",
       },
     })
   } catch (error) {
