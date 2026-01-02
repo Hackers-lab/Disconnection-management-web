@@ -411,16 +411,16 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
   const handleManualRefresh = async () => {
     if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
     
-    // 👇 THIS IS THE FIX: Explicitly expire the cache date
-    await saveToCache("consumers_base_date", null)
+    // 💥 HARD RESET: Completely wipe all data (Consumers, Agencies, Dates)
+    // This is more powerful than just setting the date to null.
+    await clearAllCache()
     
-    // Reset sync timer so cooldown doesn't block us
+    // Reset sync timer
     globalLastSyncTime = 0
     
     // Trigger the reload
     setRefreshKey((prev) => prev + 1)
   }
-
   // Advanced filtering logic
   const filteredConsumers = useMemo(() => consumers.filter((consumer) => {
     // Basic search term filter
