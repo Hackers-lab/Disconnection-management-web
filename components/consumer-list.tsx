@@ -408,9 +408,16 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
     }
   }
 
-  const handleManualRefresh = () => {
+  const handleManualRefresh = async () => {
     if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
+    
+    // 👇 THIS IS THE FIX: Explicitly expire the cache date
+    await saveToCache("consumers_base_date", null)
+    
+    // Reset sync timer so cooldown doesn't block us
     globalLastSyncTime = 0
+    
+    // Trigger the reload
     setRefreshKey((prev) => prev + 1)
   }
 
