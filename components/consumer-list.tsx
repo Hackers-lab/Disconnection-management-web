@@ -53,11 +53,14 @@ import {
   Clock,
   UserX,
   HelpCircle,
+  Radio,
+  Check,
 } from "lucide-react"
 import { DashboardStats } from "./dashboard-stats"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import type { ConsumerData } from "@/lib/google-sheets"
 import { getFromCache, saveToCache, clearAllCache } from "@/lib/indexed-db"
+import { useToast } from "@/components/ui/use-toast"
 
 // Extend ConsumerData type to include sync status
 interface ConsumerDataWithSync extends ConsumerData {
@@ -122,6 +125,7 @@ const SYNC_COOLDOWN_MS = 10000 // 10 seconds cooldown
 const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
   (props, ref) => {
   const { userRole, userAgencies, onAdminClick, showAdminPanel, onCloseAdminPanel } = props
+  const { toast } = useToast()
   const [consumers, setConsumers] = useState<ConsumerData[]>([])
   const [agencies, setAgencies] = useState<string[]>([])
   const [isPending, startTransition] = useTransition()
@@ -160,6 +164,7 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
   const [mrus, setMrus] = useState<string[]>([])
   const [isCachedData, setIsCachedData] = useState(false)
   const [isBackgroundUpdating, setIsBackgroundUpdating] = useState(false)
+  const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'updated'>('idle')
   const [viewMode, setViewMode] = useState<"card" | "list">("card")
   const [previewConsumer, setPreviewConsumer] = useState<ConsumerData | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
@@ -189,6 +194,7 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
     const CACHE_KEY = "consumers_data_cache"
     const AGENCY_CACHE_KEY = "agencies_data_cache"
     const BASE_DATE_KEY = "consumers_base_date"
+    const ROW_COUNT_KEY = "consumer_row_count"
 
     async function processData(data: ConsumerData[], preloadedAgencies: string[] | null = null, isBackgroundUpdate = false) {
       // Yield to main thread to prevent UI blocking during heavy processing
@@ -280,100 +286,81 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
     }
 
     async function loadData() {
-      if (consumersRef.current.length === 0) setLoading(true)
-      else setIsBackgroundUpdating(true)
+      // Step 1: Instant Load from Cache
       setError(null)
 
-      let cachedLoaded = false
-      let currentData: ConsumerData[] = []
-
       try {
-        // 1. Check IndexedDB for Base Data
-        currentData = await getFromCache<ConsumerData[]>(CACHE_KEY) || []
-        const cachedDate = await getFromCache<string>(BASE_DATE_KEY)
-        const today = new Date().toISOString().split("T")[0]
-        
+        // 1. Instant Load (Cache)
+        const cachedData = await getFromCache<ConsumerData[]>(CACHE_KEY)
         let cachedAgencies: string[] | null = null
+        
         if (userRole === "admin" || userRole === "viewer") {
           cachedAgencies = await getFromCache<string[]>(AGENCY_CACHE_KEY)
         }
 
-        // Initial render with cached data if available (Optimistic UI)
-        if (currentData.length > 0) {
+        if (cachedData && cachedData.length > 0) {
           console.log("✅ [Cache Hit] Loaded from IndexedDB")
-          await processData(currentData, cachedAgencies, false)
-          setLoading(false)
-          cachedLoaded = true
+          await processData(cachedData, cachedAgencies, false)
+          setLoading(false) // Stop spinner immediately if cache exists
           setIsCachedData(true)
+        } else {
+          setLoading(true) // Only show spinner if cache is empty
         }
 
-        // 2. Determine if we need to fetch Base (Missing or Stale)
-        const needsBaseFetch = !currentData.length || cachedDate !== today
+        // Step 2: Background Sync Check
+        setSyncStatus('syncing')
 
-        // 3. Check Cooldown (Prevent double-fetch or rapid re-fetch on navigation)
-        const now = Date.now()
-        if (cachedLoaded && !needsBaseFetch && (now - globalLastSyncTime < SYNC_COOLDOWN_MS)) {
-          console.log("⏳ Sync skipped (cooldown active)")
-          setLoading(false)
-          return
-        }
+        // Fetch Server Row Count for Consumers
+        const countRes = await fetch("/api/system/row-count?type=consumer")
+        if (!countRes.ok) throw new Error(`Row count fetch failed: ${countRes.status}`)
+        
+        const countData = await countRes.json().catch(() => ({ count: 0 }))
+        const serverCount = countData?.count ?? 0
+        const localCount = parseInt(localStorage.getItem(ROW_COUNT_KEY) || "0")
 
-        if (needsBaseFetch) {
-          if (!cachedLoaded) setLoading(true)
-          else setIsBackgroundUpdating(true)
+        // Step 3: Decision Tree
+        if (serverCount !== localCount) {
+          console.log("New rows detected. Fetching full Base...")
+          const baseResponse = await fetch(`/api/consumers/base?t=${Date.now()}`)
+          if (!baseResponse.ok) throw new Error("Failed to fetch base data")
           
-          console.log("⬇️ Fetching Base Data (Full Download)...")
-          const baseResponse = await fetch("/api/consumers/base")
+          const baseData = await baseResponse.json().catch(() => [])
           
-          if (!baseResponse.ok) throw new Error(`Base API Error: ${baseResponse.status}`)
-          
-          const baseData: ConsumerData[] = await baseResponse.json()
-          currentData = baseData
-          
-          // Save Base to Cache
           await saveToCache(CACHE_KEY, baseData)
-          await saveToCache(BASE_DATE_KEY, today)
-          
-          globalLastSyncTime = Date.now() // Update sync time
-          
-          // Update UI with fresh base
-          await processData(baseData, cachedAgencies, cachedLoaded)
-        }
+          await saveToCache(BASE_DATE_KEY, new Date().toISOString().split("T")[0])
+          localStorage.setItem(ROW_COUNT_KEY, serverCount.toString())
 
-        // 4. ALWAYS fetch Patch (Delta Sync)
-        if (cachedLoaded && !needsBaseFetch) setIsBackgroundUpdating(true)
-        globalLastSyncTime = Date.now() // Mark sync start
-        
-        console.log("🩹 Fetching Patch Data (Delta Sync)...")
-        const patchResponse = await fetch("/api/consumers/patch")
-        
-        if (patchResponse.ok) {
-          const patchData: ConsumerData[] = await patchResponse.json()
+          await processData(baseData, cachedAgencies, true)
           
-          if (patchData.length > 0) {
-            console.log(`🔀 Merging ${patchData.length} patch updates...`)
+          setSyncStatus('updated')
+        } else {
+          console.log("Rows match. Fetching Patches...")
+          const patchResponse = await fetch("/api/consumers/patch")
+          
+          if (patchResponse.ok) {
+            const patchData: ConsumerData[] = await patchResponse.json().catch(() => [])
             
-            // 5. Merge Patch into Base
-            // Create a map for faster lookup/upsert
-            const dataMap = new Map(currentData.map(c => [c.consumerId, c]))
-            
-            patchData.forEach(patchItem => {
-              dataMap.set(patchItem.consumerId, patchItem)
-            })
-            
-            const mergedData = Array.from(dataMap.values())
-            
-            // 6. Update State and Cache
-            await saveToCache(CACHE_KEY, mergedData)
-            await processData(mergedData, cachedAgencies, true)
-          } else {
-            console.log("✨ No new patches found")
+            if (patchData.length > 0) {
+              console.log(`Merging ${patchData.length} patch updates...`)
+              
+              // Merge Patch into Current (or Cached)
+              const currentData = consumersRef.current.length > 0 ? consumersRef.current : (cachedData || [])
+              const dataMap = new Map(currentData.map(c => [c.consumerId, c]))
+              
+              patchData.forEach(patchItem => {
+                dataMap.set(patchItem.consumerId, patchItem)
+              })
+              
+              const mergedData = Array.from(dataMap.values())
+              await saveToCache(CACHE_KEY, mergedData)
+              await processData(mergedData, cachedAgencies, true)
+              setSyncStatus('updated')
+            }
           }
         }
 
-        // Handle Agencies Refresh (Admin/Viewer) 
-        // Only fetch if missing from cache OR if we just did a full Base sync (daily refresh)
-        if ((userRole === "admin" || userRole === "viewer") && (!cachedAgencies || needsBaseFetch)) {
+        // Handle Agencies Refresh (Admin/Viewer)
+        if ((userRole === "admin" || userRole === "viewer") && !cachedAgencies) {
            const agenciesRes = await fetch("/api/admin/agencies")
            if (agenciesRes.ok) {
              const agencyData = await agenciesRes.json()
@@ -385,12 +372,17 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
 
       } catch (error) {
         console.error("💥 Error loading data:", error)
-        if (!cachedLoaded) {
+        if (consumersRef.current.length === 0) {
           setError(error instanceof Error ? error.message : "Unknown error occurred")
         }
       } finally {
         setLoading(false)
-        setIsBackgroundUpdating(false)
+        // If status was updated, keep it for 3 seconds then go to idle
+        if (syncStatus !== 'updated') {
+           setTimeout(() => setSyncStatus('idle'), 2000)
+        } else {
+           setTimeout(() => setSyncStatus('idle'), 4000)
+        }
       }
     }
 
@@ -1060,16 +1052,23 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
         <div className="flex justify-between items-center mt-2 text-xs text-gray-500">
            <div className="flex items-center gap-2">
               <span>{sortedConsumers.length} consumers</span>
-              {isBackgroundUpdating ? (
-                <RefreshCw className="h-3 w-3 animate-spin text-blue-500" />
+              
+              {/* Live Status Indicator */}
+              {syncStatus === 'syncing' ? (
+                <div className="flex items-center gap-1 text-red-600 animate-pulse font-medium">
+                  <RefreshCw className="h-3 w-3 animate-spin" />
+                  <span>Updating List...</span>
+                </div>
+              ) : syncStatus === 'updated' ? (
+                <div className="flex items-center gap-1 text-green-600 font-medium animate-in fade-in duration-500">
+                  <Check className="h-3 w-3" />
+                  <span>Updated</span>
+                </div>
               ) : (
-                <button
-                  onClick={handleManualRefresh}
-                  className="hover:bg-gray-100 p-0.5 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  title="Refresh Patch Data"
-                >
-                  <RefreshCw className="h-3 w-3 text-gray-400 hover:text-blue-600" />
-                </button>
+                <div className="flex items-center gap-1 text-blue-600/70" title="Live Connection">
+                  <Radio className="h-3 w-3" />
+                  <span>Live</span>
+                </div>
               )}
            </div>
            {(Object.values(filters).some((f) => f !== "All Agencies" && f !== "All Status" && f !== "All Classes" && f !== "All MRUs" && f !== "") ||

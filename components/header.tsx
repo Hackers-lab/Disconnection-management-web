@@ -116,6 +116,8 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
   const [availableAgencies, setAvailableAgencies] = useState<string[]>(["All Agencies"])
   const [cachedAgencyDescription, setCachedAgencyDescription] = useState<string | null>(null)
 
+  const isDisconnectionView = activeView === "disconnection"
+
   // --- Date helpers ---
   const parseDate = (dateStr: string) => {
     if (!dateStr) return null;
@@ -198,9 +200,19 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
     }
   };
 
-  const handleGlobalRefresh = () => {
+  const handleGlobalRefresh = async () => {
     if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
     if (confirm("Sync fresh data from server? This will reload the page.")) {
+      try {
+        const db = await openDB()
+        const transaction = db.transaction(STORE_NAME, "readwrite")
+        const store = transaction.objectStore(STORE_NAME)
+        store.clear()
+      } catch (e) {
+        console.error("Failed to clear IndexedDB", e)
+      }
+      
+      localStorage.removeItem("dd_row_count")
       sessionStorage.removeItem("consumers_synced_session")
       window.location.reload()
     }
@@ -640,6 +652,8 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
                 <LayoutDashboard className="h-4 w-4" />
               </Button>
 
+              {isDisconnectionView && (
+                <>
               {/* Download menu */}
               <div className="relative">
                 <Button 
@@ -740,6 +754,8 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
                   <RefreshCw className="h-4 w-4" />
                 </Button>
               )}
+                </>
+              )}
 
               <Button
                 variant="ghost"
@@ -767,6 +783,8 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
                   <DropdownMenuLabel>Downloads</DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   
+                  {isDisconnectionView && (
+                    <>
                   <DropdownMenuItem onClick={() => { 
                     if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
                     onDownload && onDownload() 
@@ -789,7 +807,11 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
                     <Download className="mr-2 h-4 w-4" />
                     <span>Daily Report</span>
                   </DropdownMenuItem>
+                    </>
+                  )}
 
+                  {isDisconnectionView && (
+                    <>
                   {canSeeAgencyUpdates && (
                     <>
                       <DropdownMenuSeparator />
@@ -801,12 +823,17 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
                       </DropdownMenuItem>
                     </>
                   )}
+                    </>
+                  )}
 
                   {userRole === "admin" && (
                     <>
                       <DropdownMenuSeparator />
                       <DropdownMenuLabel>Admin</DropdownMenuLabel>
                       <DropdownMenuSeparator />
+                      
+                      {isDisconnectionView && (
+                        <>
                       <DropdownMenuItem onClick={() => {
                         if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
                         window.open("/api/sheet-redirect", "_blank")
@@ -814,6 +841,8 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
                         <FileSpreadsheet className="mr-2 h-4 w-4" />
                         <span>Edit DC List</span>
                       </DropdownMenuItem>
+                        </>
+                      )}
 
                       {onAdminClick && (
                         <DropdownMenuItem onClick={() => {
@@ -825,10 +854,12 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
                         </DropdownMenuItem>
                       )}
 
+                      {isDisconnectionView && (
                       <DropdownMenuItem onClick={handleGlobalRefresh}>
                         <RefreshCw className="mr-2 h-4 w-4" />
                         <span>Sync Fresh Data</span>
                       </DropdownMenuItem>
+                      )}
                     </>
                   )}
 

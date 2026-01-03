@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
-import { Search, MapPin, Phone, IndianRupee, RefreshCw, AlertCircle, X, Filter, CheckCircle2, Power, Clock, HelpCircle, Edit, LayoutGrid, List, ChevronLeft, ChevronRight, Calendar as CalendarIcon, UserX, Image as ImageIcon } from "lucide-react"
+import { Search, MapPin, Phone, IndianRupee, RefreshCw, AlertCircle, X, Filter, CheckCircle2, Power, Clock, HelpCircle, Edit, LayoutGrid, List, ChevronLeft, ChevronRight, Calendar as CalendarIcon, UserX, Image as ImageIcon, Radio, Check } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { getFromCache, saveToCache } from "@/lib/indexed-db"
 import type { DeemedVisitData } from "@/lib/dd-service"
@@ -21,6 +21,7 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { useToast } from "@/components/ui/use-toast"
 
 function useBackNavigation(isOpen: boolean, onClose: () => void) {
   const onCloseRef = useRef(onClose)
@@ -58,9 +59,10 @@ interface DDListProps {
 }
 
 export function DDList({ userRole, userAgencies }: DDListProps) {
+  const { toast } = useToast()
   const [consumers, setConsumers] = useState<DeemedVisitData[]>([])
   const [loading, setLoading] = useState(true)
-  const [isSyncing, setIsSyncing] = useState(false)
+  const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'updated'>('idle')
   const [error, setError] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState("")
   const [isPending, startTransition] = useTransition()
@@ -96,79 +98,93 @@ export function DDList({ userRole, userAgencies }: DDListProps) {
   useEffect(() => {
     const CACHE_KEY = "dd_data_cache"
     const BASE_DATE_KEY = "dd_base_date"
+    const ROW_COUNT_KEY = "dd_row_count"
 
     async function loadData() {
-      setLoading(true)
       try {
-        // 1. Try Cache
-        let currentData = await getFromCache<DeemedVisitData[]>(CACHE_KEY) || []
-        const cachedDate = await getFromCache<string>(BASE_DATE_KEY)
-        const today = new Date().toISOString().split("T")[0]
-
-        if (currentData.length > 0) {
-          setConsumers(currentData)
+        // 1. Instant Load (Cache)
+        const cachedData = await getFromCache<DeemedVisitData[]>(CACHE_KEY)
+        if (cachedData && cachedData.length > 0) {
+          setConsumers(cachedData)
           // Extract unique base classes
           const uniqueBaseClasses = Array.from(
             new Set(
-              currentData
+              cachedData
                 .map(c => (c.baseClass || "").toUpperCase().trim())
                 .filter(bc => bc !== "")
             )
           ).sort()
           setBaseClasses(uniqueBaseClasses)
-          consumersRef.current = currentData
+          consumersRef.current = cachedData
           setLoading(false)
         }
 
-        // 2. Fetch Base if needed
-        if (!currentData.length || cachedDate !== today) {
-          const res = await fetch("/api/dd/base")
-          if (!res.ok) throw new Error("Failed to fetch base data")
-          const baseData = await res.json()
-          
-          currentData = baseData
-          await saveToCache(CACHE_KEY, baseData)
-          await saveToCache(BASE_DATE_KEY, today)
-          
-          const uniqueBaseClasses = Array.from(
-            new Set(
-              baseData
-                .map((c: DeemedVisitData) => (c.baseClass || "").toUpperCase().trim())
-                .filter((bc: string) => bc !== "")
-            )
-          ).sort()
-          setBaseClasses(uniqueBaseClasses)
-          setConsumers(baseData)
-          consumersRef.current = baseData
-        }
+        // 2. Background Sync
+        setSyncStatus('syncing')
+        
+        // Fetch Server Row Count
+        const countRes = await fetch("/api/system/row-count?type=dd")
+        if (!countRes.ok) throw new Error(`Row count fetch failed: ${countRes.status}`)
+        
+        const countData = await countRes.json().catch(() => ({ count: 0 }))
+        const serverCount = countData?.count ?? 0
+        const localCount = parseInt(localStorage.getItem(ROW_COUNT_KEY) || "0")
 
-        // 3. Fetch Patch (Delta)
-        const patchRes = await fetch("/api/dd/patch")
-        if (patchRes.ok) {
-          const patchData: DeemedVisitData[] = await patchRes.json()
-          if (patchData.length > 0) {
-            const dataMap = new Map(currentData.map(c => [c.consumerId, c]))
-            patchData.forEach(p => dataMap.set(p.consumerId, p))
-            const merged = Array.from(dataMap.values())
-            
-            await saveToCache(CACHE_KEY, merged)
-            const uniqueBaseClasses = Array.from(
-              new Set(
-                merged
-                  .map(c => (c.baseClass || "").toUpperCase().trim())
-                  .filter(bc => bc !== "")
-              )
-            ).sort()
-            setBaseClasses(uniqueBaseClasses)
-            setConsumers(merged)
-            consumersRef.current = merged
+        if (serverCount !== localCount) {
+          console.log("Row count changed. Fetching fresh Base...")
+          const res = await fetch(`/api/dd/base?t=${Date.now()}`)
+          if (!res.ok) throw new Error("Failed to fetch base data")
+          const baseData = await res.json().catch(() => [])
+
+          await saveToCache(CACHE_KEY, baseData)
+          await saveToCache(BASE_DATE_KEY, new Date().toISOString().split("T")[0])
+          localStorage.setItem(ROW_COUNT_KEY, serverCount.toString())
+
+          // MERGE LOGIC: Preserve local edits (syncing/error) when new base arrives
+          const mergedBase = baseData.map((newC: DeemedVisitData) => {
+            const existing = consumersRef.current.find(c => c.consumerId === newC.consumerId)
+            if (existing && (existing._syncStatus === 'syncing' || existing._syncStatus === 'error')) {
+              return existing
+            }
+            return newC
+          })
+
+          setConsumers(mergedBase)
+          consumersRef.current = mergedBase
+          
+          // Re-calc classes
+          const uniqueBaseClasses = Array.from(new Set(mergedBase.map((c: any) => (c.baseClass || "").toUpperCase().trim()).filter((bc: any) => bc !== ""))).sort()
+          setBaseClasses(uniqueBaseClasses as string[])
+
+          setSyncStatus('updated')
+        } else {
+          console.log("Row count matches. Checking for patches...")
+          const patchRes = await fetch("/api/dd/patch")
+          if (patchRes.ok) {
+            const patchData: DeemedVisitData[] = await patchRes.json().catch(() => [])
+            if (patchData.length > 0) {
+              setConsumers(prev => {
+                const dataMap = new Map(prev.map(c => [c.consumerId, c]))
+                patchData.forEach(p => dataMap.set(p.consumerId, p))
+                const merged = Array.from(dataMap.values())
+                saveToCache(CACHE_KEY, merged)
+                consumersRef.current = merged
+                return merged
+              })
+              setSyncStatus('updated')
+            }
           }
         }
 
       } catch (err) {
         console.error(err)
-        setError("Failed to load Deemed Visit data")
+        if (consumersRef.current.length === 0) setError("Failed to load Deemed Visit data")
       } finally {
+        if (syncStatus !== 'updated') {
+           setTimeout(() => setSyncStatus('idle'), 2000)
+        } else {
+           setTimeout(() => setSyncStatus('idle'), 4000)
+        }
         setLoading(false)
       }
     }
@@ -263,40 +279,6 @@ export function DDList({ userRole, userAgencies }: DDListProps) {
     if ((consumer.disconStatus || "Deemed Disconnected").toLowerCase() !== "deemed disconnected") return true
     
     return false
-  }
-
-  // --- Manual Sync Handler ---
-  const handleSync = async () => {
-    if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
-    setIsSyncing(true)
-    try {
-      // Force fetch base data
-      const res = await fetch("/api/dd/base", { cache: 'no-store' })
-      if (!res.ok) throw new Error("Failed to fetch data")
-      const data = await res.json()
-      
-      // Update Cache
-      const today = new Date().toISOString().split("T")[0]
-      await saveToCache("dd_data_cache", data)
-      await saveToCache("dd_base_date", today)
-      
-      // Update State
-      setConsumers(data)
-      consumersRef.current = data
-      
-      // Re-calculate base classes
-      const uniqueBaseClasses = Array.from(
-        new Set(
-          data.map((c: DeemedVisitData) => (c.baseClass || "").toUpperCase().trim()).filter((bc: string) => bc !== "")
-        )
-      ).sort()
-      setBaseClasses(uniqueBaseClasses as string[])
-      
-    } catch (e) {
-      console.error("Sync failed", e)
-    } finally {
-      setIsSyncing(false)
-    }
   }
 
   // Helper to ensure links work even if "https://" is missing
@@ -541,16 +523,24 @@ export function DDList({ userRole, userAgencies }: DDListProps) {
         </div>
         <div className="mt-2 flex justify-start items-center gap-4 text-xs text-gray-500">
           <span>{filteredConsumers.length} records found</span>
-          <Button 
-            variant="ghost" 
-            size="sm" 
-            className="h-6 px-2 text-xs hover:bg-gray-100 text-blue-600"
-            onClick={handleSync}
-            disabled={isSyncing}
-          >
-            <RefreshCw className={`h-3 w-3 mr-1 ${isSyncing ? "animate-spin" : ""}`} />
-            {isSyncing ? "Syncing..." : "Sync Now"}
-          </Button>
+          
+          {/* Live Status Indicator */}
+          {syncStatus === 'syncing' ? (
+            <div className="flex items-center gap-1 text-red-600 animate-pulse font-medium">
+              <RefreshCw className="h-3 w-3 animate-spin" />
+              <span>Updating List...</span>
+            </div>
+          ) : syncStatus === 'updated' ? (
+            <div className="flex items-center gap-1 text-green-600 font-medium animate-in fade-in duration-500">
+              <Check className="h-3 w-3" />
+              <span>Updated</span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1 text-blue-600/70" title="Live Connection">
+              <Radio className="h-3 w-3" />
+              <span>Live</span>
+            </div>
+          )}
         </div>
       </div>
 
