@@ -47,7 +47,7 @@ export function DashboardMenu({ onSelect, userRole, userAgencies = [] }: Dashboa
       color: "text-blue-600",
       bgColor: "bg-blue-50",
       borderColor: "hover:border-blue-200",
-      allowed: ["admin", "executive", "agency"],
+      allowed: ["admin", "executive"],
       status: "soon"
     },
     {
@@ -69,7 +69,7 @@ export function DashboardMenu({ onSelect, userRole, userAgencies = [] }: Dashboa
       color: "text-orange-600",
       bgColor: "bg-orange-50",
       borderColor: "hover:border-orange-200",
-      allowed: ["admin", "executive", "agency"],
+      allowed: ["admin", "executive"],
       status: "soon"
     },
     {
