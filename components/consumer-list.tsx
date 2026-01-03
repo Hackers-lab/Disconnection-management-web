@@ -53,19 +53,16 @@ import {
   Clock,
   UserX,
   HelpCircle,
-  Radio,
   Check,
+  Loader2,
+  DownloadCloud,
+  Activity,
 } from "lucide-react"
 import { DashboardStats } from "./dashboard-stats"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import type { ConsumerData } from "@/lib/google-sheets"
 import { getFromCache, saveToCache, clearAllCache } from "@/lib/indexed-db"
 import { useToast } from "@/components/ui/use-toast"
-
-// Extend ConsumerData type to include sync status
-interface ConsumerDataWithSync extends ConsumerData {
-  _syncStatus?: 'syncing' | 'error'
-}
 
 // Dynamically import heavy components to reduce initial bundle size
 const ConsumerForm = dynamic(() => import("./consumer-form").then((mod) => mod.ConsumerForm), {
@@ -164,7 +161,7 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
   const [mrus, setMrus] = useState<string[]>([])
   const [isCachedData, setIsCachedData] = useState(false)
   const [isBackgroundUpdating, setIsBackgroundUpdating] = useState(false)
-  const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'updated'>('idle')
+  const [syncStatus, setSyncStatus] = useState<'idle' | 'checking' | 'found' | 'syncing' | 'updated'>('idle')
   const [viewMode, setViewMode] = useState<"card" | "list">("card")
   const [previewConsumer, setPreviewConsumer] = useState<ConsumerData | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
@@ -248,31 +245,11 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
         setMinOsd(0)
       }
 
-      // Filter consumers based on user role and agencies (case-insensitive)
-      let filteredData = data
-
-      if (userRole !== "admin" && userRole !== "viewer") {
-        const userAgenciesUpper = userAgencies.map((a) => a.toUpperCase())
-
-        if (userRole === "executive") {
-          // Executive: their agencies + any "bill dispute"
-          filteredData = data.filter((consumer) => {
-            const consumerAgency = (consumer.agency || "").toUpperCase()
-            const isOwnAgency = userAgenciesUpper.includes(consumerAgency)
-            const isBillDispute = consumer.disconStatus?.toLowerCase() === "bill dispute"
-            return (isOwnAgency || isBillDispute) && consumer.disconStatus !== "&"
-          })
-        } else {
-          // Normal agency user
-          filteredData = data.filter((consumer) => {
-            const consumerAgency = (consumer.agency || "").toUpperCase()
-            return userAgenciesUpper.includes(consumerAgency) && consumer.disconStatus !== "&"
-          })
-        }
-      }
+      // NOTE: We no longer filter data here. State must hold 100% of rows.
+      // Filtering happens in useMemo (filteredConsumers) below.
       const uniqueMrus = Array.from(
         new Set(
-          filteredData
+          data
             .map(c => (c.mru || "").trim())
             .filter(m => m !== "")
         )
@@ -281,11 +258,12 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
 
       // Use transition to keep UI responsive during state update
       startTransition(() => {
-        setConsumers(filteredData)
+        setConsumers(data)
       })
     }
 
     async function loadData() {
+      let finalStatus = 'idle'
       // Step 1: Instant Load from Cache
       setError(null)
 
@@ -308,7 +286,7 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
         }
 
         // Step 2: Background Sync Check
-        setSyncStatus('syncing')
+        setSyncStatus('checking')
 
         // Fetch Server Row Count for Consumers
         const countRes = await fetch("/api/system/row-count?type=consumer")
@@ -317,22 +295,36 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
         const countData = await countRes.json().catch(() => ({ count: 0 }))
         const serverCount = countData?.count ?? 0
         const localCount = parseInt(localStorage.getItem(ROW_COUNT_KEY) || "0")
+        
+        const isCacheEmpty = !cachedData || cachedData.length === 0
+        const isMismatch = serverCount !== localCount
 
         // Step 3: Decision Tree
-        if (serverCount !== localCount) {
-          console.log("New rows detected. Fetching full Base...")
-          const baseResponse = await fetch(`/api/consumers/base?t=${Date.now()}`)
-          if (!baseResponse.ok) throw new Error("Failed to fetch base data")
-          
-          const baseData = await baseResponse.json().catch(() => [])
-          
-          await saveToCache(CACHE_KEY, baseData)
-          await saveToCache(BASE_DATE_KEY, new Date().toISOString().split("T")[0])
-          localStorage.setItem(ROW_COUNT_KEY, serverCount.toString())
+        if (isCacheEmpty || isMismatch) {
+          if (isMismatch) {
+             setSyncStatus('found')
+             await new Promise(resolve => setTimeout(resolve, 800))
+          }
+          setSyncStatus('syncing')
+          console.log(`New content detected (Server: ${serverCount}). Downloading Base...`)
+          try {
+            const baseResponse = await fetch(`/api/consumers/base?v=${serverCount}`)
+            if (!baseResponse.ok) throw new Error("Base fetch failed")
+            
+            const baseData = await baseResponse.json()
+            
+            await saveToCache(CACHE_KEY, baseData)
+            await saveToCache(BASE_DATE_KEY, new Date().toISOString().split("T")[0])
+            localStorage.setItem(ROW_COUNT_KEY, serverCount.toString())
 
-          await processData(baseData, cachedAgencies, true)
-          
-          setSyncStatus('updated')
+            await processData(baseData, cachedAgencies, true)
+            setSyncStatus('updated')
+            finalStatus = 'updated'
+          } catch (e) {
+            console.error("Base fetch error:", e)
+            setError("Failed to download list")
+            return // Stop here, do not fetch patch
+          }
         } else {
           console.log("Rows match. Fetching Patches...")
           const patchResponse = await fetch("/api/consumers/patch")
@@ -341,6 +333,7 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
             const patchData: ConsumerData[] = await patchResponse.json().catch(() => [])
             
             if (patchData.length > 0) {
+              setSyncStatus('syncing')
               console.log(`Merging ${patchData.length} patch updates...`)
               
               // Merge Patch into Current (or Cached)
@@ -355,6 +348,7 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
               await saveToCache(CACHE_KEY, mergedData)
               await processData(mergedData, cachedAgencies, true)
               setSyncStatus('updated')
+              finalStatus = 'updated'
             }
           }
         }
@@ -378,7 +372,7 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
       } finally {
         setLoading(false)
         // If status was updated, keep it for 3 seconds then go to idle
-        if (syncStatus !== 'updated') {
+        if (finalStatus !== 'updated') {
            setTimeout(() => setSyncStatus('idle'), 2000)
         } else {
            setTimeout(() => setSyncStatus('idle'), 4000)
@@ -414,7 +408,28 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
     setRefreshKey((prev) => prev + 1)
   }
   // Advanced filtering logic
-  const filteredConsumers = useMemo(() => consumers.filter((consumer) => {
+  const filteredConsumers = useMemo(() => {
+    // 1. Role-Based Security Filter (Applied to Full Data)
+    let dataToFilter = consumers;
+    
+    if (userRole !== "admin" && userRole !== "viewer") {
+       const userAgenciesUpper = userAgencies.map(a => a.toUpperCase())
+       if (userRole === "executive") {
+          dataToFilter = consumers.filter(c => {
+            const consumerAgency = (c.agency || "").toUpperCase()
+            const isOwnAgency = userAgenciesUpper.includes(consumerAgency)
+            const isBillDispute = c.disconStatus?.toLowerCase() === "bill dispute"
+            return (isOwnAgency || isBillDispute) && c.disconStatus !== "&"
+          })
+       } else {
+          dataToFilter = consumers.filter(c => {
+             const consumerAgency = (c.agency || "").toUpperCase()
+             return userAgenciesUpper.includes(consumerAgency) && c.disconStatus !== "&"
+          })
+       }
+    }
+
+    return dataToFilter.filter((consumer) => {
     // Basic search term filter
     // Date range filter  
     function normalizeDate(dateValue: string | Date | null | undefined): string | null {
@@ -522,7 +537,8 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
       excludeDeemedDisconnection &&
       excludeTemproryDisconnected
     )
-  }), [consumers, searchTerm, filters, minOsd, excludeFilters, dateFilter])
+    })
+  }, [consumers, searchTerm, filters, minOsd, excludeFilters, dateFilter, userRole, userAgencies])
 
   // Apply OSD sorting
   const sortedConsumers = useMemo(() => [...filteredConsumers].sort((a, b) => {
@@ -603,7 +619,7 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
     setConsumers((prev) => {
       const newList = prev
         .map((c) => (c.consumerId === updatedConsumer.consumerId ? syncingConsumer : c))
-        .filter((c) => userRole === "admin" || c.disconStatus !== "&");
+        // .filter((c) => userRole === "admin" || c.disconStatus !== "&"); // Removed to prevent accidental data loss
       saveToCache("consumers_data_cache", newList);
       return newList;
     });
@@ -1054,10 +1070,20 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
               <span>{sortedConsumers.length} consumers</span>
               
               {/* Live Status Indicator */}
-              {syncStatus === 'syncing' ? (
+              {syncStatus === 'checking' ? (
+                <div className="flex items-center gap-1 text-yellow-600 font-medium animate-pulse">
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  <span>Checking Updates...</span>
+                </div>
+              ) : syncStatus === 'found' ? (
+                <div className="flex items-center gap-1 text-orange-600 font-medium animate-pulse">
+                  <DownloadCloud className="h-3 w-3" />
+                  <span>Update Found</span>
+                </div>
+              ) : syncStatus === 'syncing' ? (
                 <div className="flex items-center gap-1 text-red-600 animate-pulse font-medium">
                   <RefreshCw className="h-3 w-3 animate-spin" />
-                  <span>Updating List...</span>
+                  <span>Downloading...</span>
                 </div>
               ) : syncStatus === 'updated' ? (
                 <div className="flex items-center gap-1 text-green-600 font-medium animate-in fade-in duration-500">
@@ -1065,9 +1091,8 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
                   <span>Updated</span>
                 </div>
               ) : (
-                <div className="flex items-center gap-1 text-blue-600/70" title="Live Connection">
-                  <Radio className="h-3 w-3" />
-                  <span>Live</span>
+                <div className="text-green-600/70" title="Data is up to date">
+                  <Check className="h-4 w-4" />
                 </div>
               )}
            </div>

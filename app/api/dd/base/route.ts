@@ -6,11 +6,9 @@ export async function GET() {
   
   return NextResponse.json(data, {
     headers: {
-      // CHANGE THIS: Disable aggressive caching
-      "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
-      "CDN-Cache-Control": "no-store",
-      "Pragma": "no-cache",
-      "Expires": "0",
+      "Cache-Control": "public, s-maxage=86400, stale-while-revalidate=300",
+      "CDN-Cache-Control": "public, s-maxage=86400, stale-while-revalidate=300",
+      "Vercel-CDN-Cache-Control": "public, s-maxage=86400, stale-while-revalidate=300",
     },
   })
 }

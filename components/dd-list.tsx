@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
-import { Search, MapPin, Phone, IndianRupee, RefreshCw, AlertCircle, X, Filter, CheckCircle2, Power, Clock, HelpCircle, Edit, LayoutGrid, List, ChevronLeft, ChevronRight, Calendar as CalendarIcon, UserX, Image as ImageIcon, Radio, Check } from "lucide-react"
+import { Search, MapPin, Phone, IndianRupee, RefreshCw, AlertCircle, X, Filter, CheckCircle2, Power, Clock, HelpCircle, Edit, LayoutGrid, List, ChevronLeft, ChevronRight, Calendar as CalendarIcon, UserX, Image as ImageIcon, Check, Loader2, DownloadCloud, Activity } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { getFromCache, saveToCache } from "@/lib/indexed-db"
 import type { DeemedVisitData } from "@/lib/dd-service"
@@ -62,7 +62,7 @@ export function DDList({ userRole, userAgencies }: DDListProps) {
   const { toast } = useToast()
   const [consumers, setConsumers] = useState<DeemedVisitData[]>([])
   const [loading, setLoading] = useState(true)
-  const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'updated'>('idle')
+  const [syncStatus, setSyncStatus] = useState<'idle' | 'checking' | 'found' | 'syncing' | 'updated'>('idle')
   const [error, setError] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState("")
   const [isPending, startTransition] = useTransition()
@@ -101,6 +101,7 @@ export function DDList({ userRole, userAgencies }: DDListProps) {
     const ROW_COUNT_KEY = "dd_row_count"
 
     async function loadData() {
+      let finalStatus = 'idle'
       try {
         // 1. Instant Load (Cache)
         const cachedData = await getFromCache<DeemedVisitData[]>(CACHE_KEY)
@@ -120,7 +121,7 @@ export function DDList({ userRole, userAgencies }: DDListProps) {
         }
 
         // 2. Background Sync
-        setSyncStatus('syncing')
+        setSyncStatus('checking')
         
         // Fetch Server Row Count
         const countRes = await fetch("/api/system/row-count?type=dd")
@@ -131,7 +132,10 @@ export function DDList({ userRole, userAgencies }: DDListProps) {
         const localCount = parseInt(localStorage.getItem(ROW_COUNT_KEY) || "0")
 
         if (serverCount !== localCount) {
+          setSyncStatus('found')
+          await new Promise(resolve => setTimeout(resolve, 800)) // UX Delay to show "Update Found"
           console.log("Row count changed. Fetching fresh Base...")
+          setSyncStatus('syncing')
           const res = await fetch(`/api/dd/base?t=${Date.now()}`)
           if (!res.ok) throw new Error("Failed to fetch base data")
           const baseData = await res.json().catch(() => [])
@@ -157,12 +161,14 @@ export function DDList({ userRole, userAgencies }: DDListProps) {
           setBaseClasses(uniqueBaseClasses as string[])
 
           setSyncStatus('updated')
+          finalStatus = 'updated'
         } else {
           console.log("Row count matches. Checking for patches...")
           const patchRes = await fetch("/api/dd/patch")
           if (patchRes.ok) {
             const patchData: DeemedVisitData[] = await patchRes.json().catch(() => [])
             if (patchData.length > 0) {
+              setSyncStatus('syncing')
               setConsumers(prev => {
                 const dataMap = new Map(prev.map(c => [c.consumerId, c]))
                 patchData.forEach(p => dataMap.set(p.consumerId, p))
@@ -172,6 +178,7 @@ export function DDList({ userRole, userAgencies }: DDListProps) {
                 return merged
               })
               setSyncStatus('updated')
+              finalStatus = 'updated'
             }
           }
         }
@@ -180,7 +187,7 @@ export function DDList({ userRole, userAgencies }: DDListProps) {
         console.error(err)
         if (consumersRef.current.length === 0) setError("Failed to load Deemed Visit data")
       } finally {
-        if (syncStatus !== 'updated') {
+        if (finalStatus !== 'updated') {
            setTimeout(() => setSyncStatus('idle'), 2000)
         } else {
            setTimeout(() => setSyncStatus('idle'), 4000)
@@ -525,10 +532,20 @@ export function DDList({ userRole, userAgencies }: DDListProps) {
           <span>{filteredConsumers.length} records found</span>
           
           {/* Live Status Indicator */}
-          {syncStatus === 'syncing' ? (
+          {syncStatus === 'checking' ? (
+            <div className="flex items-center gap-1 text-yellow-600 font-medium animate-pulse">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              <span>Checking Updates...</span>
+            </div>
+          ) : syncStatus === 'found' ? (
+            <div className="flex items-center gap-1 text-orange-600 font-medium animate-pulse">
+              <DownloadCloud className="h-3 w-3" />
+              <span>Update Found</span>
+            </div>
+          ) : syncStatus === 'syncing' ? (
             <div className="flex items-center gap-1 text-red-600 animate-pulse font-medium">
               <RefreshCw className="h-3 w-3 animate-spin" />
-              <span>Updating List...</span>
+              <span>Downloading...</span>
             </div>
           ) : syncStatus === 'updated' ? (
             <div className="flex items-center gap-1 text-green-600 font-medium animate-in fade-in duration-500">
@@ -536,9 +553,8 @@ export function DDList({ userRole, userAgencies }: DDListProps) {
               <span>Updated</span>
             </div>
           ) : (
-            <div className="flex items-center gap-1 text-blue-600/70" title="Live Connection">
-              <Radio className="h-3 w-3" />
-              <span>Live</span>
+            <div className="text-green-600/70" title="Data is up to date">
+              <Check className="h-4 w-4" />
             </div>
           )}
         </div>
