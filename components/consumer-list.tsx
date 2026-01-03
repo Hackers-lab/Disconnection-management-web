@@ -256,10 +256,7 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
       ).sort()
       setMrus(uniqueMrus)
 
-      // Use transition to keep UI responsive during state update
-      startTransition(() => {
-        setConsumers(data)
-      })
+      setConsumers(data)
     }
 
     async function loadData() {
@@ -268,114 +265,105 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
       setError(null)
 
       try {
-        // 1. Instant Load (Cache)
-        const cachedData = await getFromCache<ConsumerData[]>(CACHE_KEY)
-        let cachedAgencies: string[] | null = null
-        
+        const cachedData = await getFromCache<ConsumerData[]>(CACHE_KEY);
+        let cachedAgencies: string[] | null = null;
         if (userRole === "admin" || userRole === "viewer") {
-          cachedAgencies = await getFromCache<string[]>(AGENCY_CACHE_KEY)
+          cachedAgencies = await getFromCache<string[]>(AGENCY_CACHE_KEY);
         }
 
         if (cachedData && cachedData.length > 0) {
-          console.log("✅ [Cache Hit] Loaded from IndexedDB")
-          await processData(cachedData, cachedAgencies, false)
-          setLoading(false) // Stop spinner immediately if cache exists
-          setIsCachedData(true)
+          console.log(`[Data Sync] ✅ Cache Hit: Loaded ${cachedData.length} records from IndexedDB.`);
+          await processData(cachedData, cachedAgencies, false);
+          setLoading(false); // Stop spinner immediately if cache exists
+          setIsCachedData(true);
         } else {
-          setLoading(true) // Only show spinner if cache is empty
+          console.log("[Data Sync] M Cache Miss: No data in IndexedDB.");
+          setLoading(true); // Only show spinner if cache is empty
         }
 
-        // Step 2: Background Sync Check
-        setSyncStatus('checking')
+        setSyncStatus('checking');
 
-        // Fetch Server Row Count for Consumers
-        const countRes = await fetch("/api/system/row-count?type=consumer")
-        if (!countRes.ok) throw new Error(`Row count fetch failed: ${countRes.status}`)
+        const countRes = await fetch(`/api/system/row-count?type=consumer`);
+        if (!countRes.ok) throw new Error(`Row count fetch failed: ${countRes.status}`);
         
-        const countData = await countRes.json().catch(() => ({ count: 0 }))
-        const serverCount = countData?.count ?? 0
-        const localCount = parseInt(localStorage.getItem(ROW_COUNT_KEY) || "0")
+        const countData = await countRes.json().catch(() => ({ count: 0 }));
+        const serverCount = countData?.count ?? 0;
+        const localCount = parseInt(localStorage.getItem(ROW_COUNT_KEY) || "0");
+        console.log(`[Data Sync] Row Count Check - Server: ${serverCount}, Local: ${localCount}`);
         
-        const isCacheEmpty = !cachedData || cachedData.length === 0
-        const isMismatch = serverCount !== localCount
+        const isCacheEmpty = !cachedData || cachedData.length === 0;
+        const isMismatch = serverCount !== localCount;
 
-        // Step 3: Decision Tree
         if (isCacheEmpty || isMismatch) {
           if (isMismatch) {
-             setSyncStatus('found')
-             await new Promise(resolve => setTimeout(resolve, 800))
+             console.log("[Data Sync] Row count mismatch. Triggering full download.");
+             setSyncStatus('found');
+             await new Promise(resolve => setTimeout(resolve, 800));
+          } else {
+             console.log("[Data Sync] Cache is empty. Triggering full download.");
           }
-          setSyncStatus('syncing')
-          console.log(`New content detected (Server: ${serverCount}). Downloading Base...`)
+          setSyncStatus('syncing');
           try {
-            const baseResponse = await fetch(`/api/consumers/base?v=${serverCount}`)
-            if (!baseResponse.ok) throw new Error("Base fetch failed")
+            const baseResponse = await fetch(`/api/consumers/base?v=${serverCount}`);
+            if (!baseResponse.ok) throw new Error("Base fetch failed");
+            const baseData = await baseResponse.json();
+            console.log(`[Data Sync] Loaded ${baseData.length} records from base.`);
             
-            const baseData = await baseResponse.json()
+            await saveToCache(CACHE_KEY, baseData);
+            await saveToCache(BASE_DATE_KEY, new Date().toISOString().split("T")[0]);
+            localStorage.setItem(ROW_COUNT_KEY, serverCount.toString());
             
-            await saveToCache(CACHE_KEY, baseData)
-            await saveToCache(BASE_DATE_KEY, new Date().toISOString().split("T")[0])
-            localStorage.setItem(ROW_COUNT_KEY, serverCount.toString())
-
-            await processData(baseData, cachedAgencies, true)
-            setSyncStatus('updated')
-            finalStatus = 'updated'
+            await processData(baseData, cachedAgencies, true);
+            setSyncStatus('updated');
+            finalStatus = 'updated';
           } catch (e) {
-            console.error("Base fetch error:", e)
-            setError("Failed to download list")
-            return // Stop here, do not fetch patch
+            console.error("Base fetch error:", e);
+            setError("Failed to download list");
+            return;
           }
         } else {
-          console.log("Rows match. Fetching Patches...")
-          const patchResponse = await fetch("/api/consumers/patch")
-          
+          console.log("[Data Sync] Row counts match. Checking for patches.");
+          const patchResponse = await fetch(`/api/consumers/patch`);
           if (patchResponse.ok) {
-            const patchData: ConsumerData[] = await patchResponse.json().catch(() => [])
+            const patchData: ConsumerData[] = await patchResponse.json().catch(() => []);
             
             if (patchData.length > 0) {
-              setSyncStatus('syncing')
-              console.log(`Merging ${patchData.length} patch updates...`)
+              console.log(`[Data Sync] Patching with ${patchData.length} records.`);
+              setSyncStatus('syncing');
               
-              // Merge Patch into Current (or Cached)
-              const currentData = consumersRef.current.length > 0 ? consumersRef.current : (cachedData || [])
-              const dataMap = new Map(currentData.map(c => [c.consumerId, c]))
-              
-              patchData.forEach(patchItem => {
-                dataMap.set(patchItem.consumerId, patchItem)
-              })
-              
-              const mergedData = Array.from(dataMap.values())
-              await saveToCache(CACHE_KEY, mergedData)
-              await processData(mergedData, cachedAgencies, true)
-              setSyncStatus('updated')
-              finalStatus = 'updated'
+              const currentData = consumersRef.current.length > 0 ? consumersRef.current : (cachedData || []);
+              const dataMap = new Map(currentData.map(c => [c.consumerId, c]));
+              patchData.forEach(patchItem => dataMap.set(patchItem.consumerId, patchItem));
+              const mergedData = Array.from(dataMap.values());
+
+              await saveToCache(CACHE_KEY, mergedData);
+              await processData(mergedData, cachedAgencies, true);
+              setSyncStatus('updated');
+              finalStatus = 'updated';
             }
           }
         }
 
-        // Handle Agencies Refresh (Admin/Viewer)
         if ((userRole === "admin" || userRole === "viewer") && !cachedAgencies) {
-           const agenciesRes = await fetch("/api/admin/agencies")
+           const agenciesRes = await fetch("/api/admin/agencies");
            if (agenciesRes.ok) {
-             const agencyData = await agenciesRes.json()
-             const freshAgencies = agencyData.filter((a: any) => a.isActive).map((a: any) => a.name)
-             await saveToCache(AGENCY_CACHE_KEY, freshAgencies)
-             setAgencies(freshAgencies)
+             const agencyData = await agenciesRes.json();
+             const freshAgencies = agencyData.filter((a: any) => a.isActive).map((a: any) => a.name);
+             await saveToCache(AGENCY_CACHE_KEY, freshAgencies);
+             setAgencies(freshAgencies);
           }
         }
-
       } catch (error) {
-        console.error("💥 Error loading data:", error)
+        console.error("💥 Error loading data:", error);
         if (consumersRef.current.length === 0) {
-          setError(error instanceof Error ? error.message : "Unknown error occurred")
+          setError(error instanceof Error ? error.message : "Unknown error occurred");
         }
       } finally {
-        setLoading(false)
-        // If status was updated, keep it for 3 seconds then go to idle
+        setLoading(false);
         if (finalStatus !== 'updated') {
-           setTimeout(() => setSyncStatus('idle'), 2000)
+           setTimeout(() => setSyncStatus('idle'), 2000);
         } else {
-           setTimeout(() => setSyncStatus('idle'), 4000)
+           setTimeout(() => setSyncStatus('idle'), 4000);
         }
       }
     }

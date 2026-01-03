@@ -564,7 +564,7 @@ export function DDList({ userRole, userAgencies }: DDListProps) {
       {viewMode === "card" ? (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {paginatedConsumers.map((consumer) => (
-            <Card key={consumer.consumerId} className="hover:shadow-md transition-shadow">
+            <Card key={consumer.consumerId} className="hover:shadow-md transition-shadow overflow-hidden max-w-full">
               <CardHeader className="pb-3">
                 <div className="flex justify-between items-start">
                   <div>

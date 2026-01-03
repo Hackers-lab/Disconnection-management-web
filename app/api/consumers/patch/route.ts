@@ -10,7 +10,7 @@ export async function GET() {
 
     // Filter for rows updated today (YYYY-MM-DD)
     const today = new Date().toISOString().split("T")[0]
-    const patchData = data.filter((consumer) => consumer.lastUpdated === today)
+    const patchData = data.filter((consumer) => consumer.lastUpdated?.startsWith(today))
 
     return NextResponse.json(patchData, {
       status: 200,

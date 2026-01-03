@@ -116,7 +116,9 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
   const [availableAgencies, setAvailableAgencies] = useState<string[]>(["All Agencies"])
   const [cachedAgencyDescription, setCachedAgencyDescription] = useState<string | null>(null)
 
-  const isDisconnectionView = activeView === "disconnection"
+  const isDisconnectionView = activeView === "disconnection";
+  const isDDView = activeView === 'deemed';
+  const showDownloadButton = isDisconnectionView || isDDView;
 
   // --- Date helpers ---
   const parseDate = (dateStr: string) => {
@@ -126,6 +128,212 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
     const [day, month, year] = parts.map(p => parseInt(p, 10));
     const d = new Date(year, month - 1, day);
     return isNaN(d.getTime()) ? null : d;
+  };
+  
+  const handleGenerateDDReport = async () => {
+    if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10);
+    setLoading(true);
+
+    try {
+        const data = await getFromCache<any[]>("dd_data_cache");
+        if (!data || data.length === 0) {
+            alert("No DD data available to generate a report.");
+            setLoading(false);
+            return;
+        }
+
+        // 1. Filter data based on user role
+        const filteredData = (userRole === "admin" || userRole === "viewer")
+            ? data
+            : data.filter(item => userAgencies.includes(item.agency));
+        
+        if (filteredData.length === 0) {
+            alert("No records found for your agency/agencies.");
+            setLoading(false);
+            return;
+        }
+
+        const printWindow = window.open('', '_blank');
+        if (!printWindow) {
+            alert("Pop-up blocked. Please allow pop-ups for this site to generate reports.");
+            setLoading(false);
+            return;
+        }
+
+        const getStatusBadge = (status: string) => {
+            const s = (status || "").toLowerCase();
+            let backgroundColor = "#eff6ff"; // Default blue
+            let color = "#1e40af";
+
+            if (s === "deemed disconnected") { backgroundColor = "#fef2f2"; color = "#991b1b"; }
+            else if (s === "connected (meter running)" || s === "physically live") { backgroundColor = "#fefce8"; color = "#854d0e"; }
+            else if (s === "disconnected (using neighbor source)" || s.includes("enjoying power")) { backgroundColor = "#fff7ed"; color = "#9a3412"; }
+            else if (s === "permanently disconnected" || s === "disconnected") { backgroundColor = "#f0fdf4"; color = "#166534"; }
+            else if (s === "premises locked") { backgroundColor = "#eff6ff"; color = "#1e40af"; }
+            else if (s === "consumer not found" || s === "not found") { backgroundColor = "#f9fafb"; color = "#374151"; }
+
+            return `<span style="background-color: ${backgroundColor}; color: ${color}; padding: 2px 8px; border-radius: 9999px; font-size: 10px; font-weight: 600; white-space: nowrap;">${status}</span>`;
+        };
+
+        let reportBody = '';
+
+        // 2. Role-based content generation
+        if (userRole === "admin" || userRole === "viewer") {
+            const groupedByAgency: { [key: string]: any[] } = filteredData.reduce((acc, item) => {
+                const agency = item.agency || "Unassigned";
+                if (!acc[agency]) acc[agency] = [];
+                acc[agency].push(item);
+                return acc;
+            }, {} as { [key: string]: any[] });
+
+            const agencyKeys = Object.keys(groupedByAgency).sort();
+
+            agencyKeys.forEach((agency, index) => {
+                const items = groupedByAgency[agency];
+                const isLast = index === agencyKeys.length - 1;
+                reportBody += `
+                    <div class="report-page ${!isLast ? 'page-break' : ''}">
+                        <div class="header">
+                            <h1>${agency}</h1>
+                            <h2>Deemed Visit Report</h2>
+                            <h3>Total Records: ${items.length}</h3>
+                        </div>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>Consumer ID</th>
+                                    <th>Name</th>
+                                    <th>Address</th>
+                                    <th>Class</th>
+                                    <th>Device</th>
+                                    <th>Mobile</th>
+                                    <th>Amount (₹)</th>
+                                    <th>Status</th>
+                                    <th>Discon Date</th>
+                                    <th>Visit Date</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${items.map((item, i) => `
+                                    <tr>
+                                        <td>${i + 1}</td>
+                                        <td>${item.consumerId || ''}</td>
+                                        <td>${item.name || ''}</td>
+                                        <td>${item.address || ''}</td>
+                                        <td>${item.baseClass || ''}</td>
+                                        <td>${item.device || ''}</td>
+                                        <td>${item.mobileNumber || ''}</td>
+                                        <td class="text-right">${item.totalArrears ? Number(item.totalArrears).toLocaleString() : '0'}</td>
+                                        <td>${getStatusBadge(item.disconStatus)}</td>
+                                        <td>${item.disconDate || ''}</td>
+                                        <td>${item.visitDate || ''}</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+            });
+        } else {
+            // For Agency user
+            reportBody += `
+                <div class="report-page">
+                    <div class="header">
+                        <h1>Deemed Visit Report</h1>
+                        <h2>Total Records: ${filteredData.length}</h2>
+                    </div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Consumer ID</th>
+                                <th>Name</th>
+                                <th>Address</th>
+                                <th>Class</th>
+                                <th>Device</th>
+                                <th>Mobile</th>
+                                <th>Amount (₹)</th>
+                                <th>Status</th>
+                                <th>Discon Date</th>
+                                <th>Visit Date</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${filteredData.map((item, i) => `
+                                <tr>
+                                    <td>${i + 1}</td>
+                                    <td>${item.consumerId || ''}</td>
+                                    <td>${item.name || ''}</td>
+                                    <td>${item.address || ''}</td>
+                                    <td>${item.baseClass || ''}</td>
+                                    <td>${item.device || ''}</td>
+                                    <td>${item.mobileNumber || ''}</td>
+                                    <td class="text-right">${item.totalArrears ? Number(item.totalArrears).toLocaleString() : '0'}</td>
+                                    <td>${getStatusBadge(item.disconStatus)}</td>
+                                    <td>${item.disconDate || ''}</td>
+                                    <td>${item.visitDate || ''}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+        }
+        
+        const reportContent = `
+            <html>
+                <head>
+                    <title>Deemed Visit Report</title>
+                    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+                    <style>
+                        body { font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #333; }
+                        .report-page { width: 100%; }
+                        .page-break { page-break-after: always; }
+                        .header { text-align: center; margin-bottom: 20px; }
+                        .header h1 { font-size: 22px; font-weight: 700; margin: 5px 0; }
+                        .header h2 { font-size: 16px; font-weight: 500; margin: 5px 0; color: #444; }
+                        .header h3 { font-size: 12px; font-weight: 600; margin: 5px 0; color: #555; }
+                        table { width: 100%; border-collapse: collapse; font-size: 9px; }
+                        th, td { border: 1px solid #ccc; padding: 5px; text-align: left; }
+                        th { background-color: #f0f0f0; font-weight: 600; text-transform: uppercase; }
+                        .text-right { text-align: right; }
+                        @media print {
+                            @page { size: A4 landscape; margin: 10mm; }
+                            .page-break { page-break-after: always; }
+                        }
+                    </style>
+                </head>
+                <body>
+                    <div id="report-content">${reportBody}</div>
+                    <script>
+                        window.onload = function() {
+                            const element = document.getElementById('report-content');
+                            const opt = {
+                                margin: 8,
+                                filename: 'DD_Report_${new Date().toISOString().split('T')[0]}.pdf',
+                                image: { type: 'jpeg', quality: 0.98 },
+                                html2canvas: { scale: 2, useCORS: true },
+                                jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' }
+                            };
+                            html2pdf().set(opt).from(element).save().then(() => {
+                                setTimeout(() => window.close(), 500);
+                            });
+                        }
+                    </script>
+                </body>
+            </html>
+        `;
+
+        printWindow.document.write(reportContent);
+        printWindow.document.close();
+
+    } catch (error) {
+        console.error("Failed to generate DD report:", error);
+        alert("An error occurred while generating the report.");
+    } finally {
+        setLoading(false);
+    }
   };
 
   const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
@@ -652,109 +860,111 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
                 <LayoutDashboard className="h-4 w-4" />
               </Button>
 
+              {showDownloadButton && (
+                <div className="relative">
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={() => {
+                      if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
+                      setShowDownloadMenu(!showDownloadMenu)
+                    }}
+                    title="Download Options"
+                  >
+                    <Download className="h-4 w-4" />
+                  </Button>
+
+                  {showDownloadMenu && (
+                    <div className="absolute right-0 mt-2 w-56 bg-white border rounded-lg shadow-lg z-50 animate-in fade-in zoom-in-95 duration-200">
+                      {isDisconnectionView && (
+                        <>
+                          <button
+                            type="button"
+                            className="block w-full text-left px-4 py-2 hover:bg-blue-50 text-sm"
+                            onClick={() => {
+                              if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
+                              setShowDownloadMenu(false);
+                              onDownload && onDownload();
+                            }}
+                          >
+                            Download DC List
+                          </button>
+                          <button
+                            type="button"
+                            className="block w-full text-left px-4 py-2 hover:bg-blue-50 text-sm"
+                            onClick={() => {
+                              if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
+                              setShowDownloadMenu(false);
+                              setShowReportDialog(true);
+                            }}
+                          >
+                            Daily Report (PDF)
+                          </button>
+                          {canDownloadDefaulters && (
+                            <button
+                              type="button"
+                              className="block w-full text-left px-4 py-2 hover:bg-blue-50 text-sm"
+                              onClick={() => {
+                                if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
+                                setShowDownloadMenu(false);
+                                onDownloadDefaulters && onDownloadDefaulters();
+                              }}
+                            >
+                              Top Defaulter List
+                            </button>
+                          )}
+                        </>
+                      )}
+                      {isDDView && (
+                        <button
+                          className="block w-full text-left px-4 py-2 hover:bg-blue-50 text-sm"
+                          onClick={() => { setShowDownloadMenu(false); handleGenerateDDReport(); }}
+                        >
+                          Download DD List (PDF)
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* View-specific Admin buttons */}
               {isDisconnectionView && (
                 <>
-              {/* Download menu */}
-              <div className="relative">
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  onClick={() => {
-                    if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
-                    setShowDownloadMenu(!showDownloadMenu)
-                  }}
-                  title="Download Options"
-                >
-                  <Download className="h-4 w-4" />
-                </Button>
-
-                {showDownloadMenu && (
-                  <div className="absolute right-0 mt-2 w-48 bg-white border rounded-lg shadow-lg z-50 animate-in fade-in zoom-in-95 duration-200">
-                    <button
-                      type="button"
-                      className="block w-full text-left px-4 py-2 hover:bg-blue-50 text-sm"
-                      onClick={() => {
-                        if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
-                        setShowDownloadMenu(false);
-                        onDownload && onDownload();
-                      }}
-                    >
-                      Download DC List
-                    </button>
-                    <button
-                      type="button"
-                      className="block w-full text-left px-4 py-2 hover:bg-blue-50 text-sm"
-                      onClick={() => {
-                        if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
-                        setShowDownloadMenu(false);
-                        setShowReportDialog(true);
-                      }}
-                    >
-                      Daily Report (PDF)
-                    </button>
-                    {canDownloadDefaulters && (
-                    <button
-                      type="button"
-                      className="block w-full text-left px-4 py-2 hover:bg-blue-50 text-sm"
-                      onClick={() => {
-                        if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
-                        setShowDownloadMenu(false);
-                        onDownloadDefaulters && onDownloadDefaulters();
-                      }}
-                    >
-                      Top Defaulter List
-                    </button>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {canSeeAgencyUpdates && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleUpload}
-                  title="Agency Last Updates"
-                  disabled={loading}
-                >
-                  <List className="h-4 w-4" />
-                </Button>
+                  {canSeeAgencyUpdates && (
+                    <Button variant="ghost" size="sm" onClick={handleUpload} title="Agency Last Updates" disabled={loading}>
+                      <List className="h-4 w-4" />
+                    </Button>
+                  )}
+                  {userRole === "admin" && (
+                    <Button variant="ghost" size="sm" onClick={() => window.open("/api/sheet-redirect", "_blank")} title="Edit DC List">
+                      <FileSpreadsheet className="h-4 w-4" />
+                    </Button>
+                  )}
+                </>
               )}
 
-              {userRole === "admin" && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
-                    window.open("/api/sheet-redirect", "_blank")
-                  }}
-                  title="Edit DC List"
-                >
-                  <FileSpreadsheet className="h-4 w-4" />
-                </Button>
+              {isDDView && (
+                 <>
+                  {userRole === "admin" && (
+                    <Button variant="ghost" size="sm" onClick={() => window.open("/api/dd-sheet-redirect", "_blank")} title="Edit DD List">
+                      <FileText className="h-4 w-4" />
+                    </Button>
+                  )}
+                </>
               )}
-
+              
+              {/* Global Admin Buttons */}
               {userRole === "admin" && onAdminClick && (
-                <Button variant="ghost" size="sm" onClick={() => {
-                    if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
-                    onAdminClick()
-                }} title="Admin Panel">
+                <Button variant="ghost" size="sm" onClick={onAdminClick} title="Admin Panel">
                   <Settings className="h-4 w-4" />
                 </Button>
               )}
 
               {userRole === "admin" && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleGlobalRefresh}
-                  title="Sync Fresh Data"
-                >
-                  <RefreshCw className="h-4 w-4" />
-                </Button>
-              )}
-                </>
+                 <Button variant="ghost" size="sm" onClick={handleGlobalRefresh} title="Sync Fresh Data">
+                   <RefreshCw className="h-4 w-4" />
+                 </Button>
               )}
 
               <Button
@@ -780,39 +990,42 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-56">
-                  <DropdownMenuLabel>Downloads</DropdownMenuLabel>
-                  <DropdownMenuSeparator />
+                  {showDownloadButton && (
+                    <>
+                      <DropdownMenuLabel>Downloads</DropdownMenuLabel>
+                      <DropdownMenuSeparator />
+                    </>
+                  )}
                   
                   {isDisconnectionView && (
                     <>
-                  <DropdownMenuItem onClick={() => { 
-                    if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
-                    onDownload && onDownload() 
-                  }}>
-                    <Download className="mr-2 h-4 w-4" />
-                    <span>Disconnection List</span>
-                  </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => onDownload && onDownload() }>
+                        <Download className="mr-2 h-4 w-4" />
+                        <span>Disconnection List</span>
+                      </DropdownMenuItem>
 
-                  {canDownloadDefaulters && (
-                    <DropdownMenuItem onClick={() => { 
-                        if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
-                        onDownloadDefaulters && onDownloadDefaulters() 
-                    }}>
-                      <Download className="mr-2 h-4 w-4" />
-                      <span>Top Defaulter List</span>
-                    </DropdownMenuItem>
-                  )}
+                      {canDownloadDefaulters && (
+                        <DropdownMenuItem onClick={() => onDownloadDefaulters && onDownloadDefaulters()}>
+                          <Download className="mr-2 h-4 w-4" />
+                          <span>Top Defaulter List</span>
+                        </DropdownMenuItem>
+                      )}
 
-                  <DropdownMenuItem onClick={() => setShowReportDialog(true)}>
-                    <Download className="mr-2 h-4 w-4" />
-                    <span>Daily Report</span>
-                  </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setShowReportDialog(true)}>
+                        <Download className="mr-2 h-4 w-4" />
+                        <span>Daily Report</span>
+                      </DropdownMenuItem>
                     </>
                   )}
 
-                  {isDisconnectionView && (
-                    <>
-                  {canSeeAgencyUpdates && (
+                  {isDDView && (
+                    <DropdownMenuItem onClick={handleGenerateDDReport}>
+                        <Download className="mr-2 h-4 w-4" />
+                        <span>Download DD List</span>
+                    </DropdownMenuItem>
+                  )}
+
+                  {isDisconnectionView && canSeeAgencyUpdates && (
                     <>
                       <DropdownMenuSeparator />
                       <DropdownMenuLabel>Updates</DropdownMenuLabel>
@@ -823,8 +1036,6 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
                       </DropdownMenuItem>
                     </>
                   )}
-                    </>
-                  )}
 
                   {userRole === "admin" && (
                     <>
@@ -833,33 +1044,30 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
                       <DropdownMenuSeparator />
                       
                       {isDisconnectionView && (
-                        <>
-                      <DropdownMenuItem onClick={() => {
-                        if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
-                        window.open("/api/sheet-redirect", "_blank")
-                      }}>
-                        <FileSpreadsheet className="mr-2 h-4 w-4" />
-                        <span>Edit DC List</span>
-                      </DropdownMenuItem>
-                        </>
+                        <DropdownMenuItem onClick={() => window.open("/api/sheet-redirect", "_blank")}>
+                          <FileSpreadsheet className="mr-2 h-4 w-4" />
+                          <span>Edit DC List</span>
+                        </DropdownMenuItem>
+                      )}
+
+                      {isDDView && (
+                        <DropdownMenuItem onClick={() => window.open("/api/dd-sheet-redirect", "_blank")}>
+                          <FileText className="mr-2 h-4 w-4" />
+                          <span>Edit DD List</span>
+                        </DropdownMenuItem>
                       )}
 
                       {onAdminClick && (
-                        <DropdownMenuItem onClick={() => {
-                            if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
-                            onAdminClick()
-                        }}>
+                        <DropdownMenuItem onClick={onAdminClick}>
                           <Settings className="mr-2 h-4 w-4" />
                           <span>Admin Settings</span>
                         </DropdownMenuItem>
                       )}
 
-                      {isDisconnectionView && (
                       <DropdownMenuItem onClick={handleGlobalRefresh}>
                         <RefreshCw className="mr-2 h-4 w-4" />
                         <span>Sync Fresh Data</span>
                       </DropdownMenuItem>
-                      )}
                     </>
                   )}
 
