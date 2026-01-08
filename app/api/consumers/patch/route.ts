@@ -1,4 +1,3 @@
-// c:\Users\Pc\Documents\GitHub\Disconnection-management-web\app\api\consumers\patch\route.ts
 import { NextResponse } from "next/server"
 import { fetchConsumerData } from "@/lib/google-sheets"
 
@@ -8,17 +7,40 @@ export async function GET() {
   try {
     const data = await fetchConsumerData()
 
-    // Filter for rows updated today (YYYY-MM-DD)
-    const today = new Date().toISOString().split("T")[0]
-    const patchData = data.filter((consumer) => consumer.lastUpdated?.startsWith(today))
+    // If the dataset is small (e.g., under 100 rows), return it all.
+    // This avoids complex date logic for small datasets.
+    if (data.length < 100) {
+      return NextResponse.json(data, {
+        headers: {
+          'Cache-Control': 'no-store',
+        },
+      });
+    }
+
+    // Filter for rows updated in the last 48 hours to reliably cover timezone differences.
+    const fortyEightHoursAgo = new Date();
+    fortyEightHoursAgo.setHours(fortyEightHoursAgo.getHours() - 48);
+
+    const patchData = data.filter((consumer) => {
+      if (!consumer.lastUpdated) {
+        return false;
+      }
+      try {
+        // Robustly parse the lastUpdated string into a Date object.
+        const updatedDate = new Date(consumer.lastUpdated);
+        // Ensure the date is valid and falls within the last 48 hours.
+        return !isNaN(updatedDate.getTime()) && updatedDate >= fortyEightHoursAgo;
+      } catch (e) {
+        console.error(`Failed to parse date string: "${consumer.lastUpdated}"`);
+        return false;
+      }
+    });
 
     return NextResponse.json(patchData, {
       status: 200,
       headers: {
-        // No caching for patch data to ensure real-time updates
-        "Cache-Control": "no-cache, no-store, must-revalidate",
-        Pragma: "no-cache",
-        Expires: "0",
+        // Ensure patches are never cached by the CDN or browser.
+        "Cache-Control": "no-store",
       },
     })
   } catch (error) {
