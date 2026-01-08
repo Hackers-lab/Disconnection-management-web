@@ -1,28 +1,37 @@
 // c:\Users\Pc\Documents\GitHub\Disconnection-management-web\app\api\consumers\base\route.ts
-import { NextResponse } from "next/server"
-import { fetchConsumerData } from "@/lib/google-sheets"
+import { NextResponse } from "next/server";
+import { fetchConsumerData } from "@/lib/google-sheets";
 
-export const dynamic = 'force-dynamic'
+export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
-    // Fetch full consumer data
-    const data = await fetchConsumerData()
+    const data = await fetchConsumerData();
+    const lastRow = data[data.length - 1];
 
-    // Return data with NO caching so updates appear immediately
+    // Smart Integrity Check
+    if (lastRow && lastRow.consumerId && !lastRow.agency) {
+      // Data is incomplete, prevent caching
+      return NextResponse.json(data, {
+        status: 200,
+        headers: {
+          'Cache-Control': 'no-store',
+        },
+      });
+    }
+
+    // Data is complete, allow caching
     return NextResponse.json(data, {
       status: 200,
       headers: {
-        "Cache-Control": "public, s-maxage=86400, stale-while-revalidate=300",
-        "CDN-Cache-Control": "public, s-maxage=86400, stale-while-revalidate=300",
-        "Vercel-CDN-Cache-Control": "public, s-maxage=86400, stale-while-revalidate=300",
+        'Cache-Control': 'public, s-maxage=86400, stale-while-revalidate=900',
       },
-    })
+    });
   } catch (error) {
-    console.error("💥 API /consumers/base error:", error)
+    console.error("💥 API /consumers/base error:", error);
     return NextResponse.json(
       { error: "Failed to fetch base data" },
       { status: 500 }
-    )
+    );
   }
 }

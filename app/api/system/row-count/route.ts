@@ -1,6 +1,7 @@
 // c:\Users\Pc\Documents\GitHub\Disconnection-management-web\app\api\system\row-count\route.ts
-import { google } from "googleapis"
-import { NextRequest, NextResponse } from "next/server"
+import { google } from "googleapis";
+import { NextRequest, NextResponse } from "next/server";
+import crypto from "crypto";
 
 export const dynamic = 'force-dynamic'
 
@@ -9,21 +10,15 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams
     const type = searchParams.get('type') || 'consumer'
 
-    // Determine Tab Name based on type
-    // Default 'consumer' -> Sheet1
-    // 'dd' -> DD
-    let range = "Sheet1!A:A"
-    
-    if (type === 'dd') {
-      range = "DD!A:A"
-    }
+    // Fetch Column C for consumer ID
+    let range = type === 'dd' ? "DD!C:C" : "Sheet1!C:C";
 
     const client_email = process.env.GOOGLE_SHEETS_CLIENT_EMAIL || process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL
     const private_key = (process.env.GOOGLE_SHEETS_PRIVATE_KEY || process.env.GOOGLE_PRIVATE_KEY)?.replace(/\\n/g, "\n")
     const spreadsheetId = process.env.DISCONNECTION_SHEET || process.env.GOOGLE_SHEET_ID
 
     if (!client_email || !private_key || !spreadsheetId) {
-      throw new Error("Missing required environment variables (GOOGLE_SHEETS_CLIENT_EMAIL, GOOGLE_SHEETS_PRIVATE_KEY, or DISCONNECTION_SHEET)")
+      throw new Error("Missing required environment variables for Google Sheets API")
     }
 
     const auth = new google.auth.GoogleAuth({
@@ -42,13 +37,22 @@ export async function GET(request: NextRequest) {
     })
 
     const rows = response.data.values || []
-    // Count non-empty rows in Column A
-    // Ensure row exists and has content
-    const count = rows.filter((row: any[]) => row && row[0] && String(row[0]).trim() !== "").length
+    
+    // Filter for non-empty rows first to ensure consistency
+    const nonEmptyRows = rows.filter((row: any[]) => 
+      row && row[0] && String(row[0]).trim() !== ""
+    );
 
-    return NextResponse.json({ count })
+    // Count is the length of the filtered array
+    const count = nonEmptyRows.length;
+    
+    // Generate MD5 hash of only the non-empty data for stable hashing
+    const dataString = JSON.stringify(nonEmptyRows);
+    const hash = crypto.createHash('md5').update(dataString).digest('hex');
+
+    return NextResponse.json({ count, version: hash })
   } catch (error) {
-    console.error("Row count fetch failed:", error)
-    return NextResponse.json({ count: 0 }, { status: 500 })
+    console.error(`API Error: Failed to fetch row count or generate hash for '${(request.nextUrl.searchParams.get('type') || 'consumer')}':`, error)
+    return NextResponse.json({ count: 0, version: null }, { status: 500 })
   }
 }

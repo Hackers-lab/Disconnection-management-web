@@ -192,6 +192,7 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
     const AGENCY_CACHE_KEY = "agencies_data_cache"
     const BASE_DATE_KEY = "consumers_base_date"
     const ROW_COUNT_KEY = "consumer_row_count"
+    const CONSUMER_VERSION_KEY = "consumer_version_hash"
 
     async function processData(data: ConsumerData[], preloadedAgencies: string[] | null = null, isBackgroundUpdate = false) {
       // Yield to main thread to prevent UI blocking during heavy processing
@@ -286,17 +287,21 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
         const countRes = await fetch(`/api/system/row-count?type=consumer`);
         if (!countRes.ok) throw new Error(`Row count fetch failed: ${countRes.status}`);
         
-        const countData = await countRes.json().catch(() => ({ count: 0 }));
+        const countData = await countRes.json().catch(() => ({ count: 0, version: null }));
         const serverCount = countData?.count ?? 0;
+        const serverVersion = countData?.version ?? null;
         const localCount = parseInt(localStorage.getItem(ROW_COUNT_KEY) || "0");
+        const localVersion = localStorage.getItem(CONSUMER_VERSION_KEY) || null;
+
         console.log(`[Data Sync] Row Count Check - Server: ${serverCount}, Local: ${localCount}`);
+        console.log(`[Data Sync] Version Check - Server: ${serverVersion}, Local: ${localVersion}`);
         
         const isCacheEmpty = !cachedData || cachedData.length === 0;
-        const isMismatch = serverCount !== localCount;
+        const isMismatch = serverCount !== localCount || serverVersion !== localVersion;
 
         if (isCacheEmpty || isMismatch) {
           if (isMismatch) {
-             console.log("[Data Sync] Row count mismatch. Triggering full download.");
+             console.log("[Data Sync] Count or Version mismatch. Triggering full download.");
              setSyncStatus('found');
              await new Promise(resolve => setTimeout(resolve, 800));
           } else {
@@ -306,23 +311,36 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
           try {
             const baseResponse = await fetch(`/api/consumers/base?v=${serverCount}`);
             if (!baseResponse.ok) throw new Error("Base fetch failed");
+            
+            const cacheControl = baseResponse.headers.get('Cache-Control');
             const baseData = await baseResponse.json();
             console.log(`[Data Sync] Loaded ${baseData.length} records from base.`);
-            
+
+            // Always update the underlying data cache and UI
             await saveToCache(CACHE_KEY, baseData);
-            await saveToCache(BASE_DATE_KEY, new Date().toISOString().split("T")[0]);
-            localStorage.setItem(ROW_COUNT_KEY, serverCount.toString());
-            
             await processData(baseData, cachedAgencies, true);
-            setSyncStatus('updated');
-            finalStatus = 'updated';
+
+            // Only "commit" the new count/version if the data was complete
+            if (cacheControl !== 'no-store') {
+              console.log('[Data Sync] ✅ Integrity check passed. Updating local count and version.');
+              await saveToCache(BASE_DATE_KEY, new Date().toISOString().split("T")[0]);
+              localStorage.setItem(ROW_COUNT_KEY, serverCount.toString());
+              if (serverVersion) {
+                localStorage.setItem(CONSUMER_VERSION_KEY, serverVersion);
+              }
+              setSyncStatus('updated');
+              finalStatus = 'updated';
+            } else {
+              console.log('[Data Sync] ⚠️ Integrity check failed. Local count/version preserved to force re-check on next sync.');
+              // Do not update status to 'updated', let it time out from 'syncing' to 'idle'
+            }
           } catch (e) {
             console.error("Base fetch error:", e);
             setError("Failed to download list");
             return;
           }
         } else {
-          console.log("[Data Sync] Row counts match. Checking for patches.");
+          console.log("[Data Sync] Row counts and versions match. Checking for patches.");
           const patchResponse = await fetch(`/api/consumers/patch`);
           if (patchResponse.ok) {
             const patchData: ConsumerData[] = await patchResponse.json().catch(() => []);
