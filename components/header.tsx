@@ -432,14 +432,84 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
     setLoading(true);
     setAgencyLastUpdates([]);
 
-    // 1. Prioritize Network Fetch
+    // 1. Try to calculate from consumers_data_cache (Local Base+Patch Data)
     try {
-      console.log("🔄 [Network] Fetching fresh agency updates...");
-      const response = await fetch("/api/agency-last-updates");
-      if (!response.ok) {
-        // This will be caught by the catch block below
-        throw new Error(`API request failed with status ${response.status}`);
+      console.log("🔄 [Local DB] Attempting to calculate agency updates from local cache...");
+      const consumers = await getFromCache<any[]>("consumers_data_cache");
+      
+      if (consumers && Array.isArray(consumers) && consumers.length > 0) {
+        console.log("✅ [Local DB] Cache hit. Calculating updates locally.");
+        
+        const agencyData = new Map<string, any[]>();
+        consumers.forEach(item => {
+            if (!item.agency) return;
+            const agency = item.agency;
+            if (!agencyData.has(agency)) {
+                agencyData.set(agency, []);
+            }
+            agencyData.get(agency)!.push(item);
+        });
+
+        const derivedUpdates = Array.from(agencyData.entries()).map(([name, items]) => {
+            if (items.length === 0) {
+                return { name, lastUpdate: "", lastUpdateCount: 0 };
+            }
+
+            let latestTs = 0;
+            let latestDateStr = "";
+
+            // Find the latest date string in this agency's items
+            items.forEach(item => {
+                if (item.disconDate) {
+                    let ts = 0;
+                    if (item.disconDate.match(/^\d{2}-\d{2}-\d{4}$/)) {
+                        const [day, month, year] = item.disconDate.split('-').map(Number);
+                        ts = new Date(year, month - 1, day).getTime();
+                    } else if (item.disconDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                        ts = new Date(item.disconDate).getTime();
+                    }
+
+                    if (ts > latestTs) {
+                        latestTs = ts;
+                        latestDateStr = item.disconDate;
+                    }
+                }
+            });
+
+            if (latestDateStr === "") {
+              return { name, lastUpdate: "", lastUpdateCount: 0 };
+            }
+
+            // Count items that have the latest date string
+            const count = items.filter(item => item.disconDate === latestDateStr).length;
+
+            return {
+                name,
+                lastUpdate: latestDateStr,
+                lastUpdateCount: count
+            };
+        });
+
+        // Filter based on role
+        const filteredData = (userRole === "admin" || userRole === "viewer" || userRole === "executive" || userRole === "agency")
+          ? derivedUpdates
+          : derivedUpdates.filter((agency) => userAgencies.includes(agency.name));
+
+        setAgencyLastUpdates(filteredData);
+        setLoading(false);
+        return; // Stop here, do not fetch from API
+      } else {
+        console.log(" M [Local DB] Cache miss or empty. Falling back to network.");
       }
+    } catch (error) {
+      console.warn("⚠️ [Local DB] Could not calculate updates from local cache, falling back to network.", error);
+    }
+
+    // 2. Fallback to Network if local cache is empty or fails
+    try {
+      console.log("🔄 [Network] Fetching fresh agency updates from server...");
+      const response = await fetch("/api/agency-last-updates");
+      if (!response.ok) throw new Error("API request failed");
       
       const data = await response.json();
       
@@ -449,80 +519,9 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
           : data.filter((agency: { name: string, lastUpdate: string }) => userAgencies.includes(agency.name));
 
       setAgencyLastUpdates(filteredData);
-      console.log("✅ [Network] Successfully loaded fresh updates.");
-
-    } catch (networkError) {
-      console.warn("⚠️ [Network] Fetch failed, falling back to local cache.", networkError);
-
-      // 2. Fallback to Local Cache Calculation
-      try {
-        const consumers = await getFromCache<any[]>("consumers_data_cache");
-        
-        if (consumers && Array.isArray(consumers) && consumers.length > 0) {
-          console.log("✅ [Local DB] Calculating agency updates from consumers_data_cache");
-          
-          const agencyData = new Map<string, any[]>();
-          consumers.forEach(item => {
-              if (!item.agency) return;
-              const agency = item.agency;
-              if (!agencyData.has(agency)) {
-                  agencyData.set(agency, []);
-              }
-              agencyData.get(agency)!.push(item);
-          });
-
-          const derivedUpdates = Array.from(agencyData.entries()).map(([name, items]) => {
-              if (items.length === 0) {
-                  return { name, lastUpdate: "", lastUpdateCount: 0 };
-              }
-
-              let latestTs = 0;
-              let latestDateStr = "";
-
-              // Find the latest date string in this agency's items
-              items.forEach(item => {
-                  if (item.disconDate) {
-                      let ts = 0;
-                      if (item.disconDate.match(/^\d{2}-\d{2}-\d{4}$/)) {
-                          const [day, month, year] = item.disconDate.split('-').map(Number);
-                          ts = new Date(year, month - 1, day).getTime();
-                      } else if (item.disconDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
-                          ts = new Date(item.disconDate).getTime();
-                      }
-
-                      if (ts > latestTs) {
-                          latestTs = ts;
-                          latestDateStr = item.disconDate;
-                      }
-                  }
-              });
-
-              if (latestDateStr === "") {
-                return { name, lastUpdate: "", lastUpdateCount: 0 };
-              }
-
-              // Count items that have the latest date string
-              const count = items.filter(item => item.disconDate === latestDateStr).length;
-
-              return {
-                  name,
-                  lastUpdate: latestDateStr,
-                  lastUpdateCount: count
-              };
-          });
-
-          // Filter based on role
-          const filteredData = (userRole === "admin" || userRole === "viewer" || userRole === "executive" || userRole === "agency")
-            ? derivedUpdates
-            : derivedUpdates.filter((agency) => userAgencies.includes(agency.name));
-
-          setAgencyLastUpdates(filteredData);
-        } else {
-            console.error("❌ [Local DB] Fallback failed: No data in local cache.");
-        }
-      } catch (cacheError) {
-        console.error("❌ [Local DB] Fallback failed with error:", cacheError);
-      }
+      console.log("✅ [Network] Successfully loaded fresh updates from server.");
+    } catch (error) {
+      console.error("❌ [Network] Error fetching fresh agency updates:", error);
     } finally {
       setLoading(false);
     }
