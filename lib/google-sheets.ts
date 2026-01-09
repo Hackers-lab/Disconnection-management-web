@@ -90,74 +90,83 @@ export async function getAgencyLastUpdates(): Promise<
 > {
   const consumers = await fetchConsumerData();
 
-  interface AgencyInfo {
-    latest: Date;
-    count: number;
+  // 1. Group all records by agency
+  const agencyData = new Map<string, any[]>();
+  consumers.forEach(item => {
+      if (!item.agency) return;
+      const agency = item.agency;
+      if (!agencyData.has(agency)) {
+          agencyData.set(agency, []);
+      }
+      agencyData.get(agency)!.push(item);
+  });
+  
+  const dateFormats = [
+      {
+        pattern: /^(\d{2})-(\d{2})-(\d{4})$/,
+        handler: (d: RegExpMatchArray) => new Date(`${d[3]}-${d[2]}-${d[1]}`), // DD-MM-YYYY
+      },
+      {
+        pattern: /^(\d{2})-(\d{2})-(\d{4})$/,
+        handler: (d: RegExpMatchArray) => new Date(`${d[3]}-${d[1]}-${d[2]}`), // MM-DD-YYYY
+      },
+      {
+        pattern: /^(\d{4})-(\d{2})-(\d{2})$/,
+        handler: (d: RegExpMatchArray) => new Date(`${d[1]}-${d[2]}-${d[3]}`), // YYYY-MM-DD
+      },
+  ];
+  
+  const parseDate = (dateStr: string): Date | null => {
+      if (!dateStr) return null;
+      for (const format of dateFormats) {
+          const match = dateStr.match(format.pattern);
+          if (match) {
+              const d = format.handler(match);
+              if (!isNaN(d.getTime())) return d;
+          }
+      }
+      return null;
   }
 
-  const agencyMap = new Map<string, AgencyInfo>();
-
-  const dateFormats = [
-    {
-      pattern: /^(\d{2})-(\d{2})-(\d{4})$/,
-      handler: (d: RegExpMatchArray) => new Date(`${d[3]}-${d[2]}-${d[1]}`), // DD-MM-YYYY
-    },
-    {
-      pattern: /^(\d{2})-(\d{2})-(\d{4})$/,
-      handler: (d: RegExpMatchArray) => new Date(`${d[3]}-${d[1]}-${d[2]}`), // MM-DD-YYYY
-    },
-    {
-      pattern: /^(\d{4})-(\d{2})-(\d{2})$/,
-      handler: (d: RegExpMatchArray) => new Date(`${d[1]}-${d[2]}-${d[3]}`), // YYYY-MM-DD
-    },
-  ];
-
-  consumers.forEach((consumer) => {
-    if (!consumer.agency || !consumer.disconDate) return;
-
-    // Parse the date
-    let parsedDate: Date | null = null;
-    for (const format of dateFormats) {
-      const match = consumer.disconDate.match(format.pattern);
-      if (match) {
-        parsedDate = format.handler(match);
-        break;
+  const derivedUpdates = Array.from(agencyData.entries()).map(([name, items]) => {
+      if (items.length === 0) {
+          return { name, lastUpdate: "", lastUpdateCount: 0 };
       }
-    }
-    if (!parsedDate || isNaN(parsedDate.getTime())) return;
 
-    const info = agencyMap.get(consumer.agency);
+      let latestTs = 0;
+      let latestDateStr = "";
 
-    if (!info) {
-      // first record for this agency
-      agencyMap.set(consumer.agency, { latest: parsedDate, count: 1 });
-    } else {
-      if (parsedDate > info.latest) {
-        // found a newer date → reset count
-        agencyMap.set(consumer.agency, { latest: parsedDate, count: 1 });
-      } else if (
-        parsedDate.getFullYear() === info.latest.getFullYear() &&
-        parsedDate.getMonth() === info.latest.getMonth() &&
-        parsedDate.getDate() === info.latest.getDate()
-      ) {
-        // same as latest date → increment count
-        info.count++;
-        agencyMap.set(consumer.agency, info);
+      // Find the latest date string in this agency's items
+      items.forEach(item => {
+          if (item.disconDate) {
+              const d = parseDate(item.disconDate);
+              if (d && d.getTime() > latestTs) {
+                  latestTs = d.getTime();
+                  latestDateStr = item.disconDate;
+              }
+          }
+      });
+
+      if (latestDateStr === "") {
+        return { name, lastUpdate: "", lastUpdateCount: 0 };
       }
-      // if older → ignore
-    }
+
+      // Count items that have the latest date string
+      const count = items.filter(item => item.disconDate === latestDateStr).length;
+
+      const latestDate = parseDate(latestDateStr);
+      const formattedDate = latestDate 
+          ? `${String(latestDate.getDate()).padStart(2, "0")}-${String(latestDate.getMonth() + 1).padStart(2, "0")}-${latestDate.getFullYear()}`
+          : "";
+
+      return {
+          name,
+          lastUpdate: formattedDate,
+          lastUpdateCount: count
+      };
   });
 
-  // Format output
-  return Array.from(agencyMap.entries())
-    .map(([name, info]) => ({
-      name,
-      lastUpdate: `${String(info.latest.getDate()).padStart(2, "0")}-${String(
-        info.latest.getMonth() + 1
-      ).padStart(2, "0")}-${info.latest.getFullYear()}`,
-      lastUpdateCount: info.count,
-    }))
-    .sort((a, b) => a.name.localeCompare(b.name));
+  return derivedUpdates.sort((a, b) => a.name.localeCompare(b.name));
 }
 
 
@@ -171,7 +180,7 @@ export async function fetchConsumerData(): Promise<ConsumerData[]> {
     const freshUrl = `${csvUrl}${separator}t=${Date.now()}`
 
     const response = await fetch(
-      csvUrl,
+      freshUrl,
       {
         // OPTIMIZATION: Cache the CSV from Google for 60 seconds.
         // This reduces the Patch API time from ~3.6s to ~100ms.

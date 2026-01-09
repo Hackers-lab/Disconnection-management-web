@@ -25,15 +25,26 @@ export async function GET() {
       if (!consumer.lastUpdated) {
         return false;
       }
-      try {
-        // Robustly parse the lastUpdated string into a Date object.
-        const updatedDate = new Date(consumer.lastUpdated);
-        // Ensure the date is valid and falls within the last 48 hours.
-        return !isNaN(updatedDate.getTime()) && updatedDate >= fortyEightHoursAgo;
-      } catch (e) {
-        console.error(`Failed to parse date string: "${consumer.lastUpdated}"`);
-        return false;
+      
+      let updatedDate: Date | null = null;
+      const dateStr = consumer.lastUpdated;
+    
+      // Try parsing YYYY-MM-DD (ISO format)
+      if (/^\d{4}-\d{2}-\d{2}/.test(dateStr)) {
+        updatedDate = new Date(dateStr);
+      } 
+      // Try parsing DD-MM-YYYY
+      else if (/^\d{2}-\d{2}-\d{4}/.test(dateStr)) {
+        const [day, month, year] = dateStr.split(/[-/]/);
+        updatedDate = new Date(`${year}-${month}-${day}`);
       }
+      // Try parsing MM/DD/YYYY from Sheets (and other formats JS `new Date` can handle)
+      else {
+        // This handles MM/DD/YYYY and full timestamps like "1/9/2026 14:35:10"
+        updatedDate = new Date(dateStr);
+      }
+      
+      return updatedDate && !isNaN(updatedDate.getTime()) && updatedDate >= fortyEightHoursAgo;
     });
 
     return NextResponse.json(patchData, {
