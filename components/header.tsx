@@ -487,28 +487,7 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
       }
     } catch (error) {
       console.warn("Could not calculate updates from local cache", error);
-    }
-
-    // 2. Fallback to Network if local cache is empty
-    try {
-      console.log("🔄 [Network] Local cache empty, fetching fresh agency updates...");
-      const response = await fetch("/api/agency-last-updates");
-      if (!response.ok) throw new Error("API request failed");
-      
-      const data = await response.json();
-      
-      // Filter based on role
-      const filteredData = (userRole === "admin" || userRole === "viewer" || userRole === "executive" || userRole === "agency")
-          ? data
-          : data.filter((agency: { name: string, lastUpdate: string }) => userAgencies.includes(agency.name));
-
-      // 3. Update state
-      setAgencyLastUpdates(filteredData);
-
-    } catch (error) {
-      console.error("Error fetching fresh agency updates:", error);
     } finally {
-      // Ensure loading is always turned off in the end
       setLoading(false);
     }
   };

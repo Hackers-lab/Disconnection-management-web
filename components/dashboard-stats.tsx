@@ -94,6 +94,76 @@ export function DashboardStats({ consumers, loading = false, onStatusSelect }: D
   const [isSliderOpen, setIsSliderOpen] = useState(false)
   const [selectedAgency, setSelectedAgency] = useState("All")
   const [selectedClass, setSelectedClass] = useState("All")
+  const [agencyUpdates, setAgencyUpdates] = useState<{ name: string; lastUpdate: string; lastUpdateCount: number }[]>([]);
+
+
+  useEffect(() => {
+    const calculateAgencyStats = () => {
+      interface AgencyInfo {
+        latest: Date;
+        count: number;
+      }
+      const agencyMap = new Map<string, AgencyInfo>();
+  
+      const dateFormats = [
+        {
+          pattern: /^(\d{2})-(\d{2})-(\d{4})$/, // DD-MM-YYYY
+          handler: (d: RegExpMatchArray) => new Date(`${d[3]}-${d[2]}-${d[1]}`),
+        },
+        {
+            pattern: /^(\d{4})-(\d{2})-(\d{2})$/, // YYYY-MM-DD
+            handler: (d: RegExpMatchArray) => new Date(`${d[1]}-${d[2]}-${d[3]}`),
+        },
+      ];
+  
+      consumers.forEach((consumer) => {
+        if (!consumer.agency || !consumer.disconDate) return;
+  
+        let parsedDate: Date | null = null;
+        for (const format of dateFormats) {
+          const match = consumer.disconDate.match(format.pattern);
+          if (match) {
+            parsedDate = format.handler(match);
+            break;
+          }
+        }
+        if (!parsedDate || isNaN(parsedDate.getTime())) return;
+  
+        const info = agencyMap.get(consumer.agency);
+  
+        if (!info) {
+          agencyMap.set(consumer.agency, { latest: parsedDate, count: 1 });
+        } else {
+          if (parsedDate > info.latest) {
+            agencyMap.set(consumer.agency, { latest: parsedDate, count: 1 });
+          } else if (
+            parsedDate.getFullYear() === info.latest.getFullYear() &&
+            parsedDate.getMonth() === info.latest.getMonth() &&
+            parsedDate.getDate() === info.latest.getDate()
+          ) {
+            info.count++;
+            agencyMap.set(consumer.agency, info);
+          }
+        }
+      });
+  
+      const updates = Array.from(agencyMap.entries())
+        .map(([name, info]) => ({
+          name,
+          lastUpdate: `${String(info.latest.getDate()).padStart(2, "0")}-${String(
+            info.latest.getMonth() + 1
+          ).padStart(2, "0")}-${info.latest.getFullYear()}`,
+          lastUpdateCount: info.count,
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name));
+        
+      setAgencyUpdates(updates);
+    };
+
+    if (consumers.length > 0) {
+      calculateAgencyStats();
+    }
+  }, [consumers]);
 
   useBackNavigation(isSliderOpen, () => setIsSliderOpen(false))
 
@@ -418,6 +488,30 @@ export function DashboardStats({ consumers, loading = false, onStatusSelect }: D
               </Card>
             ))}
           </div>
+
+          {agencyUpdates.length > 0 && (
+            <div className="bg-white rounded-lg border overflow-x-auto shadow-md text-xs font-sans">
+              <h3 className="font-semibold text-gray-800 p-3">Agency Last Updates</h3>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Agency</TableHead>
+                    <TableHead>Last Update</TableHead>
+                    <TableHead className="text-right">Count</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {agencyUpdates.map((update) => (
+                    <TableRow key={update.name}>
+                      <TableCell className="font-medium">{update.name}</TableCell>
+                      <TableCell>{update.lastUpdate}</TableCell>
+                      <TableCell className="text-right">{update.lastUpdateCount}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
 
           <div className="bg-white rounded-lg border overflow-x-auto shadow-md text-[10px] font-sans">
             <Table className="compact-table">
