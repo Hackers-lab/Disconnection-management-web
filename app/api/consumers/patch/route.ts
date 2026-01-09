@@ -44,6 +44,7 @@ export async function GET() {
       },
     })
   } catch (error) {
+    console.error("💥 API /consumers/patch error:", error)
     return NextResponse.json(
       { error: "Failed to fetch patch data" },
       { status: 500 }
