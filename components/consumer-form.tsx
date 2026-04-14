@@ -374,18 +374,22 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
                     <Check className="h-4 w-4 mr-2" /> PAID
                   </Button>
                 </div>
-                <div className="flex gap-3">
-                  <Button type="button" variant={formData.disconStatus === "not found" ? "default" : "outline"} className={`flex-1 h-12 border-2 ${formData.disconStatus === "not found" ? "bg-slate-800 hover:bg-slate-900 text-white border-slate-800" : "border-slate-300 text-slate-700 hover:border-slate-800 hover:bg-slate-50"}`} onClick={() => handleStatusUpdate("not found")}> 
-                    <CircleX className="h-4 w-4 mr-2" /> NOT FOUND
-                  </Button>
-                  <Button type="button" variant={formData.disconStatus === "visited" ? "default" : "outline"} className={`flex-1 h-12 border-2 ${formData.disconStatus === "visited" ? "bg-green-700 hover:bg-green-800 text-white border-green-700" : "border-slate-300 text-slate-700 hover:border-green-700 hover:bg-green-50"}`} onClick={() => handleStatusUpdate("visited")}> 
-                    <Check className="h-4 w-4 mr-2" /> VISITED
-                  </Button>
-                  {userRole === "admin" && (
-                    <Button type="button" variant={formData.disconStatus === "connected" ? "default" : "outline"} className={`flex-1 h-12 border-2 ${formData.disconStatus === "connected" ? "bg-slate-800 hover:bg-slate-900 text-white border-slate-800" : "border-slate-300 text-slate-700 hover:border-slate-800 hover:bg-slate-50"}`} onClick={() => handleStatusUpdate("connected")}> 
-                      <RotateCcw className="h-4 w-4 mr-2" /> REISSUE
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <div className="flex gap-3 w-full">
+                    <Button type="button" variant={formData.disconStatus === "not found" ? "default" : "outline"} className={`flex-1 h-12 border-2 ${formData.disconStatus === "not found" ? "bg-slate-800 hover:bg-slate-900 text-white border-slate-800" : "border-slate-300 text-slate-700 hover:border-slate-800 hover:bg-slate-50"}`} onClick={() => handleStatusUpdate("not found")}> 
+                      <CircleX className="h-4 w-4 mr-2" /> NOT FOUND
                     </Button>
-                  )}
+                    {userRole === "admin" && (
+                      <Button type="button" variant={formData.disconStatus === "connected" ? "default" : "outline"} className={`flex-1 h-12 border-2 ${formData.disconStatus === "connected" ? "bg-slate-800 hover:bg-slate-900 text-white border-slate-800" : "border-slate-300 text-slate-700 hover:border-slate-800 hover:bg-slate-50"}`} onClick={() => handleStatusUpdate("connected")}> 
+                        <RotateCcw className="h-4 w-4 mr-2" /> REISSUE
+                      </Button>
+                    )}
+                  </div>
+                  <div className="flex w-full mt-3 sm:mt-0">
+                    <Button type="button" variant={formData.disconStatus === "visited" ? "default" : "outline"} className={`flex-1 h-12 border-2 ${formData.disconStatus === "visited" ? "bg-green-700 hover:bg-green-800 text-white border-green-700" : "border-slate-300 text-slate-700 hover:border-green-700 hover:bg-green-50"}`} onClick={() => handleStatusUpdate("visited")}> 
+                      <Check className="h-4 w-4 mr-2" /> VISITED
+                    </Button>
+                  </div>
                 </div>
               </div>
               <div className="bg-gray-50 p-2 rounded text-center text-xs text-gray-500">
