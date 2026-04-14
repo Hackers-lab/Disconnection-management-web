@@ -250,17 +250,33 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
     e.preventDefault();
 
     if (userRole !== "admin") {
-      if (!formData.imageUrl) {
-        alert("Please upload the image first.")
-        return
-      }
-      if ((formData.disconStatus === "disconnected" || formData.disconStatus === "bill dispute") && !formData.reading) {
-        alert("Meter reading is required.")
-        return
-      }
-      if ((formData.disconStatus === "bill dispute" || formData.disconStatus === "office team") && !formData.notes) {
-        alert("Remarks are required for Bill Dispute or Office Team status.")
-        return
+      // Visited: all mandatory
+      if (formData.disconStatus === "visited") {
+        if (!formData.imageUrl) {
+          alert("Please upload the image for Visited status.")
+          return
+        }
+        if (!formData.reading) {
+          alert("Meter reading is required for Visited status.")
+          return
+        }
+        if (!formData.notes) {
+          alert("Remarks are required for Visited status.")
+          return
+        }
+      } else {
+        if (!formData.imageUrl) {
+          alert("Please upload the image first.")
+          return
+        }
+        if ((formData.disconStatus === "disconnected" || formData.disconStatus === "bill dispute") && !formData.reading) {
+          alert("Meter reading is required.")
+          return
+        }
+        if ((formData.disconStatus === "bill dispute" || formData.disconStatus === "office team") && !formData.notes) {
+          alert("Remarks are required for Bill Dispute or Office Team status.")
+          return
+        }
       }
     }
 
@@ -340,39 +356,42 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
             
             {/* Status Buttons */}
             <div className="space-y-3">
-                <Label className="text-xs font-bold text-gray-500 uppercase">Set Status</Label>
-                <div className="grid grid-cols-1 gap-3">
-                    <div className="flex gap-3">
-                        <Button type="button" variant={formData.disconStatus === "disconnected" ? "default" : "outline"} className={`flex-1 h-12 border-2 ${formData.disconStatus === "disconnected" ? "bg-slate-800 hover:bg-slate-900 text-white border-slate-800" : "border-slate-300 text-slate-700 hover:border-slate-800 hover:bg-slate-50"}`} onClick={() => handleStatusUpdate("disconnected")}>
-                            <Power className="h-4 w-4 mr-2" /> DISCONNECT
-                        </Button>
-                        <Button type="button" variant={formData.disconStatus === "bill dispute" ? "default" : "outline"} className={`flex-1 h-12 border-2 ${formData.disconStatus === "bill dispute" ? "bg-slate-800 hover:bg-slate-900 text-white border-slate-800" : "border-slate-300 text-slate-700 hover:border-slate-800 hover:bg-slate-50"}`} onClick={() => handleStatusUpdate("bill dispute")}>
-                            <AlertCircle className="h-4 w-4 mr-2" /> DISPUTE
-                        </Button>
-                    </div>
-                    <div className="flex gap-3">
-                        <Button type="button" variant={formData.disconStatus === "office team" ? "default" : "outline"} className={`flex-1 h-12 border-2 ${formData.disconStatus === "office team" ? "bg-slate-800 hover:bg-slate-900 text-white border-slate-800" : "border-slate-300 text-slate-700 hover:border-slate-800 hover:bg-slate-50"}`} onClick={() => handleStatusUpdate("office team")}>
-                            <Clock className="h-4 w-4 mr-2" /> OFFICE TEAM
-                        </Button>
-                        <Button type="button" variant={formData.disconStatus === "agency paid" ? "default" : "outline"} className={`flex-1 h-12 border-2 ${formData.disconStatus === "agency paid" ? "bg-slate-800 hover:bg-slate-900 text-white border-slate-800" : "border-slate-300 text-slate-700 hover:border-slate-800 hover:bg-slate-50"}`} onClick={() => handleStatusUpdate("agency paid")}>
-                            <Check className="h-4 w-4 mr-2" /> PAID
-                        </Button>
-                    </div>
-                    <div className="flex gap-3">
-                        <Button type="button" variant={formData.disconStatus === "not found" ? "default" : "outline"} className={`flex-1 h-12 border-2 ${formData.disconStatus === "not found" ? "bg-slate-800 hover:bg-slate-900 text-white border-slate-800" : "border-slate-300 text-slate-700 hover:border-slate-800 hover:bg-slate-50"}`} onClick={() => handleStatusUpdate("not found")}>
-                            <CircleX className="h-4 w-4 mr-2" /> NOT FOUND
-                        </Button>
-                        {userRole === "admin" && (
-                            <Button type="button" variant={formData.disconStatus === "connected" ? "default" : "outline"} className={`flex-1 h-12 border-2 ${formData.disconStatus === "connected" ? "bg-slate-800 hover:bg-slate-900 text-white border-slate-800" : "border-slate-300 text-slate-700 hover:border-slate-800 hover:bg-slate-50"}`} onClick={() => handleStatusUpdate("connected")}>
-                                <RotateCcw className="h-4 w-4 mr-2" /> REISSUE
-                            </Button>
-                        )}
-                    </div>
+              <Label className="text-xs font-bold text-gray-500 uppercase">Set Status</Label>
+              <div className="grid grid-cols-1 gap-3">
+                <div className="flex gap-3">
+                  <Button type="button" variant={formData.disconStatus === "disconnected" ? "default" : "outline"} className={`flex-1 h-12 border-2 ${formData.disconStatus === "disconnected" ? "bg-slate-800 hover:bg-slate-900 text-white border-slate-800" : "border-slate-300 text-slate-700 hover:border-slate-800 hover:bg-slate-50"}`} onClick={() => handleStatusUpdate("disconnected")}> 
+                    <Power className="h-4 w-4 mr-2" /> DISCONNECT
+                  </Button>
+                  <Button type="button" variant={formData.disconStatus === "bill dispute" ? "default" : "outline"} className={`flex-1 h-12 border-2 ${formData.disconStatus === "bill dispute" ? "bg-slate-800 hover:bg-slate-900 text-white border-slate-800" : "border-slate-300 text-slate-700 hover:border-slate-800 hover:bg-slate-50"}`} onClick={() => handleStatusUpdate("bill dispute")}> 
+                    <AlertCircle className="h-4 w-4 mr-2" /> DISPUTE
+                  </Button>
                 </div>
-                <div className="bg-gray-50 p-2 rounded text-center text-xs text-gray-500">
-                    Current: <span className="font-bold text-gray-900 uppercase">{formData.disconStatus}</span>
-                    {formData.disconDate && <span> ({formData.disconDate})</span>}
+                <div className="flex gap-3">
+                  <Button type="button" variant={formData.disconStatus === "office team" ? "default" : "outline"} className={`flex-1 h-12 border-2 ${formData.disconStatus === "office team" ? "bg-slate-800 hover:bg-slate-900 text-white border-slate-800" : "border-slate-300 text-slate-700 hover:border-slate-800 hover:bg-slate-50"}`} onClick={() => handleStatusUpdate("office team")}> 
+                    <Clock className="h-4 w-4 mr-2" /> OFFICE TEAM
+                  </Button>
+                  <Button type="button" variant={formData.disconStatus === "agency paid" ? "default" : "outline"} className={`flex-1 h-12 border-2 ${formData.disconStatus === "agency paid" ? "bg-slate-800 hover:bg-slate-900 text-white border-slate-800" : "border-slate-300 text-slate-700 hover:border-slate-800 hover:bg-slate-50"}`} onClick={() => handleStatusUpdate("agency paid")}> 
+                    <Check className="h-4 w-4 mr-2" /> PAID
+                  </Button>
                 </div>
+                <div className="flex gap-3">
+                  <Button type="button" variant={formData.disconStatus === "not found" ? "default" : "outline"} className={`flex-1 h-12 border-2 ${formData.disconStatus === "not found" ? "bg-slate-800 hover:bg-slate-900 text-white border-slate-800" : "border-slate-300 text-slate-700 hover:border-slate-800 hover:bg-slate-50"}`} onClick={() => handleStatusUpdate("not found")}> 
+                    <CircleX className="h-4 w-4 mr-2" /> NOT FOUND
+                  </Button>
+                  <Button type="button" variant={formData.disconStatus === "visited" ? "default" : "outline"} className={`flex-1 h-12 border-2 ${formData.disconStatus === "visited" ? "bg-green-700 hover:bg-green-800 text-white border-green-700" : "border-slate-300 text-slate-700 hover:border-green-700 hover:bg-green-50"}`} onClick={() => handleStatusUpdate("visited")}> 
+                    <Check className="h-4 w-4 mr-2" /> VISITED
+                  </Button>
+                  {userRole === "admin" && (
+                    <Button type="button" variant={formData.disconStatus === "connected" ? "default" : "outline"} className={`flex-1 h-12 border-2 ${formData.disconStatus === "connected" ? "bg-slate-800 hover:bg-slate-900 text-white border-slate-800" : "border-slate-300 text-slate-700 hover:border-slate-800 hover:bg-slate-50"}`} onClick={() => handleStatusUpdate("connected")}> 
+                      <RotateCcw className="h-4 w-4 mr-2" /> REISSUE
+                    </Button>
+                  )}
+                </div>
+              </div>
+              <div className="bg-gray-50 p-2 rounded text-center text-xs text-gray-500">
+                Current: <span className="font-bold text-gray-900 uppercase">{formData.disconStatus}</span>
+                {formData.disconDate && <span> ({formData.disconDate})</span>}
+              </div>
             </div>
 
             {/* Admin: Agency Selection */}
