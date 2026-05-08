@@ -309,6 +309,9 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
                 <div>
                     <h2 className="text-lg font-bold text-gray-900">{consumer.name}</h2>
                     <p className="text-xs text-gray-500 font-mono">ID: {consumer.consumerId}</p>
+                    {consumer.mru ? (
+                      <p className="text-xs text-gray-500 uppercase tracking-[0.08em] mt-1">MRU: {consumer.mru}</p>
+                    ) : null}
                 </div>
                 <div className="text-right">
                     <div className="text-xl font-bold text-red-600 flex items-center justify-end">

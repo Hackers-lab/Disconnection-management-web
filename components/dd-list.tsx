@@ -570,6 +570,11 @@ export function DDList({ userRole, userAgencies }: DDListProps) {
                   <div>
                     <CardTitle className="text-lg">{consumer.name}</CardTitle>
                     <p className="text-sm text-gray-600">{consumer.consumerId}</p>
+                    {consumer.mru ? (
+                      <Badge variant="outline" className="mt-2 text-xs uppercase tracking-[0.08em]">
+                        {consumer.mru}
+                      </Badge>
+                    ) : null}
                   </div>
                   <div className="flex flex-col items-end gap-1">
                     <Badge className={getStatusColor(consumer.disconStatus)}>

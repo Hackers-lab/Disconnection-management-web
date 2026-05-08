@@ -245,6 +245,11 @@ export function DDForm({ consumer, onSave, onCancel, userRole }: DDFormProps) {
                 <MapPin className="h-4 w-4 mt-0.5 text-blue-500 shrink-0" />
                 <span className="leading-snug">{consumer.address}</span>
             </div>
+            {consumer.mru ? (
+              <div className="text-sm text-gray-600 pt-1">
+                <span className="font-medium text-gray-800">MRU:</span> {consumer.mru}
+              </div>
+            ) : null}
             <div className="grid grid-cols-2 gap-y-2 gap-x-4 text-xs text-gray-600 pt-1">
                 <div className="flex items-center gap-2">
                     <Smartphone className="h-4 w-4 text-gray-400" />

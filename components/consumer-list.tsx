@@ -1127,6 +1127,11 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
                   <div className="min-w-0 flex-1">
                     <CardTitle className="text-lg break-words whitespace-normal line-clamp-2 leading-tight">{consumer.name}</CardTitle>
                     <p className="text-sm text-gray-600">{consumer.consumerId}</p>
+                    {consumer.mru ? (
+                      <Badge variant="outline" className="mt-2 text-[10px] uppercase tracking-[0.08em]">
+                        {consumer.mru}
+                      </Badge>
+                    ) : null}
                   </div>
                   <div className="flex flex-col items-end space-y-1 shrink-0">
                     <div className="flex items-center gap-1">
@@ -1252,6 +1257,11 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
                     <tr key={consumer.consumerId} className="hover:bg-gray-50 transition-colors">
                       <td className="px-4 py-3">
                         <div className="font-medium text-gray-900">{consumer.consumerId}</div>
+                        {consumer.mru ? (
+                          <div className="text-[10px] text-gray-500 uppercase tracking-[0.08em] truncate max-w-[150px]">
+                            {consumer.mru}
+                          </div>
+                        ) : null}
                         <div className="text-xs text-gray-500 truncate max-w-[150px]" title={consumer.name}>{consumer.name}</div>
                       </td>
                       <td className="px-4 py-3 max-w-[200px]">
@@ -1309,8 +1319,11 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
                   <div className="flex items-center gap-2 min-w-0 flex-1 mr-2">
                      <div className="shrink-0">{getStatusIcon(consumer.disconStatus)}</div>
                      <div className="font-semibold text-sm text-gray-900 shrink-0">{consumer.consumerId}</div>
-                     <div className="text-xs text-gray-500 flex items-center gap-1 min-w-0">
+                     <div className="text-xs text-gray-500 flex flex-col gap-1 min-w-0">
                         <span className="truncate">{consumer.name}</span>
+                        {consumer.mru ? (
+                          <span className="text-[10px] uppercase tracking-[0.08em] text-gray-400 truncate">{consumer.mru}</span>
+                        ) : null}
                      </div>
                   </div>
                   <div className="text-xs font-bold text-red-600 whitespace-nowrap shrink-0 mt-0.5">
