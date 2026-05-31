@@ -105,14 +105,19 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
     const [parsedData, setParsedData] = useState<any[]>([]);
     const [columnMapping, setColumnMapping] = useState<Record<string, string>>({});
     const [fileName, setFileName] = useState<string>("");
-    const [dcUploadResult, setDcUploadResult] = useState<{ total: number; inserted: number; updated: number; autoAssigned: number } | null>(null);
+    const [dcUploadResult, setDcUploadResult] = useState<{ total: number; inserted: number; updated: number; protectedStatusSkipped: number; autoAssigned: number; archivedNotInUpload: number } | null>(null);
 
     // --- ZONE MAP STATE (item 12) ---
-    const [zoneMapRows, setZoneMapRows] = useState<{ zone: string; agency: string }[]>([]);
+    const [zoneMapRows, setZoneMapRows] = useState<{ zone: string; agency: string; updatedOn?: string }[]>([]);
     const [zoneMapLoading, setZoneMapLoading] = useState(false);
     const [zoneMapSaving, setZoneMapSaving] = useState(false);
     const [newZone, setNewZone] = useState("");
     const [newZoneAgency, setNewZoneAgency] = useState("");
+    const [availableMrus, setAvailableMrus] = useState<string[]>([]);
+    const [zoneUploadMode, setZoneUploadMode] = useState<"manual" | "csv">("manual");
+    const [zoneUploadRows, setZoneUploadRows] = useState<{ zone: string; agency: string }[]>([]);
+    const [zoneUploadFileName, setZoneUploadFileName] = useState("");
+    const [showZoneGuide, setShowZoneGuide] = useState(false);
 
     const detectColumnType = (values: any[]) => {
     for (const [colName, regex] of Object.entries(columnRegexMap)) {
@@ -349,8 +354,12 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
   const loadZoneMap = async () => {
     setZoneMapLoading(true)
     try {
-      const resp = await fetch("/api/zone-map")
-      if (resp.ok) setZoneMapRows(await resp.json())
+      const [mapResp, mruResp] = await Promise.all([
+        fetch("/api/zone-map"),
+        fetch("/api/zone-map/mrus"),
+      ])
+      if (mapResp.ok) setZoneMapRows(await mapResp.json())
+      if (mruResp.ok) setAvailableMrus(await mruResp.json())
     } catch { /* silent */ }
     finally { setZoneMapLoading(false) }
   }
@@ -358,14 +367,33 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
   const saveZoneMap = async (rows: { zone: string; agency: string }[]) => {
     setZoneMapSaving(true)
     try {
-      await fetch("/api/zone-map", {
+      const resp = await fetch("/api/zone-map", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ rows }),
       })
-      setZoneMapRows(rows)
+      if (resp.ok) {
+        setZoneMapRows(rows.map(r => ({ ...r, updatedOn: new Date().toLocaleDateString("en-IN") })))
+      }
     } catch { /* silent */ }
     finally { setZoneMapSaving(false) }
+  }
+
+  const parseZoneCsv = (file: File) => {
+    setZoneUploadFileName(file.name)
+    Papa.parse<any[]>(file, {
+      header: false, skipEmptyLines: true,
+      complete: (res: any) => {
+        const rows = res.data as any[][]
+        if (!rows || rows.length < 2) return
+        // Expect: Zone (col 0), Agency (col 1)
+        const parsed = rows.slice(1)
+          .map(r => ({ zone: String(r[0] || "").trim().toUpperCase(), agency: String(r[1] || "").trim().toUpperCase() }))
+          .filter(r => r.zone && r.agency)
+        setZoneUploadRows(parsed)
+      },
+      error: () => setMessage({ type: "error", text: "Failed to parse zone map CSV" }),
+    })
   }
 
   useEffect(() => { if (view === "zoneMap") loadZoneMap() }, [view])
@@ -1036,9 +1064,25 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
           <div>
             <h2 className="text-xl font-bold">Upload Payment Data</h2>
             <p className="text-sm text-gray-600 mt-1">
-              Upload a Cash Desk or Portal payment file (Excel / CSV). Matched
-              consumers will be marked Paid with full/partial detection,
-              outstanding-after, and a default next-payment-date (paid date + 30 days).
+              Upload a Cash Desk or Portal payment file (Excel or CSV). Matched consumers
+              are marked Paid with full/partial detection and outstanding balance.
+              <details className="mt-2">
+                <summary className="cursor-pointer text-blue-600 text-xs underline">Show file format guide</summary>
+                <div className="mt-2 bg-blue-50 rounded p-3 text-xs space-y-1">
+                  <p className="font-semibold text-blue-800">Required columns (auto-detected by name):</p>
+                  <pre className="bg-white rounded p-2 overflow-auto">{`Consumer ID  |  Paid Amount  |  Paid Date (optional)
+-----------     -----------     ----------
+100000001       5000            15-05-2025
+100000002       12000           15-05-2025`}</pre>
+                  <ul className="list-disc pl-4 space-y-0.5 text-gray-600">
+                    <li>Column names are matched loosely: "Consumer ID", "CA", "Account" all work for ID.</li>
+                    <li>"Amount", "Paid Amount", "Credit" all work for amount.</li>
+                    <li>"Date", "Paid Date", "Payment Date" work for date (leave blank to use today).</li>
+                    <li>Rows with zero or non-numeric amount are skipped.</li>
+                    <li>Unmatched consumer IDs are listed in the result — they are not created.</li>
+                  </ul>
+                </div>
+              </details>
             </p>
           </div>
 
@@ -1163,9 +1207,24 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
           <div>
             <h2 className="text-xl font-bold">Upload DC List</h2>
             <p className="text-sm text-gray-600 mt-1">
-              Upload a CSV or Excel file. Existing consumers are <strong>updated</strong>;
-              new consumer IDs are <strong>inserted</strong>. Agency is auto-assigned from
-              the Zone Map if configured. Missing sheet columns are created automatically.
+              Upload a CSV or Excel DC list. New IDs are inserted; existing IDs are updated.
+              Consumers removed from the new list are archived to <span className="font-mono">DC_History</span>.
+              Statuses like Disconnected/Paid are protected — only billing data is updated for them.
+              <details className="mt-2">
+                <summary className="cursor-pointer text-blue-600 text-xs underline">Show file format guide</summary>
+                <div className="mt-2 bg-blue-50 rounded p-3 text-xs space-y-1">
+                  <p className="font-semibold text-blue-800">Required columns (must be present as headers):</p>
+                  <pre className="bg-white rounded p-2 overflow-auto text-[10px]">{`off_code | MRU      | Consumer Id | Name         | Address       | Base Class | Device    | O/S Duedate Range          | D2 Net O/S | Mobile Number
+6612107  | AB01MR   | 100000001   | CONSUMER NAME| 123 ROAD...   | L-1 PHASE  | METER001  | 01-01-2024 - 31-03-2024    | 5000       | 9876543210`}</pre>
+                  <ul className="list-disc pl-4 space-y-0.5 text-gray-600">
+                    <li>Columns are detected by regex pattern matching, not exact header name.</li>
+                    <li>Consumer ID, MRU, and D2 Net O/S are mandatory — rows without them are skipped.</li>
+                    <li>Agency is auto-assigned from Zone Map based on MRU. Run Zone Map setup first.</li>
+                    <li><strong>Protected statuses</strong> (Disconnected, Paid, Visited, etc.): only OSD and base info are updated — status, date, notes, image are never overwritten.</li>
+                    <li>Consumers in the sheet but not in this file are marked as removed and logged to DC_History.</li>
+                  </ul>
+                </div>
+              </details>
             </p>
           </div>
 
@@ -1279,10 +1338,18 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
                 <Alert>
                   <CheckCircle2 className="h-4 w-4" />
                   <AlertDescription>
-                    <strong>{dcUploadResult.total}</strong> rows processed —{" "}
-                    <strong>{dcUploadResult.inserted}</strong> new,{" "}
-                    <strong>{dcUploadResult.updated}</strong> updated,{" "}
-                    <strong>{dcUploadResult.autoAssigned}</strong> auto-assigned agency.
+                    <div className="space-y-1 text-sm">
+                      <p><strong>{dcUploadResult.total}</strong> rows in file processed.</p>
+                      <div className="flex flex-wrap gap-3 text-xs mt-1">
+                        <span className="text-green-700">✓ {dcUploadResult.inserted} new inserted</span>
+                        <span className="text-blue-700">✓ {dcUploadResult.updated} updated</span>
+                        <span className="text-orange-700">⚠ {dcUploadResult.protectedStatusSkipped} had protected status (only OSD/base updated)</span>
+                        <span className="text-purple-700">✓ {dcUploadResult.autoAssigned} auto-assigned agency</span>
+                        {dcUploadResult.archivedNotInUpload > 0 && (
+                          <span className="text-gray-600">📦 {dcUploadResult.archivedNotInUpload} removed from new list → archived to DC_History tab</span>
+                        )}
+                      </div>
+                    </div>
                   </AlertDescription>
                 </Alert>
               )}
@@ -1296,11 +1363,33 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
           <div>
             <h2 className="text-xl font-bold">Agency Zone Map</h2>
             <p className="text-sm text-gray-600 mt-1">
-              Map MRU zone codes (first 4 chars of MRU) to agencies. During DC list upload,
-              each row&apos;s zone is looked up here and the agency is auto-filled.
-              Stored in the <span className="font-mono">AgencyZoneMap</span> sheet tab.
+              Map MRU codes to agencies. During DC list upload, each consumer&apos;s MRU is matched
+              here and their agency is auto-filled. History of changes is stored in the
+              <span className="font-mono"> ZoneMapHistory</span> sheet tab.
             </p>
           </div>
+
+          {/* Upload Guide */}
+          <button
+            className="text-xs text-blue-600 underline text-left"
+            onClick={() => setShowZoneGuide(g => !g)}
+          >
+            {showZoneGuide ? "Hide" : "Show"} CSV upload guide
+          </button>
+          {showZoneGuide && (
+            <Card className="border-blue-200 bg-blue-50">
+              <CardContent className="pt-4 text-xs space-y-2">
+                <p className="font-semibold text-blue-800">CSV format for bulk zone upload:</p>
+                <pre className="bg-white rounded p-2 text-[11px] overflow-auto">{`Zone,Agency\nAB01,AGENCY NAME 1\nAB02,AGENCY NAME 2\nCD01,AGENCY NAME 1`}</pre>
+                <ul className="list-disc pl-4 text-gray-600 space-y-1">
+                  <li><strong>Zone</strong>: First 4 characters of the MRU (e.g. MRU <code>AB01MR</code> → Zone <code>AB01</code>)</li>
+                  <li><strong>Agency</strong>: Exact agency name as registered in Manage Agencies</li>
+                  <li>Header row is required. Extra columns are ignored.</li>
+                  <li>Uploading will overwrite existing mappings for matching zones and record the change in history.</li>
+                </ul>
+              </CardContent>
+            </Card>
+          )}
 
           <Card>
             <CardContent className="pt-5 space-y-4">
@@ -1310,30 +1399,119 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
                 </div>
               ) : (
                 <>
+                  {/* Mode toggle */}
+                  <div className="flex gap-2">
+                    <Button size="sm" variant={zoneUploadMode === "manual" ? "default" : "outline"} onClick={() => setZoneUploadMode("manual")}>Manual</Button>
+                    <Button size="sm" variant={zoneUploadMode === "csv" ? "default" : "outline"} onClick={() => setZoneUploadMode("csv")}>Bulk CSV Upload</Button>
+                  </div>
+
+                  {/* Manual add */}
+                  {zoneUploadMode === "manual" && (
+                    <div className="flex gap-2 items-end">
+                      <div className="space-y-1 flex-1">
+                        <Label className="text-xs">MRU (from DC list)</Label>
+                        {availableMrus.length > 0 ? (
+                          <Select value={newZone} onValueChange={setNewZone}>
+                            <SelectTrigger className="h-8"><SelectValue placeholder="Select MRU" /></SelectTrigger>
+                            <SelectContent>
+                              {availableMrus.map(mru => (
+                                <SelectItem key={mru} value={mru}>{mru}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          <Input
+                            placeholder="e.g. AB01MR"
+                            value={newZone}
+                            onChange={(e) => setNewZone(e.target.value.toUpperCase())}
+                            className="h-8 font-mono"
+                          />
+                        )}
+                        <p className="text-[10px] text-gray-400">Zone = first 4 chars used for matching</p>
+                      </div>
+                      <div className="space-y-1 flex-1">
+                        <Label className="text-xs">Agency</Label>
+                        <Select value={newZoneAgency} onValueChange={setNewZoneAgency}>
+                          <SelectTrigger className="h-8"><SelectValue placeholder="Select agency" /></SelectTrigger>
+                          <SelectContent>
+                            {agencies.filter(a => a.isActive).map(a => (
+                              <SelectItem key={a.id} value={a.name}>{a.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <Button
+                        size="sm" className="h-8"
+                        disabled={!newZone || !newZoneAgency || zoneMapSaving}
+                        onClick={() => {
+                          const zone = newZone.substring(0, 4).toUpperCase()
+                          const updated = [
+                            ...zoneMapRows.filter(r => r.zone !== zone),
+                            { zone, agency: newZoneAgency.toUpperCase() },
+                          ].sort((a, b) => a.zone.localeCompare(b.zone))
+                          saveZoneMap(updated)
+                          setNewZone(""); setNewZoneAgency("")
+                        }}
+                      >
+                        <Plus className="h-4 w-4 mr-1" /> Add / Update
+                      </Button>
+                    </div>
+                  )}
+
+                  {/* CSV upload */}
+                  {zoneUploadMode === "csv" && (
+                    <div className="space-y-3">
+                      <Input
+                        type="file" accept=".csv,text/csv"
+                        onChange={(e) => e.target.files && parseZoneCsv(e.target.files[0])}
+                      />
+                      {zoneUploadFileName && <p className="text-xs text-gray-500">Selected: <span className="font-mono">{zoneUploadFileName}</span></p>}
+                      {zoneUploadRows.length > 0 && (
+                        <>
+                          <p className="text-xs text-gray-600">{zoneUploadRows.length} zone-agency pairs parsed.</p>
+                          <Button
+                            size="sm" disabled={zoneMapSaving}
+                            onClick={() => {
+                              // Merge: new file entries override existing, keep others
+                              const incoming = new Map(zoneUploadRows.map(r => [r.zone, r.agency]))
+                              const merged = [
+                                ...zoneMapRows.filter(r => !incoming.has(r.zone)),
+                                ...zoneUploadRows,
+                              ].sort((a, b) => a.zone.localeCompare(b.zone))
+                              saveZoneMap(merged)
+                              setZoneUploadRows([]); setZoneUploadFileName("")
+                            }}
+                          >
+                            <Upload className="h-4 w-4 mr-1" /> Apply {zoneUploadRows.length} mappings
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Current map table */}
                   {zoneMapRows.length > 0 && (
-                    <div className="border rounded-md overflow-auto max-h-60">
+                    <div className="border rounded-md overflow-auto max-h-64">
                       <Table>
                         <TableHeader>
                           <TableRow>
-                            <TableHead>Zone (MRU prefix)</TableHead>
-                            <TableHead>Agency</TableHead>
-                            <TableHead className="w-12"></TableHead>
+                            <TableHead className="text-xs">MRU / Zone</TableHead>
+                            <TableHead className="text-xs">Agency</TableHead>
+                            <TableHead className="text-xs">Updated</TableHead>
+                            <TableHead className="w-10"></TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
                           {zoneMapRows.map((row, i) => (
                             <TableRow key={i}>
-                              <TableCell className="font-mono">{row.zone}</TableCell>
-                              <TableCell>{row.agency}</TableCell>
+                              <TableCell className="font-mono text-xs">{row.zone}</TableCell>
+                              <TableCell className="text-xs">{row.agency}</TableCell>
+                              <TableCell className="text-xs text-gray-400">{row.updatedOn || "—"}</TableCell>
                               <TableCell>
                                 <Button
-                                  size="icon"
-                                  variant="ghost"
+                                  size="icon" variant="ghost"
                                   className="h-6 w-6 text-red-500 hover:text-red-700"
-                                  onClick={() => {
-                                    const updated = zoneMapRows.filter((_, idx) => idx !== i)
-                                    saveZoneMap(updated)
-                                  }}
+                                  onClick={() => saveZoneMap(zoneMapRows.filter((_, idx) => idx !== i))}
                                 >
                                   <X className="h-3 w-3" />
                                 </Button>
@@ -1344,46 +1522,10 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
                       </Table>
                     </div>
                   )}
-                  {zoneMapRows.length === 0 && <p className="text-sm text-gray-400">No mappings yet. Add one below.</p>}
-
-                  <div className="flex gap-2 items-end">
-                    <div className="space-y-1 flex-1">
-                      <Label className="text-xs">Zone code (e.g. AB01)</Label>
-                      <Input
-                        placeholder="AB01"
-                        value={newZone}
-                        onChange={(e) => setNewZone(e.target.value.toUpperCase())}
-                        className="h-8 font-mono"
-                      />
-                    </div>
-                    <div className="space-y-1 flex-1">
-                      <Label className="text-xs">Agency name</Label>
-                      <Select value={newZoneAgency} onValueChange={setNewZoneAgency}>
-                        <SelectTrigger className="h-8">
-                          <SelectValue placeholder="Select agency" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {agencies.filter(a => a.isActive).map(a => (
-                            <SelectItem key={a.id} value={a.name}>{a.name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <Button
-                      size="sm"
-                      className="h-8"
-                      disabled={!newZone || !newZoneAgency || zoneMapSaving}
-                      onClick={() => {
-                        const updated = [...zoneMapRows.filter(r => r.zone !== newZone), { zone: newZone, agency: newZoneAgency }]
-                          .sort((a, b) => a.zone.localeCompare(b.zone))
-                        saveZoneMap(updated)
-                        setNewZone(""); setNewZoneAgency("")
-                      }}
-                    >
-                      <Plus className="h-4 w-4 mr-1" /> Add
-                    </Button>
-                  </div>
-                  {zoneMapSaving && <p className="text-xs text-blue-600">Saving…</p>}
+                  {zoneMapRows.length === 0 && !zoneMapLoading && (
+                    <p className="text-sm text-gray-400">No mappings yet.</p>
+                  )}
+                  {zoneMapSaving && <p className="text-xs text-blue-600">Saving to sheet…</p>}
                 </>
               )}
             </CardContent>

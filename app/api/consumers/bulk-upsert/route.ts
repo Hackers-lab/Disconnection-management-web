@@ -13,38 +13,31 @@ import { verifySession } from "@/lib/session"
 
 export const maxDuration = 60
 
-// The ordered list of columns the upload file must supply.
-// Matches the admin panel's expectedColumns list.
-const UPLOAD_COLUMNS = [
-  "off_code", "MRU", "Consumer Id", "Name", "Address",
-  "Base Class", "Device", "O/S Duedate Range", "D2 Net O/S", "Mobile Number",
-] as const
+// Statuses that represent field-team work — NEVER overwrite these on upload.
+const PROTECTED_STATUSES = new Set([
+  "disconnected", "paid", "agency paid", "bill dispute",
+  "office team", "visited", "not found", "deemed disconnected",
+  "temprory disconnected",
+])
 
-type UpsertRequest = {
-  // sheetName to write into (defaults to GOOGLE_SHEET_NAME env var)
-  sheetName?: string
-  // Rows as ordered arrays matching UPLOAD_COLUMNS
-  rows: string[][]
-}
+// History tab name
+const HISTORY_TAB = "DC_History"
+const HISTORY_HEADERS = [
+  "Upload Date", "Consumer Id", "Name", "Previous Status",
+  "Previous OSD", "Previous Agency", "Previous Notes", "Action",
+]
 
 const sheets = google.sheets({ version: "v4", auth })
 
-// Auto-detect the MRU zone from a MRU string (e.g. "AB01MR" -> "AB01").
-// Convention: first 4 chars of MRU = zone code.
 function mruToZone(mru: string): string {
   return (mru || "").trim().substring(0, 4).toUpperCase()
 }
 
-// Fetch the AgencyZoneMap sheet and return a Map<zone, agency>.
-// Returns an empty map if the sheet doesn't exist yet (first run).
-async function loadAgencyZoneMap(
-  spreadsheetId: string
-): Promise<Map<string, string>> {
+async function loadAgencyZoneMap(spreadsheetId: string): Promise<Map<string, string>> {
   const map = new Map<string, string>()
   try {
     const resp = await sheets.spreadsheets.values.get({
-      spreadsheetId,
-      range: "AgencyZoneMap!A:B",
+      spreadsheetId, range: "AgencyZoneMap!A:B",
     })
     const rows = resp.data.values || []
     for (let i = 1; i < rows.length; i++) {
@@ -52,10 +45,34 @@ async function loadAgencyZoneMap(
       const agency = String(rows[i]?.[1] || "").trim().toUpperCase()
       if (zone && agency) map.set(zone, agency)
     }
-  } catch {
-    // Sheet doesn't exist yet — that's fine, no agency assignment.
-  }
+  } catch { /* tab not yet created */ }
   return map
+}
+
+async function ensureHistoryTab(spreadsheetId: string) {
+  const meta = await sheets.spreadsheets.get({ spreadsheetId })
+  const exists = meta.data.sheets?.some(s => s.properties?.title === HISTORY_TAB)
+  if (!exists) {
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId,
+      requestBody: { requests: [{ addSheet: { properties: { title: HISTORY_TAB } } }] },
+    })
+    await sheets.spreadsheets.values.update({
+      spreadsheetId, range: `${HISTORY_TAB}!A1`,
+      valueInputOption: "RAW",
+      requestBody: { values: [HISTORY_HEADERS] },
+    })
+  }
+}
+
+const today = () => {
+  const d = new Date()
+  return `${String(d.getDate()).padStart(2,"0")}-${String(d.getMonth()+1).padStart(2,"0")}-${d.getFullYear()}`
+}
+
+type UpsertRequest = {
+  sheetName?: string
+  rows: string[][]
 }
 
 export async function POST(request: NextRequest) {
@@ -65,11 +82,8 @@ export async function POST(request: NextRequest) {
   }
 
   let body: UpsertRequest
-  try {
-    body = await request.json()
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 })
-  }
+  try { body = await request.json() }
+  catch { return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 }) }
 
   const uploadRows = Array.isArray(body.rows) ? body.rows : []
   if (uploadRows.length === 0) {
@@ -80,126 +94,213 @@ export async function POST(request: NextRequest) {
     const spreadsheetId = getSpreadsheetId()
     const sheetName = body.sheetName || getSheetName()
 
-    // 1. Ensure all expected columns exist (item 10 — idempotent).
-    const headers = await ensureHeaders(spreadsheetId, sheetName, EXPECTED_CONSUMER_HEADERS)
+    // 1. Ensure columns and history tab exist.
+    const [headers] = await Promise.all([
+      ensureHeaders(spreadsheetId, sheetName, EXPECTED_CONSUMER_HEADERS),
+      ensureHistoryTab(spreadsheetId),
+    ])
 
-    // 2. Read the Consumer ID column to find existing rows.
-    const idColIndex = findColumn(headers, ["consumerId", "consumer id", "consumer_id"])
+    // 2. Read the full sheet (Consumer ID + status + agency + notes + OSD) to
+    //    determine what already exists. We need these 5 columns only.
+    const idColIndex       = findColumn(headers, ["consumerId","consumer id","consumer_id"])
+    const statusColIndex   = findColumn(headers, ["discon status","disconnection status","status"])
+    const agencyColIndex   = findColumn(headers, ["agency"])
+    const notesColIndex    = findColumn(headers, ["notes","remarks","comments"])
+    const osdColIndex      = findColumn(headers, ["d2 net o/s","d2 net os","outstanding"])
+    const lastUpdColIndex  = findColumn(headers, ["last updated","lastupdated","updatedAt","timestamp"])
+
     if (idColIndex === -1) {
       return NextResponse.json({ error: "Consumer ID column not found" }, { status: 500 })
     }
-    const idColLetter = colLetter(idColIndex)
-    const existingIdResp = await sheets.spreadsheets.values.get({
+
+    // Fetch ID + status + OSD + agency + notes columns in one batchGet
+    const colsToFetch = [idColIndex, statusColIndex, osdColIndex, agencyColIndex, notesColIndex]
+      .filter(i => i !== -1)
+      .map(i => `'${sheetName}'!${colLetter(i)}:${colLetter(i)}`)
+
+    const batchResp = await sheets.spreadsheets.values.batchGet({
       spreadsheetId,
-      range: `'${sheetName}'!${idColLetter}:${idColLetter}`,
+      ranges: colsToFetch,
     })
-    const existingIds = (existingIdResp.data.values || []) as string[][]
-    // Map consumerId -> 1-based sheet row number
-    const idToRow = new Map<string, number>()
-    for (let i = 1; i < existingIds.length; i++) {
-      const id = String(existingIds[i]?.[0] || "").trim()
-      if (id) idToRow.set(id, i + 1) // i+1 because sheet rows are 1-based
+
+    // Build lookup: consumerId -> { row (1-based), status, osd, agency, notes }
+    const idValues = batchResp.data.valueRanges?.[0]?.values || []
+    const statusValues   = statusColIndex !== -1 ? (batchResp.data.valueRanges?.[colsToFetch.indexOf(`'${sheetName}'!${colLetter(statusColIndex)}:${colLetter(statusColIndex)}`)]?.values || []) : []
+    const osdValues      = osdColIndex    !== -1 ? (batchResp.data.valueRanges?.[colsToFetch.indexOf(`'${sheetName}'!${colLetter(osdColIndex)}:${colLetter(osdColIndex)}`)]?.values    || []) : []
+    const agencyValues   = agencyColIndex !== -1 ? (batchResp.data.valueRanges?.[colsToFetch.indexOf(`'${sheetName}'!${colLetter(agencyColIndex)}:${colLetter(agencyColIndex)}`)]?.values || []) : []
+    const notesValues    = notesColIndex  !== -1 ? (batchResp.data.valueRanges?.[colsToFetch.indexOf(`'${sheetName}'!${colLetter(notesColIndex)}:${colLetter(notesColIndex)}`)]?.values  || []) : []
+
+    type ExistingRow = { row: number; status: string; osd: string; agency: string; notes: string }
+    const existingMap = new Map<string, ExistingRow>()
+    for (let i = 1; i < idValues.length; i++) {
+      const id = String(idValues[i]?.[0] || "").trim()
+      if (!id) continue
+      existingMap.set(id, {
+        row: i + 1,
+        status: String(statusValues[i]?.[0] || "").toLowerCase().trim(),
+        osd:    String(osdValues[i]?.[0]    || "").trim(),
+        agency: String(agencyValues[i]?.[0] || "").trim(),
+        notes:  String(notesValues[i]?.[0]  || "").trim(),
+      })
     }
 
-    // 3. Load agency→zone map for auto-assignment (item 12).
+    // 3. Load agency→zone map.
     const zoneAgencyMap = await loadAgencyZoneMap(spreadsheetId)
 
     // 4. Map upload columns to sheet column indices.
-    //    UPLOAD_COLUMNS order: off_code, MRU, Consumer Id, Name, Address,
-    //    Base Class, Device, O/S Duedate Range, D2 Net O/S, Mobile Number
+    // Upload column order: off_code, MRU, Consumer Id, Name, Address,
+    //                      Base Class, Device, O/S Duedate Range, D2 Net O/S, Mobile Number
     const uploadColCandidates: string[][] = [
-      ["off_code", "offcode"],
+      ["off_code","offcode"],
       ["mru"],
-      ["consumer id", "consumerid", "consumer_id"],
-      ["name", "consumer name"],
+      ["consumer id","consumerid","consumer_id"],
+      ["name","consumer name"],
       ["address"],
-      ["base class", "baseclass"],
+      ["base class","baseclass"],
       ["device"],
-      ["o/s duedate range", "os duedate range", "due date range"],
-      ["d2 net o/s", "d2 net os", "outstanding"],
-      ["mobile number", "mobile", "phone"],
+      ["o/s duedate range","os duedate range","due date range"],
+      ["d2 net o/s","d2 net os","outstanding"],
+      ["mobile number","mobile","phone"],
     ]
-    const uploadToSheetCol: number[] = uploadColCandidates.map((cands) =>
-      findColumn(headers, cands)
-    )
+    const uploadToSheetCol = uploadColCandidates.map(cands => findColumn(headers, cands))
 
-    // Also find the agency column for auto-assign
-    const agencyColIndex = findColumn(headers, ["agency"])
-    const lastUpdatedColIndex = findColumn(headers, [
-      "last updated", "last_updated", "updatedAt", "timestamp",
-    ])
+    // Base-only columns that are always safe to update (billing data from DC list).
+    // Status, disconDate, notes, reading, imageUrl, latitude, longitude are NOT included.
+    const BASE_FIELD_UPLOAD_INDICES = [0, 1, 3, 4, 5, 6, 7, 8, 9] // skip index 2 (ID — already known)
 
-    const today = (() => {
-      const d = new Date()
-      return `${String(d.getDate()).padStart(2, "0")}-${String(d.getMonth() + 1).padStart(2, "0")}-${d.getFullYear()}`
-    })()
-
-    // 5. Split into inserts (new) vs. updates (existing).
-    const insertRows: string[][] = []
+    const todayStr = today()
     const updateWrites: sheets_v4.Schema$ValueRange[] = []
+    const insertRows: string[][] = []
+    const historyRows: string[][] = []
+    let protectedCount = 0
     let autoAssignedCount = 0
 
+    // Build the upload-row id set for marking removed consumers
+    const uploadIdSet = new Set<string>()
+
     for (const uploadRow of uploadRows) {
-      // Consumer ID is at UPLOAD_COLUMNS index 2
       const consumerId = String(uploadRow[2] || "").trim()
       if (!consumerId) continue
+      uploadIdSet.add(consumerId)
 
-      // Build a full-width row for the sheet, preserving any existing cells we
-      // don't touch (leave as empty string — batchUpdate only writes non-empty
-      // ranges when using update, but for new rows we provide what we have).
       const mru = String(uploadRow[1] || "").trim()
       const zone = mruToZone(mru)
-      const agency = zoneAgencyMap.get(zone) || ""
-      if (agency) autoAssignedCount++
+      const mappedAgency = zoneAgencyMap.get(zone) || ""
 
-      if (idToRow.has(consumerId)) {
-        // UPDATE: write only the upload columns + agency + lastUpdated per cell
-        const targetRow = idToRow.get(consumerId)!
-        uploadRow.forEach((val, i) => {
-          const sheetCol = uploadToSheetCol[i]
-          if (sheetCol !== -1) {
-            updateWrites.push({
-              range: `'${sheetName}'!${colLetter(sheetCol)}${targetRow}`,
-              values: [[val ?? ""]],
-            })
-          }
-        })
-        if (agencyColIndex !== -1 && agency) {
-          updateWrites.push({
-            range: `'${sheetName}'!${colLetter(agencyColIndex)}${targetRow}`,
-            values: [[agency]],
-          })
-        }
-        if (lastUpdatedColIndex !== -1) {
-          updateWrites.push({
-            range: `'${sheetName}'!${colLetter(lastUpdatedColIndex)}${targetRow}`,
-            values: [[today]],
-          })
-        }
-      } else {
-        // INSERT: build a row array padded to the header width
+      const existing = existingMap.get(consumerId)
+
+      if (!existing) {
+        // --- INSERT: new consumer ---
         const newRow: string[] = new Array(headers.length).fill("")
         uploadRow.forEach((val, i) => {
           const sheetCol = uploadToSheetCol[i]
           if (sheetCol !== -1) newRow[sheetCol] = val ?? ""
         })
-        if (agencyColIndex !== -1 && agency) newRow[agencyColIndex] = agency
-        if (lastUpdatedColIndex !== -1) newRow[lastUpdatedColIndex] = today
+        // Default status to "connected" so it shows up in the list
+        if (statusColIndex !== -1) newRow[statusColIndex] = "connected"
+        if (agencyColIndex !== -1 && mappedAgency) { newRow[agencyColIndex] = mappedAgency; autoAssignedCount++ }
+        if (lastUpdColIndex !== -1) newRow[lastUpdColIndex] = todayStr
         insertRows.push(newRow)
+      } else {
+        // --- UPDATE: existing consumer ---
+        const isProtected = PROTECTED_STATUSES.has(existing.status)
+
+        if (isProtected) {
+          // Only update base billing fields — never touch status/date/notes/evidence
+          protectedCount++
+          BASE_FIELD_UPLOAD_INDICES.forEach(i => {
+            const sheetCol = uploadToSheetCol[i]
+            const val = uploadRow[i] ?? ""
+            if (sheetCol !== -1 && val) {
+              updateWrites.push({
+                range: `'${sheetName}'!${colLetter(sheetCol)}${existing.row}`,
+                values: [[val]],
+              })
+            }
+          })
+          // Update OSD (billing amount may change even for completed cases)
+          const osdVal = uploadRow[8] ?? ""
+          if (osdColIndex !== -1 && osdVal) {
+            updateWrites.push({
+              range: `'${sheetName}'!${colLetter(osdColIndex)}${existing.row}`,
+              values: [[osdVal]],
+            })
+          }
+        } else {
+          // Safe to update all base fields (status is blank/connected)
+          uploadRow.forEach((val, i) => {
+            const sheetCol = uploadToSheetCol[i]
+            if (sheetCol !== -1) {
+              updateWrites.push({
+                range: `'${sheetName}'!${colLetter(sheetCol)}${existing.row}`,
+                values: [[val ?? ""]],
+              })
+            }
+          })
+          // Auto-assign agency if not yet assigned
+          if (agencyColIndex !== -1 && mappedAgency && !existing.agency) {
+            updateWrites.push({
+              range: `'${sheetName}'!${colLetter(agencyColIndex)}${existing.row}`,
+              values: [[mappedAgency]],
+            })
+            autoAssignedCount++
+          }
+        }
+        if (lastUpdColIndex !== -1) {
+          updateWrites.push({
+            range: `'${sheetName}'!${colLetter(lastUpdColIndex)}${existing.row}`,
+            values: [[todayStr]],
+          })
+        }
       }
     }
 
-    // 6. Execute updates (batch) then inserts (append) — 2 API calls max.
-    if (updateWrites.length > 0) {
-      await sheets.spreadsheets.values.batchUpdate({
-        spreadsheetId,
-        requestBody: {
-          valueInputOption: "USER_ENTERED",
-          data: updateWrites,
-        },
+    // 5. Identify consumers in sheet but NOT in new upload — archive to history,
+    //    mark them with "&" status so they are hidden from agency views.
+    let archivedCount = 0
+    if (statusColIndex !== -1) {
+      existingMap.forEach((existing, consumerId) => {
+        if (!uploadIdSet.has(consumerId)) {
+          // Archive: write a history row before changing anything
+          historyRows.push([
+            todayStr, consumerId,
+            "", // name — would need another fetch; omitted for API efficiency
+            existing.status, existing.osd, existing.agency, existing.notes,
+            "removed-from-upload",
+          ])
+          // Mark as "&" — this hides from agency views per existing app logic
+          updateWrites.push({
+            range: `'${sheetName}'!${colLetter(statusColIndex)}${existing.row}`,
+            values: [["&"]],
+          })
+          if (lastUpdColIndex !== -1) {
+            updateWrites.push({
+              range: `'${sheetName}'!${colLetter(lastUpdColIndex)}${existing.row}`,
+              values: [[todayStr]],
+            })
+          }
+          archivedCount++
+        }
       })
     }
 
+    // 6. Write history rows to DC_History tab.
+    if (historyRows.length > 0) {
+      await sheets.spreadsheets.values.append({
+        spreadsheetId,
+        range: `${HISTORY_TAB}!A:H`,
+        valueInputOption: "RAW",
+        requestBody: { values: historyRows },
+      })
+    }
+
+    // 7. Execute updates (batch) and inserts (append) — max 2 Sheets API calls.
+    if (updateWrites.length > 0) {
+      await sheets.spreadsheets.values.batchUpdate({
+        spreadsheetId,
+        requestBody: { valueInputOption: "USER_ENTERED", data: updateWrites },
+      })
+    }
     if (insertRows.length > 0) {
       await sheets.spreadsheets.values.append({
         spreadsheetId,
@@ -217,14 +318,13 @@ export async function POST(request: NextRequest) {
         total: uploadRows.length,
         inserted: insertRows.length,
         updated: uploadRows.length - insertRows.length,
+        protectedStatusSkipped: protectedCount,
         autoAssigned: autoAssignedCount,
+        archivedNotInUpload: archivedCount,
       },
     })
   } catch (error: any) {
     console.error("bulk-upsert error:", error)
-    return NextResponse.json(
-      { error: error?.message || "Bulk upsert failed" },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: error?.message || "Bulk upsert failed" }, { status: 500 })
   }
 }
