@@ -3,6 +3,7 @@
 
 import Papa from "papaparse";
 import * as XLSX from "xlsx";
+import { getFromCache, saveToCache } from "@/lib/indexed-db";
 import { Table, TableHeader, TableRow, TableHead, TableCell, TableBody } from "@/components/ui/table";
 import React, { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
@@ -66,7 +67,7 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
             const response = await fetch("/api/consumers/bulk-upsert", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ rows: parsedData }),
+                body: JSON.stringify({ rows: parsedData, newCycle: newCycleUpload }),
             });
             const result = await response.json();
             if (!response.ok || !result.success) {
@@ -88,6 +89,43 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
         }
     };
 
+    // Download the current DC list from IndexedDB cache as a CSV backup.
+    // Runs entirely in the browser — no server call, no extra CPU.
+    const downloadCacheBackup = async () => {
+        setBackupDownloading(true);
+        try {
+            const cached = await getFromCache<any[]>("consumers_data_cache");
+            if (!cached || cached.length === 0) {
+                setMessage({ type: "error", text: "No cached data found. Please open the Disconnection List first so data loads into your browser." });
+                return;
+            }
+            // Convert to CSV using XLSX (already in deps)
+            const headers = [
+                "off_code","MRU","Consumer Id","Name","Address","Base Class","Class",
+                "Nature of Conn","Gov/Non-Gov","Device","O/S Duedate Range","D2 Net O/S",
+                "Discon Status","Discon Date","GIS Pole","Mobile Number","Latitude","Longitude",
+                "Agency","Reading","Image","Notes","Last Updated","Priority",
+                "Paid Amount","Paid Date","Paid Type","Outstanding After","Next Payment Date","Payment Source",
+            ];
+            const rows = cached.map(c => [
+                c.offCode,c.mru,c.consumerId,c.name,c.address,c.baseClass,c.class,
+                c.natureOfConn,c.govNonGov,c.device,c.osDuedateRange,c.d2NetOS,
+                c.disconStatus,c.disconDate,c.gisPole,c.mobileNumber,c.latitude,c.longitude,
+                c.agency,c.reading,c.imageUrl,c.notes,c.lastUpdated,c.priority,
+                c.paidAmount,c.paidDate,c.paidType,c.outstandingAfter,c.nextPaymentDate,c.paymentSource,
+            ]);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([headers, ...rows]), "DC Backup");
+            const dateStr = new Date().toISOString().slice(0, 10);
+            XLSX.writeFile(wb, `DC_Backup_${dateStr}.xlsx`);
+            setMessage({ type: "success", text: `✅ Backup downloaded: DC_Backup_${dateStr}.xlsx (${cached.length} consumers from your browser cache)` });
+        } catch (e) {
+            setMessage({ type: "error", text: "Backup failed: " + (e instanceof Error ? e.message : String(e)) });
+        } finally {
+            setBackupDownloading(false);
+        }
+    };
+
   const columnRegexMap: Record<string, RegExp> = {
     "off_code": /^\d{7}$/,
     "MRU": /^[A-Z0-9]{6}MR$/,
@@ -106,18 +144,26 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
     const [columnMapping, setColumnMapping] = useState<Record<string, string>>({});
     const [fileName, setFileName] = useState<string>("");
     const [dcUploadResult, setDcUploadResult] = useState<{ total: number; inserted: number; updated: number; protectedStatusSkipped: number; autoAssigned: number; archivedNotInUpload: number } | null>(null);
+    const [newCycleUpload, setNewCycleUpload] = useState(false);
+    const [backupDownloading, setBackupDownloading] = useState(false);
+
+    const ZONE_MAP_CACHE_KEY = "zone_map_cache";
 
     // --- ZONE MAP STATE (item 12) ---
-    const [zoneMapRows, setZoneMapRows] = useState<{ zone: string; agency: string; updatedOn?: string }[]>([]);
+    const [zoneMapRows, setZoneMapRows] = useState<{ zone: string; agency: string; address?: string; updatedOn?: string }[]>([]);
     const [zoneMapLoading, setZoneMapLoading] = useState(false);
     const [zoneMapSaving, setZoneMapSaving] = useState(false);
     const [newZone, setNewZone] = useState("");
     const [newZoneAgency, setNewZoneAgency] = useState("");
     const [availableMrus, setAvailableMrus] = useState<string[]>([]);
     const [zoneUploadMode, setZoneUploadMode] = useState<"manual" | "csv">("manual");
-    const [zoneUploadRows, setZoneUploadRows] = useState<{ zone: string; agency: string }[]>([]);
+    const [zoneUploadRows, setZoneUploadRows] = useState<{ zone: string; agency: string; address?: string }[]>([]);
     const [zoneUploadFileName, setZoneUploadFileName] = useState("");
     const [showZoneGuide, setShowZoneGuide] = useState(false);
+    const [newZoneAddress, setNewZoneAddress] = useState("");
+    const [zoneAgencyFilter, setZoneAgencyFilter] = useState("All");
+    const [zoneViewMode, setZoneViewMode] = useState<"flat" | "agency">("agency");
+    const [mruSearch, setMruSearch] = useState("");
 
     const detectColumnType = (values: any[]) => {
     for (const [colName, regex] of Object.entries(columnRegexMap)) {
@@ -350,21 +396,37 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
     }
   }
 
-  // Zone map load/save
+  // Zone map load/save — with IndexedDB cache for instant loading.
+  // Cache is invalidated only when admin explicitly saves changes.
   const loadZoneMap = async () => {
     setZoneMapLoading(true)
+
+    // 1. Show cached data immediately (zero server cost, instant display).
+    try {
+      const cached = await getFromCache<typeof zoneMapRows>(ZONE_MAP_CACHE_KEY)
+      if (cached && cached.length > 0) {
+        setZoneMapRows(cached)
+        setZoneMapLoading(false) // stop spinner so user sees data right away
+      }
+    } catch { /* ignore cache errors */ }
+
+    // 2. Refresh from server in background (always keep map + MRUs fresh).
     try {
       const [mapResp, mruResp] = await Promise.all([
         fetch("/api/zone-map"),
         fetch("/api/zone-map/mrus"),
       ])
-      if (mapResp.ok) setZoneMapRows(await mapResp.json())
+      if (mapResp.ok) {
+        const fresh = await mapResp.json()
+        setZoneMapRows(fresh)
+        await saveToCache(ZONE_MAP_CACHE_KEY, fresh)
+      }
       if (mruResp.ok) setAvailableMrus(await mruResp.json())
-    } catch { /* silent */ }
+    } catch { /* silent — cached data still shown */ }
     finally { setZoneMapLoading(false) }
   }
 
-  const saveZoneMap = async (rows: { zone: string; agency: string }[]) => {
+  const saveZoneMap = async (rows: { zone: string; agency: string; address?: string }[]) => {
     setZoneMapSaving(true)
     try {
       const resp = await fetch("/api/zone-map", {
@@ -373,7 +435,10 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
         body: JSON.stringify({ rows }),
       })
       if (resp.ok) {
-        setZoneMapRows(rows.map(r => ({ ...r, updatedOn: new Date().toLocaleDateString("en-IN") })))
+        const updated = rows.map(r => ({ ...r, updatedOn: new Date().toLocaleDateString("en-IN") }))
+        setZoneMapRows(updated)
+        // Update cache immediately with new data so next open is instant.
+        await saveToCache(ZONE_MAP_CACHE_KEY, updated)
       }
     } catch { /* silent */ }
     finally { setZoneMapSaving(false) }
@@ -416,7 +481,7 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
       }
     }
 
-    if (view === "users" || view === "agencies") {
+    if (view === "users" || view === "agencies" || view === "zoneMap") {
       loadAgencies()
     }
   }, [view])
@@ -1204,8 +1269,33 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
 
       {view === "dcList" && (
         <div className="space-y-4">
-          <div>
+          <div className="flex items-start justify-between flex-wrap gap-2">
             <h2 className="text-xl font-bold">Upload DC List</h2>
+            <div className="flex gap-2 flex-wrap">
+              {/* Backup: reads from IndexedDB, zero server cost */}
+              <Button
+                size="sm"
+                variant="outline"
+                className="border-green-300 text-green-700 hover:bg-green-50"
+                onClick={downloadCacheBackup}
+                disabled={backupDownloading}
+              >
+                {backupDownloading ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" />Preparing…</> : "⬇ Backup Current List"}
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => {
+                const wb = XLSX.utils.book_new()
+                XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
+                  ["off_code", "MRU", "Consumer Id", "Name", "Address", "Base Class", "Device", "O/S Duedate Range", "D2 Net O/S", "Mobile Number"],
+                  ["6612107", "AB01MR", "100000001", "CONSUMER NAME", "123 ROAD AREA DISTRICT", "L-1 PHASE", "METER001", "01-01-2024 - 31-03-2024", "5000", "9876543210"],
+                  ["6612107", "AB01MR", "100000002", "ANOTHER CONSUMER", "456 STREET TOWN", "L-1 PHASE", "METER002", "01-01-2024 - 31-03-2024", "12000", "9876543211"],
+                ]), "DC List")
+                XLSX.writeFile(wb, "DC_List_Template.xlsx")
+              }}>
+                Download Template
+              </Button>
+            </div>
+          </div>
+          <div>
             <p className="text-sm text-gray-600 mt-1">
               Upload a CSV or Excel DC list. New IDs are inserted; existing IDs are updated.
               Consumers removed from the new list are archived to <span className="font-mono">DC_History</span>.
@@ -1227,6 +1317,28 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
               </details>
             </p>
           </div>
+
+          {/* New cycle toggle */}
+          <Card className="border-amber-200 bg-amber-50">
+            <CardContent className="pt-4 pb-4 space-y-2">
+              <div className="flex items-start gap-3">
+                <input type="checkbox" id="newCycle" checked={newCycleUpload}
+                  onChange={(e) => setNewCycleUpload(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded" />
+                <div>
+                  <label htmlFor="newCycle" className="font-semibold text-sm text-amber-900 cursor-pointer">
+                    New Disconnection Cycle
+                  </label>
+                  <p className="text-xs text-amber-700 mt-0.5">
+                    Check this when uploading a <strong>fresh billing cycle</strong> (e.g. a new quarter's DC list).
+                    With this ON, consumers with OSD-changed will have their status reset to <code>connected</code>
+                    (treated as a new case). Consumers with <code>bill dispute</code> or <code>office team</code>
+                    status are always preserved regardless. Without this, all existing statuses are fully protected.
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
 
           <Card>
             <CardContent className="pt-5 space-y-4">
@@ -1360,56 +1472,64 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
 
       {view === "zoneMap" && (
         <div className="space-y-4">
-          <div>
-            <h2 className="text-xl font-bold">Agency Zone Map</h2>
-            <p className="text-sm text-gray-600 mt-1">
-              Map MRU codes to agencies. During DC list upload, each consumer&apos;s MRU is matched
-              here and their agency is auto-filled. History of changes is stored in the
-              <span className="font-mono"> ZoneMapHistory</span> sheet tab.
-            </p>
+          <div className="flex items-start justify-between flex-wrap gap-2">
+            <div>
+              <h2 className="text-xl font-bold">Agency Zone Map</h2>
+              <p className="text-sm text-gray-600 mt-1">
+                Map MRUs to agencies. Used during DC list upload to auto-assign agency per consumer.
+                Changes are tracked in <span className="font-mono text-xs">ZoneMapHistory</span>.
+              </p>
+            </div>
+            <Button size="sm" variant="outline" onClick={() => {
+              const wb = XLSX.utils.book_new()
+              XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
+                ["Zone (MRU)", "Agency", "Address"],
+                ["AB01MR", "AGENCY NAME", "Area / locality description"],
+              ]), "ZoneMap")
+              XLSX.writeFile(wb, "ZoneMap_Template.xlsx")
+            }}>
+              Download Template
+            </Button>
           </div>
 
-          {/* Upload Guide */}
-          <button
-            className="text-xs text-blue-600 underline text-left"
-            onClick={() => setShowZoneGuide(g => !g)}
-          >
-            {showZoneGuide ? "Hide" : "Show"} CSV upload guide
+          {/* Guide */}
+          <button className="text-xs text-blue-600 underline" onClick={() => setShowZoneGuide(g => !g)}>
+            {showZoneGuide ? "Hide" : "Show"} format guide
           </button>
           {showZoneGuide && (
             <Card className="border-blue-200 bg-blue-50">
-              <CardContent className="pt-4 text-xs space-y-2">
-                <p className="font-semibold text-blue-800">CSV format for bulk zone upload:</p>
-                <pre className="bg-white rounded p-2 text-[11px] overflow-auto">{`Zone,Agency\nAB01,AGENCY NAME 1\nAB02,AGENCY NAME 2\nCD01,AGENCY NAME 1`}</pre>
-                <ul className="list-disc pl-4 text-gray-600 space-y-1">
-                  <li><strong>Zone</strong>: First 4 characters of the MRU (e.g. MRU <code>AB01MR</code> → Zone <code>AB01</code>)</li>
-                  <li><strong>Agency</strong>: Exact agency name as registered in Manage Agencies</li>
-                  <li>Header row is required. Extra columns are ignored.</li>
-                  <li>Uploading will overwrite existing mappings for matching zones and record the change in history.</li>
+              <CardContent className="pt-3 text-xs space-y-2">
+                <p className="font-semibold text-blue-800">CSV / Excel format:</p>
+                <pre className="bg-white rounded p-2 text-[11px] overflow-auto">{`Zone (MRU),Agency,Address\nAB01MR,AGENCY NAME 1,South Zone near main road\nAB02MR,AGENCY NAME 2,North industrial area`}</pre>
+                <ul className="list-disc pl-4 text-gray-600 space-y-0.5">
+                  <li><strong>Zone</strong>: MRU code from DC list (e.g. <code>AB01MR</code>). Zone key = first 4 chars.</li>
+                  <li><strong>Agency</strong>: Exact name as in Manage Agencies (case-insensitive match on upload).</li>
+                  <li><strong>Address</strong>: Optional. Helps decide future agency allocation.</li>
+                  <li>Header row required. Changes are logged to <code>ZoneMapHistory</code> sheet.</li>
                 </ul>
               </CardContent>
             </Card>
           )}
 
+          {/* Add row + CSV upload tabs */}
           <Card>
-            <CardContent className="pt-5 space-y-4">
+            <CardContent className="pt-4 space-y-4">
               {zoneMapLoading ? (
                 <div className="flex items-center gap-2 text-sm text-gray-500">
-                  <Loader2 className="h-4 w-4 animate-spin" /> Loading zone map…
+                  <Loader2 className="h-4 w-4 animate-spin" /> Loading…
                 </div>
               ) : (
                 <>
-                  {/* Mode toggle */}
                   <div className="flex gap-2">
-                    <Button size="sm" variant={zoneUploadMode === "manual" ? "default" : "outline"} onClick={() => setZoneUploadMode("manual")}>Manual</Button>
-                    <Button size="sm" variant={zoneUploadMode === "csv" ? "default" : "outline"} onClick={() => setZoneUploadMode("csv")}>Bulk CSV Upload</Button>
+                    <Button size="sm" variant={zoneUploadMode === "manual" ? "default" : "outline"} onClick={() => setZoneUploadMode("manual")}>Add / Edit</Button>
+                    <Button size="sm" variant={zoneUploadMode === "csv" ? "default" : "outline"} onClick={() => setZoneUploadMode("csv")}>Bulk Upload</Button>
                   </div>
 
-                  {/* Manual add */}
+                  {/* Manual add row */}
                   {zoneUploadMode === "manual" && (
-                    <div className="flex gap-2 items-end">
-                      <div className="space-y-1 flex-1">
-                        <Label className="text-xs">MRU (from DC list)</Label>
+                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 items-end">
+                      <div className="space-y-1">
+                        <Label className="text-xs">MRU</Label>
                         {availableMrus.length > 0 ? (
                           <Select value={newZone} onValueChange={setNewZone}>
                             <SelectTrigger className="h-8"><SelectValue placeholder="Select MRU" /></SelectTrigger>
@@ -1420,16 +1540,11 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
                             </SelectContent>
                           </Select>
                         ) : (
-                          <Input
-                            placeholder="e.g. AB01MR"
-                            value={newZone}
-                            onChange={(e) => setNewZone(e.target.value.toUpperCase())}
-                            className="h-8 font-mono"
-                          />
+                          <Input placeholder="AB01MR" value={newZone}
+                            onChange={(e) => setNewZone(e.target.value.toUpperCase())} className="h-8 font-mono" />
                         )}
-                        <p className="text-[10px] text-gray-400">Zone = first 4 chars used for matching</p>
                       </div>
-                      <div className="space-y-1 flex-1">
+                      <div className="space-y-1">
                         <Label className="text-xs">Agency</Label>
                         <Select value={newZoneAgency} onValueChange={setNewZoneAgency}>
                           <SelectTrigger className="h-8"><SelectValue placeholder="Select agency" /></SelectTrigger>
@@ -1440,98 +1555,241 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
                           </SelectContent>
                         </Select>
                       </div>
-                      <Button
-                        size="sm" className="h-8"
+                      <div className="space-y-1">
+                        <Label className="text-xs">Area / Address (optional)</Label>
+                        <Input placeholder="e.g. South zone, near market"
+                          value={newZoneAddress}
+                          onChange={(e) => setNewZoneAddress(e.target.value)}
+                          className="h-8 text-xs" />
+                      </div>
+                      <Button size="sm" className="h-8 self-end"
                         disabled={!newZone || !newZoneAgency || zoneMapSaving}
                         onClick={() => {
                           const zone = newZone.substring(0, 4).toUpperCase()
                           const updated = [
                             ...zoneMapRows.filter(r => r.zone !== zone),
-                            { zone, agency: newZoneAgency.toUpperCase() },
+                            { zone, agency: newZoneAgency.toUpperCase(), address: newZoneAddress },
                           ].sort((a, b) => a.zone.localeCompare(b.zone))
                           saveZoneMap(updated)
-                          setNewZone(""); setNewZoneAgency("")
+                          setNewZone(""); setNewZoneAgency(""); setNewZoneAddress("")
                         }}
                       >
-                        <Plus className="h-4 w-4 mr-1" /> Add / Update
+                        <Plus className="h-4 w-4 mr-1" /> Save
                       </Button>
                     </div>
                   )}
 
-                  {/* CSV upload */}
+                  {/* Bulk CSV/Excel upload */}
                   {zoneUploadMode === "csv" && (
-                    <div className="space-y-3">
-                      <Input
-                        type="file" accept=".csv,text/csv"
-                        onChange={(e) => e.target.files && parseZoneCsv(e.target.files[0])}
+                    <div className="space-y-2">
+                      <Input type="file" accept=".csv,.xlsx,.xls,text/csv"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0]
+                          if (!file) return
+                          setZoneUploadFileName(file.name)
+                          if (/\.(xlsx|xls)$/i.test(file.name)) {
+                            const reader = new FileReader()
+                            reader.onload = (ev) => {
+                              const wb = XLSX.read(new Uint8Array(ev.target?.result as ArrayBuffer), { type: "array" })
+                              const ws = wb.Sheets[wb.SheetNames[0]]
+                              const rows = XLSX.utils.sheet_to_json<any[]>(ws, { header: 1, defval: "" }) as any[][]
+                              const parsed = rows.slice(1).map(r => ({
+                                zone: String(r[0] || "").trim().toUpperCase().substring(0, 4),
+                                agency: String(r[1] || "").trim().toUpperCase(),
+                                address: String(r[2] || "").trim(),
+                              })).filter(r => r.zone && r.agency)
+                              setZoneUploadRows(parsed)
+                            }
+                            reader.readAsArrayBuffer(file)
+                          } else {
+                            parseZoneCsv(file)
+                          }
+                        }}
                       />
-                      {zoneUploadFileName && <p className="text-xs text-gray-500">Selected: <span className="font-mono">{zoneUploadFileName}</span></p>}
+                      {zoneUploadFileName && <p className="text-xs text-gray-500">{zoneUploadFileName}</p>}
                       {zoneUploadRows.length > 0 && (
-                        <>
-                          <p className="text-xs text-gray-600">{zoneUploadRows.length} zone-agency pairs parsed.</p>
-                          <Button
-                            size="sm" disabled={zoneMapSaving}
-                            onClick={() => {
-                              // Merge: new file entries override existing, keep others
-                              const incoming = new Map(zoneUploadRows.map(r => [r.zone, r.agency]))
-                              const merged = [
-                                ...zoneMapRows.filter(r => !incoming.has(r.zone)),
-                                ...zoneUploadRows,
-                              ].sort((a, b) => a.zone.localeCompare(b.zone))
-                              saveZoneMap(merged)
-                              setZoneUploadRows([]); setZoneUploadFileName("")
-                            }}
-                          >
-                            <Upload className="h-4 w-4 mr-1" /> Apply {zoneUploadRows.length} mappings
-                          </Button>
-                        </>
+                        <Button size="sm" disabled={zoneMapSaving}
+                          onClick={() => {
+                            const incoming = new Map(zoneUploadRows.map(r => [r.zone, r]))
+                            const merged = [
+                              ...zoneMapRows.filter(r => !incoming.has(r.zone)),
+                              ...zoneUploadRows,
+                            ].sort((a, b) => a.zone.localeCompare(b.zone))
+                            saveZoneMap(merged)
+                            setZoneUploadRows([]); setZoneUploadFileName("")
+                          }}
+                        >
+                          <Upload className="h-4 w-4 mr-1" /> Apply {zoneUploadRows.length} mappings
+                        </Button>
                       )}
                     </div>
                   )}
-
-                  {/* Current map table */}
-                  {zoneMapRows.length > 0 && (
-                    <div className="border rounded-md overflow-auto max-h-64">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead className="text-xs">MRU / Zone</TableHead>
-                            <TableHead className="text-xs">Agency</TableHead>
-                            <TableHead className="text-xs">Updated</TableHead>
-                            <TableHead className="w-10"></TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {zoneMapRows.map((row, i) => (
-                            <TableRow key={i}>
-                              <TableCell className="font-mono text-xs">{row.zone}</TableCell>
-                              <TableCell className="text-xs">{row.agency}</TableCell>
-                              <TableCell className="text-xs text-gray-400">{row.updatedOn || "—"}</TableCell>
-                              <TableCell>
-                                <Button
-                                  size="icon" variant="ghost"
-                                  className="h-6 w-6 text-red-500 hover:text-red-700"
-                                  onClick={() => saveZoneMap(zoneMapRows.filter((_, idx) => idx !== i))}
-                                >
-                                  <X className="h-3 w-3" />
-                                </Button>
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </div>
-                  )}
-                  {zoneMapRows.length === 0 && !zoneMapLoading && (
-                    <p className="text-sm text-gray-400">No mappings yet.</p>
-                  )}
-                  {zoneMapSaving && <p className="text-xs text-blue-600">Saving to sheet…</p>}
+                  {zoneMapSaving && <p className="text-xs text-blue-600">Saving…</p>}
                 </>
               )}
             </CardContent>
           </Card>
+
+          {/* Zone view table — always shown, even when empty */}
+          <Card>
+            <CardContent className="pt-4 space-y-3">
+              {/* MRU Search */}
+              <div className="relative">
+                <Input
+                  placeholder="Search MRU / zone…"
+                  value={mruSearch}
+                  onChange={(e) => setMruSearch(e.target.value)}
+                  className="h-8 pl-8 text-sm"
+                />
+                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs">🔍</span>
+                {mruSearch && (
+                  <button className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-500"
+                    onClick={() => setMruSearch("")}>✕</button>
+                )}
+              </div>
+
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div className="flex gap-2">
+                  <Button size="sm" variant={zoneViewMode === "agency" ? "default" : "outline"} onClick={() => setZoneViewMode("agency")}>By Agency</Button>
+                  <Button size="sm" variant={zoneViewMode === "flat" ? "default" : "outline"} onClick={() => setZoneViewMode("flat")}>All Zones</Button>
+                </div>
+                {zoneViewMode === "agency" && zoneMapRows.length > 0 && (
+                  <Select value={zoneAgencyFilter} onValueChange={setZoneAgencyFilter}>
+                    <SelectTrigger className="h-8 w-44"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="All">All Agencies</SelectItem>
+                      {Array.from(new Set(zoneMapRows.map(r => r.agency))).sort().map(a => (
+                        <SelectItem key={a} value={a}>{a}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
+
+              {zoneMapRows.length === 0 && (
+                <p className="text-sm text-gray-400 py-4 text-center">No zone mappings yet. Add one above.</p>
+              )}
+
+              {(() => {
+                // Apply MRU search filter once, shared by both views
+                const searchLc = mruSearch.trim().toLowerCase()
+                const visibleRows = searchLc
+                  ? zoneMapRows.filter(r =>
+                      r.zone.toLowerCase().includes(searchLc) ||
+                      r.agency.toLowerCase().includes(searchLc) ||
+                      (r.address || "").toLowerCase().includes(searchLc)
+                    )
+                  : zoneMapRows
+
+                if (visibleRows.length === 0 && mruSearch) {
+                  return <p className="text-xs text-gray-400 text-center py-2">No zones match &quot;{mruSearch}&quot;</p>
+                }
+
+                return (
+                  <>
+                    {/* Flat table */}
+                    {zoneViewMode === "flat" && visibleRows.length > 0 && (
+                      <div className="border rounded-md overflow-auto max-h-80">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead className="text-xs">Zone / MRU</TableHead>
+                              <TableHead className="text-xs">Agency</TableHead>
+                              <TableHead className="text-xs">Address / Area</TableHead>
+                              <TableHead className="text-xs">Updated</TableHead>
+                              <TableHead className="w-10"></TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {visibleRows.map((row, i) => (
+                              <TableRow key={i}>
+                                <TableCell className="font-mono text-xs">{row.zone}</TableCell>
+                                <TableCell className="text-xs">{row.agency}</TableCell>
+                                <TableCell className="text-xs text-gray-500 max-w-[160px] truncate">{row.address || "—"}</TableCell>
+                                <TableCell className="text-xs text-gray-400">{row.updatedOn || "—"}</TableCell>
+                                <TableCell>
+                                  <Button size="icon" variant="ghost" className="h-6 w-6 text-red-500"
+                                    onClick={() => saveZoneMap(zoneMapRows.filter(r => r.zone !== row.zone || r.agency !== row.agency))}>
+                                    <X className="h-3 w-3" />
+                                  </Button>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    )}
+
+                    {/* Agency-wise grouped */}
+                    {zoneViewMode === "agency" && visibleRows.length > 0 && (
+                      <ZoneAgencyGrouped
+                        zoneMapRows={visibleRows}
+                        agencyFilter={zoneAgencyFilter}
+                        onDelete={(zone, agency) => saveZoneMap(zoneMapRows.filter(r => !(r.zone === zone && r.agency === agency)))}
+                      />
+                    )}
+                  </>
+                )
+              })()}
+            </CardContent>
+          </Card>
         </div>
       )}
+    </div>
+  )
+}
+
+function ZoneAgencyGrouped({
+  zoneMapRows,
+  agencyFilter,
+  onDelete,
+}: {
+  zoneMapRows: { zone: string; agency: string; address?: string; updatedOn?: string }[]
+  agencyFilter: string
+  onDelete: (zone: string, agency: string) => void
+}) {
+  const agencyNames = Array.from(new Set(zoneMapRows.map(r => r.agency))).sort()
+  const filtered = agencyFilter === "All" ? agencyNames : agencyNames.filter(a => a === agencyFilter)
+  return (
+    <div className="space-y-4">
+      {filtered.map(agencyName => {
+        const rows = zoneMapRows.filter(r => r.agency === agencyName)
+        return (
+          <div key={agencyName}>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-xs font-bold uppercase tracking-wide text-gray-700">{agencyName}</span>
+              <span className="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full">{rows.length} zones</span>
+            </div>
+            <div className="border rounded-md overflow-auto max-h-52">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="text-xs py-1">Zone / MRU</TableHead>
+                    <TableHead className="text-xs py-1">Address / Area</TableHead>
+                    <TableHead className="text-xs py-1">Updated</TableHead>
+                    <TableHead className="w-10 py-1"></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {rows.map((row, i) => (
+                    <TableRow key={i}>
+                      <TableCell className="font-mono text-xs py-1">{row.zone}</TableCell>
+                      <TableCell className="text-xs text-gray-500 py-1 max-w-[200px] truncate">{row.address || "—"}</TableCell>
+                      <TableCell className="text-xs text-gray-400 py-1">{row.updatedOn || "—"}</TableCell>
+                      <TableCell className="py-1">
+                        <Button size="icon" variant="ghost" className="h-6 w-6 text-red-500"
+                          onClick={() => onDelete(row.zone, agencyName)}>
+                          <X className="h-3 w-3" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </div>
+        )
+      })}
     </div>
   )
 }

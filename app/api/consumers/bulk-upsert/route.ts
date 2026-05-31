@@ -9,15 +9,19 @@ import {
   getSheetName,
 } from "@/lib/google-sheets-api"
 import { EXPECTED_CONSUMER_HEADERS, invalidateConsumerCache } from "@/lib/google-sheets"
+import { appendHistory, nowTimestamp, invalidateHistoryCache } from "@/lib/consumer-history"
 import { verifySession } from "@/lib/session"
 
 export const maxDuration = 60
 
-// Statuses that represent field-team work — NEVER overwrite these on upload.
-const PROTECTED_STATUSES = new Set([
-  "disconnected", "paid", "agency paid", "bill dispute",
-  "office team", "visited", "not found", "deemed disconnected",
-  "temprory disconnected",
+// Statuses that represent admin holds — ALWAYS preserved, even in new-cycle mode.
+const ADMIN_HOLD_STATUSES = new Set(["bill dispute", "office team"])
+
+// Statuses that represent completed field-team work that MAY be reset in new-cycle mode
+// if the OSD amount has changed (meaning the consumer paid, reconnected, and has new dues).
+const FIELD_WORK_STATUSES = new Set([
+  "disconnected", "paid", "agency paid", "visited", "not found",
+  "deemed disconnected", "temprory disconnected",
 ])
 
 // History tab name
@@ -73,6 +77,9 @@ const today = () => {
 type UpsertRequest = {
   sheetName?: string
   rows: string[][]
+  // When true: OSD-changed rows with field-work statuses are reset to "connected"
+  // (new billing cycle). Admin-hold statuses (bill dispute, office team) are always kept.
+  newCycle?: boolean
 }
 
 export async function POST(request: NextRequest) {
@@ -85,6 +92,7 @@ export async function POST(request: NextRequest) {
   try { body = await request.json() }
   catch { return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 }) }
 
+  const newCycle = !!body.newCycle
   const uploadRows = Array.isArray(body.rows) ? body.rows : []
   if (uploadRows.length === 0) {
     return NextResponse.json({ error: "No rows supplied" }, { status: 400 })
@@ -171,9 +179,11 @@ export async function POST(request: NextRequest) {
     const todayStr = today()
     const updateWrites: sheets_v4.Schema$ValueRange[] = []
     const insertRows: string[][] = []
-    const historyRows: string[][] = []
+    const historyRows: string[][] = []       // legacy raw rows (for archive)
+    const historyEntries: Parameters<typeof appendHistory>[0] = []
     let protectedCount = 0
     let autoAssignedCount = 0
+    const ts = nowTimestamp()
 
     // Build the upload-row id set for marking removed consumers
     const uploadIdSet = new Set<string>()
@@ -203,10 +213,37 @@ export async function POST(request: NextRequest) {
         insertRows.push(newRow)
       } else {
         // --- UPDATE: existing consumer ---
-        const isProtected = PROTECTED_STATUSES.has(existing.status)
+        const isAdminHold  = ADMIN_HOLD_STATUSES.has(existing.status)
+        const isFieldWork  = FIELD_WORK_STATUSES.has(existing.status)
+        const newOsd = uploadRow[8] ?? ""
+        const osdChanged = newOsd && existing.osd &&
+          String(parseFloat(newOsd.replace(/,/g,"")) || 0) !== String(parseFloat(existing.osd.replace(/,/g,"")) || 0)
 
-        if (isProtected) {
-          // Only update base billing fields — never touch status/date/notes/evidence
+        // Snapshot history for every consumer with meaningful field-work status.
+        // This is the core audit trail: "consumer had status X with image Y on date Z
+        // before this DC list upload". Saved regardless of whether we reset or not.
+        if (isFieldWork) {
+          historyEntries.push({
+            timestamp: ts,
+            consumerId,
+            name: uploadRow[3] || "",
+            action: osdChanged ? "in_new_list_osd_changed" : "in_new_list",
+            oldStatus: existing.status,
+            newStatus: "", // filled after status decision below
+            oldOsd: existing.osd,
+            oldNotes: existing.notes,
+            oldImageUrl: "",  // imageUrl not in batchGet — stored in sheet separately
+            changedBy: "upload",
+          })
+        }
+
+        // Decide whether to reset status to "connected"
+        const shouldReset = !isAdminHold && newCycle && isFieldWork && (
+          existing.status === "visited" || existing.status === "not found" || osdChanged
+        )
+
+        if (isAdminHold || (isFieldWork && !shouldReset)) {
+          // Base-only update: update billing fields, NEVER touch status/notes/evidence
           protectedCount++
           BASE_FIELD_UPLOAD_INDICES.forEach(i => {
             const sheetCol = uploadToSheetCol[i]
@@ -218,16 +255,14 @@ export async function POST(request: NextRequest) {
               })
             }
           })
-          // Update OSD (billing amount may change even for completed cases)
-          const osdVal = uploadRow[8] ?? ""
-          if (osdColIndex !== -1 && osdVal) {
+          if (osdColIndex !== -1 && newOsd) {
             updateWrites.push({
               range: `'${sheetName}'!${colLetter(osdColIndex)}${existing.row}`,
-              values: [[osdVal]],
+              values: [[newOsd]],
             })
           }
         } else {
-          // Safe to update all base fields (status is blank/connected)
+          // Full update: either blank/connected status, or new-cycle reset
           uploadRow.forEach((val, i) => {
             const sheetCol = uploadToSheetCol[i]
             if (sheetCol !== -1) {
@@ -237,6 +272,17 @@ export async function POST(request: NextRequest) {
               })
             }
           })
+          // Reset status to connected on new-cycle reset
+          if (shouldReset && statusColIndex !== -1) {
+            updateWrites.push({
+              range: `'${sheetName}'!${colLetter(statusColIndex)}${existing.row}`,
+              values: [["connected"]],
+            })
+            // Update the newStatus on the snapshot we already pushed above
+            const snap = historyEntries.findLast?.(h => h.consumerId === consumerId) ??
+              historyEntries.slice().reverse().find(h => h.consumerId === consumerId)
+            if (snap) snap.newStatus = "connected"
+          }
           // Auto-assign agency if not yet assigned
           if (agencyColIndex !== -1 && mappedAgency && !existing.agency) {
             updateWrites.push({
@@ -264,10 +310,17 @@ export async function POST(request: NextRequest) {
           // Archive: write a history row before changing anything
           historyRows.push([
             todayStr, consumerId,
-            "", // name — would need another fetch; omitted for API efficiency
+            "",
             existing.status, existing.osd, existing.agency, existing.notes,
             "removed-from-upload",
           ])
+          historyEntries.push({
+            timestamp: ts, consumerId, name: "",
+            action: "removed_from_upload",
+            oldStatus: existing.status, newStatus: "&",
+            oldOsd: existing.osd, oldNotes: existing.notes, oldImageUrl: "",
+            changedBy: "upload",
+          })
           // Mark as "&" — this hides from agency views per existing app logic
           updateWrites.push({
             range: `'${sheetName}'!${colLetter(statusColIndex)}${existing.row}`,
@@ -311,6 +364,13 @@ export async function POST(request: NextRequest) {
     }
 
     invalidateConsumerCache()
+
+    // Append history entries (fire-and-forget — non-critical path)
+    if (historyEntries.length > 0) {
+      appendHistory(historyEntries)
+        .then(() => invalidateHistoryCache())
+        .catch(e => console.warn("History append failed (non-critical):", e))
+    }
 
     return NextResponse.json({
       success: true,

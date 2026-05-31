@@ -8,10 +8,14 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
-import { 
+import {
   ArrowLeft, Upload, Camera, MapPin, Power, Clock, CircleX, Check, RotateCcw,
-  Smartphone, IndianRupee, Box, Monitor, AlertCircle, Calendar, Loader2
+  Smartphone, IndianRupee, Box, Monitor, AlertCircle, Calendar, Loader2, History
 } from "lucide-react"
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog"
+import { Badge } from "@/components/ui/badge"
 import type { ConsumerData } from "@/lib/google-sheets"
 
 interface ConsumerFormProps {
@@ -37,6 +41,24 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
   const [cameraActive, setCameraActive] = useState(false)
   const [location, setLocation] = useState<{lat: number, lng: number} | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  // History — loaded lazily when user opens the dialog
+  const [historyOpen, setHistoryOpen] = useState(false)
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const [historyEntries, setHistoryEntries] = useState<{
+    timestamp: string; action: string; oldStatus: string; newStatus: string;
+    oldOsd: string; oldNotes: string; oldImageUrl: string; changedBy: string;
+  }[]>([])
+
+  const loadHistory = async () => {
+    if (historyEntries.length > 0) { setHistoryOpen(true); return }
+    setHistoryLoading(true)
+    setHistoryOpen(true)
+    try {
+      const resp = await fetch(`/api/consumers/history?id=${encodeURIComponent(consumer.consumerId)}`)
+      if (resp.ok) setHistoryEntries(await resp.json())
+    } catch { /* silent */ }
+    finally { setHistoryLoading(false) }
+  }
   
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -302,8 +324,68 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
         }}>
           <ArrowLeft className="h-5 w-5" />
         </Button>
-        <h1 className="text-xl font-bold text-gray-900">Update Consumer</h1>
+        <h1 className="text-xl font-bold text-gray-900 flex-1">Update Consumer</h1>
+        <Button type="button" variant="outline" size="sm" onClick={loadHistory}
+          className="flex items-center gap-1 text-xs">
+          <History className="h-3.5 w-3.5" />
+          History
+        </Button>
       </div>
+
+      {/* --- HISTORY DIALOG --- */}
+      <Dialog open={historyOpen} onOpenChange={setHistoryOpen}>
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Consumer History — {consumer.consumerId}</DialogTitle>
+          </DialogHeader>
+          {historyLoading && (
+            <div className="flex items-center justify-center py-8 gap-2 text-sm text-gray-500">
+              <Loader2 className="h-4 w-4 animate-spin" /> Loading history…
+            </div>
+          )}
+          {!historyLoading && historyEntries.length === 0 && (
+            <p className="text-sm text-gray-400 py-6 text-center">No history recorded yet.</p>
+          )}
+          {!historyLoading && historyEntries.length > 0 && (
+            <div className="space-y-3 mt-2">
+              {historyEntries.map((h, i) => (
+                <div key={i} className="border rounded-lg p-3 space-y-2 bg-gray-50">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <span className="text-xs font-mono text-gray-500">{h.timestamp}</span>
+                    <div className="flex items-center gap-1.5">
+                      <Badge variant="outline" className="text-[10px]">{h.action.replace(/_/g," ")}</Badge>
+                      <span className="text-[10px] text-gray-400">by {h.changedBy}</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs flex-wrap">
+                    {h.oldStatus && (
+                      <span className="bg-red-100 text-red-700 px-2 py-0.5 rounded-full">{h.oldStatus}</span>
+                    )}
+                    {h.newStatus && h.newStatus !== h.oldStatus && (
+                      <>
+                        <span className="text-gray-400">→</span>
+                        <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded-full">{h.newStatus}</span>
+                      </>
+                    )}
+                    {h.oldOsd && (
+                      <span className="text-gray-500">OSD: ₹{Number(h.oldOsd).toLocaleString("en-IN")}</span>
+                    )}
+                  </div>
+                  {h.oldNotes && (
+                    <p className="text-xs text-gray-600 italic">Remarks: {h.oldNotes}</p>
+                  )}
+                  {h.oldImageUrl && (
+                    <a href={h.oldImageUrl} target="_blank" rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline">
+                      View evidence image
+                    </a>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* --- 1. SINGLE DETAILS CARD --- */}
       <Card className="bg-slate-50 border-slate-200 shadow-sm">

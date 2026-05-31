@@ -98,18 +98,16 @@ export async function updateConsumerInGoogleSheet(consumer: ConsumerData) {
     const spreadsheetId = getSpreadsheetId()
     const sheetName = getSheetName()
 
-    // 1. Ensure all expected columns exist (idempotent, single read + 0/1 write).
+    // 1. Ensure all expected columns exist.
     const headers = await ensureHeaders(spreadsheetId, sheetName, EXPECTED_CONSUMER_HEADERS)
 
     const idColIndex = findColumn(headers, ["consumerId", "consumer id", "consumer_id"])
     if (idColIndex === -1) throw new Error("Consumer ID column not found")
 
-    const idColLetter = colLetter(idColIndex)
-
-    // 2. Find the row by reading just the Consumer ID column.
+    // 2. Find the row by reading just the Consumer ID column (1 API call).
     const idColResp = await sheets.spreadsheets.values.get({
       spreadsheetId,
-      range: `'${sheetName}'!${idColLetter}:${idColLetter}`,
+      range: `'${sheetName}'!${colLetter(idColIndex)}:${colLetter(idColIndex)}`,
     })
     const idRows = idColResp.data.values
     if (!idRows) throw new Error("No data in Consumer ID column")
@@ -132,10 +130,7 @@ export async function updateConsumerInGoogleSheet(consumer: ConsumerData) {
     if (dataToUpdate.length > 0) {
       await sheets.spreadsheets.values.batchUpdate({
         spreadsheetId,
-        requestBody: {
-          valueInputOption: "USER_ENTERED",
-          data: dataToUpdate,
-        },
+        requestBody: { valueInputOption: "USER_ENTERED", data: dataToUpdate },
       })
     }
 

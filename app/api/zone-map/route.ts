@@ -22,13 +22,14 @@ async function ensureTab(spreadsheetId: string, title: string, headers: string[]
       requestBody: { requests: [{ addSheet: { properties: { title } } }] },
     })
     await sheets.spreadsheets.values.update({
-      spreadsheetId,
-      range: `${title}!A1`,
+      spreadsheetId, range: `${title}!A1`,
       valueInputOption: "RAW",
       requestBody: { values: [headers] },
     })
   }
 }
+
+type ZoneRow = { zone: string; agency: string; address?: string; updatedOn?: string }
 
 export async function GET() {
   const session = await verifySession()
@@ -37,14 +38,15 @@ export async function GET() {
   }
   try {
     const id = getSpreadsheetId()
-    await ensureTab(id, TAB, ["Zone", "Agency", "Updated On"])
-    const resp = await sheets.spreadsheets.values.get({ spreadsheetId: id, range: `${TAB}!A:C` })
+    await ensureTab(id, TAB, ["Zone", "Agency", "Address", "Updated On"])
+    const resp = await sheets.spreadsheets.values.get({ spreadsheetId: id, range: `${TAB}!A:D` })
     const rows = (resp.data.values || []).slice(1)
-    const data = rows
+    const data: ZoneRow[] = rows
       .map(r => ({
         zone:      String(r[0] || "").trim().toUpperCase(),
         agency:    String(r[1] || "").trim().toUpperCase(),
-        updatedOn: String(r[2] || "").trim(),
+        address:   String(r[2] || "").trim(),
+        updatedOn: String(r[3] || "").trim(),
       }))
       .filter(r => r.zone && r.agency)
     return NextResponse.json(data)
@@ -59,23 +61,21 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
   try {
-    const { rows } = await request.json() as { rows: { zone: string; agency: string }[] }
+    const { rows } = await request.json() as { rows: ZoneRow[] }
     const id = getSpreadsheetId()
 
-    // Ensure both tabs
     await Promise.all([
-      ensureTab(id, TAB, ["Zone", "Agency", "Updated On"]),
+      ensureTab(id, TAB, ["Zone", "Agency", "Address", "Updated On"]),
       ensureTab(id, HISTORY_TAB, ["Date", "Zone", "Previous Agency", "New Agency", "Changed By"]),
     ])
 
-    // Read existing to detect changes for history
-    const existing = await sheets.spreadsheets.values.get({ spreadsheetId: id, range: `${TAB}!A:C` })
+    const existing = await sheets.spreadsheets.values.get({ spreadsheetId: id, range: `${TAB}!A:D` })
     const existingRows = (existing.data.values || []).slice(1)
-    const existingMap = new Map<string, string>()
+    const existingMap = new Map<string, { agency: string; address: string }>()
     existingRows.forEach(r => {
       const z = String(r[0] || "").trim().toUpperCase()
       const a = String(r[1] || "").trim().toUpperCase()
-      if (z && a) existingMap.set(z, a)
+      if (z) existingMap.set(z, { agency: a, address: String(r[2] || "").trim() })
     })
 
     const historyEntries: string[][] = []
@@ -86,24 +86,23 @@ export async function POST(request: NextRequest) {
       const zone   = (r.zone   || "").trim().toUpperCase()
       const agency = (r.agency || "").trim().toUpperCase()
       const prev = existingMap.get(zone)
-      if (prev && prev !== agency) {
-        historyEntries.push([date, zone, prev, agency, changedBy])
+      if (prev && prev.agency !== agency) {
+        historyEntries.push([date, zone, prev.agency, agency, changedBy])
       } else if (!prev && agency) {
         historyEntries.push([date, zone, "", agency, changedBy])
       }
     })
 
-    // Clear data and rewrite
-    await sheets.spreadsheets.values.clear({ spreadsheetId: id, range: `${TAB}!A2:C` })
+    await sheets.spreadsheets.values.clear({ spreadsheetId: id, range: `${TAB}!A2:D` })
     if (rows && rows.length > 0) {
       await sheets.spreadsheets.values.update({
-        spreadsheetId: id,
-        range: `${TAB}!A2:C`,
+        spreadsheetId: id, range: `${TAB}!A2:D`,
         valueInputOption: "RAW",
         requestBody: {
           values: rows.map(r => [
-            (r.zone || "").trim().toUpperCase(),
-            (r.agency || "").trim().toUpperCase(),
+            (r.zone    || "").trim().toUpperCase(),
+            (r.agency  || "").trim().toUpperCase(),
+            (r.address || "").trim(),
             date,
           ]),
         },
@@ -112,8 +111,7 @@ export async function POST(request: NextRequest) {
 
     if (historyEntries.length > 0) {
       await sheets.spreadsheets.values.append({
-        spreadsheetId: id,
-        range: `${HISTORY_TAB}!A:E`,
+        spreadsheetId: id, range: `${HISTORY_TAB}!A:E`,
         valueInputOption: "RAW",
         requestBody: { values: historyEntries },
       })
