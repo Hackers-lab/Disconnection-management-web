@@ -43,6 +43,10 @@ export default function DashboardClient({ role, agencies }: DashboardClientProps
   const [isDownloadDialogOpen, setIsDownloadDialogOpen] = useState(false)
   const [downloadCount, setDownloadCount] = useState("50")
   const [downloadFormat, setDownloadFormat] = useState<"pdf" | "excel">("pdf")
+  // "defaulters" = top-N OSD list; "remarks" = group-by-remarks with date filter
+  const [reportType, setReportType] = useState<"defaulters" | "remarks">("defaulters")
+  const [remarksDateFrom, setRemarksDateFrom] = useState("")
+  const [remarksDateTo, setRemarksDateTo] = useState("")
 
   // Reference to ConsumerList to access data
   const consumerListRef = useRef<{ getCurrentConsumers: () => ConsumerData[] }>(null)
@@ -206,6 +210,140 @@ export default function DashboardClient({ role, agencies }: DashboardClientProps
     }
 
     // Close dialog
+    setIsDownloadDialogOpen(false);
+  };
+
+  // --- REMARKS REPORT (items 7 + 8) ---
+  const generateRemarksReport = () => {
+    if (!consumerListRef.current) return;
+    let consumers = [...consumerListRef.current.getCurrentConsumers()];
+
+    // Date filter (uses disconDate; matches the app's DD-MM-YYYY or YYYY-MM-DD)
+    const normDate = (s: string) => {
+      if (!s) return null;
+      if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+      if (/^\d{2}-\d{2}-\d{4}/.test(s)) {
+        const [d, m, y] = s.split("-"); return `${y}-${m}-${d}`;
+      }
+      const p = new Date(s); return isNaN(p.getTime()) ? null : p.toISOString().slice(0, 10);
+    };
+    if (remarksDateFrom || remarksDateTo) {
+      consumers = consumers.filter(c => {
+        const d = normDate(c.disconDate);
+        if (!d) return false;
+        if (remarksDateFrom && d < remarksDateFrom) return false;
+        if (remarksDateTo   && d > remarksDateTo)   return false;
+        return true;
+      });
+    }
+
+    // Only rows that have a remark
+    consumers = consumers.filter(c => c.notes && c.notes.trim() !== "");
+    if (consumers.length === 0) {
+      alert("No consumers with remarks found for the selected date range.");
+      return;
+    }
+
+    // Group by remarks text
+    const groups: Record<string, ConsumerData[]> = {};
+    consumers.forEach(c => {
+      const key = (c.notes || "").trim();
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(c);
+    });
+
+    if (downloadFormat === "excel") {
+      const wb = XLSX.utils.book_new();
+      // Sheet 1: all rows with remarks
+      const allRows = consumers.map((c, i) => ({
+        "#": i + 1,
+        "Consumer ID": c.consumerId,
+        "Name": c.name,
+        "Address": c.address,
+        "Mobile": c.mobileNumber,
+        "Agency": c.agency || "-",
+        "Status": c.disconStatus,
+        "Discon Date": c.disconDate || "-",
+        "OSD (₹)": Number(c.d2NetOS || 0),
+        "Meter Reading": c.reading || "-",
+        "Remarks": c.notes || "-",
+      }));
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(allRows), "All Remarks");
+
+      // Sheet 2: summary count per remark
+      const summaryRows = Object.entries(groups)
+        .sort((a, b) => b[1].length - a[1].length)
+        .map(([remark, rows]) => ({
+          "Remarks": remark,
+          "Count": rows.length,
+          "Total OSD (₹)": rows.reduce((s, c) => s + Number(c.d2NetOS || 0), 0),
+        }));
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summaryRows), "Remarks Summary");
+
+      XLSX.writeFile(wb, `Remarks_Report_${new Date().toISOString().slice(0,10)}.xlsx`);
+    } else {
+      // PDF
+      const doc = new jsPDF({ orientation: "landscape" });
+      const pageW = doc.internal.pageSize.width;
+      let firstPage = true;
+
+      Object.entries(groups)
+        .sort((a, b) => b[1].length - a[1].length)
+        .forEach(([remark, rows]) => {
+          if (!firstPage) doc.addPage();
+          firstPage = false;
+
+          doc.setFontSize(13);
+          doc.setTextColor(40, 53, 147);
+          doc.text("Remarks Report", pageW / 2, 12, { align: "center" });
+
+          const dateLabel = (remarksDateFrom || remarksDateTo)
+            ? ` | ${remarksDateFrom || "—"} to ${remarksDateTo || "—"}`
+            : "";
+          doc.setFontSize(8);
+          doc.setTextColor(100);
+          doc.text(`Generated: ${new Date().toLocaleDateString("en-IN")}${dateLabel}`, pageW - 14, 12, { align: "right" });
+
+          doc.setFontSize(10);
+          doc.setTextColor(30, 30, 30);
+          doc.setFont("helvetica", "bold");
+          doc.text(`Remarks: ${remark.substring(0, 80)}${remark.length > 80 ? "…" : ""}`, 14, 20);
+          doc.setFont("helvetica", "normal");
+          doc.setFontSize(8);
+          doc.text(`${rows.length} consumer(s)  |  Total OSD: ₹${Math.round(rows.reduce((s, c) => s + Number(c.d2NetOS || 0), 0)).toLocaleString("en-IN")}`, 14, 26);
+
+          const cols = ["#", "Con ID", "Name", "Address", "Mobile", "Agency", "Status", "Date", "OSD", "Reading", "Remarks"];
+          const body = rows.map((c, i) => [
+            i + 1,
+            c.consumerId || "-",
+            c.name || "-",
+            c.address ? c.address.substring(0, 30) + (c.address.length > 30 ? "…" : "") : "-",
+            c.mobileNumber || "-",
+            c.agency || "-",
+            { content: c.disconStatus || "-", styles: { fillColor: getStatusColorForPDF(c.disconStatus), textColor: [0,0,0] } },
+            c.disconDate || "-",
+            { content: Math.round(Number(c.d2NetOS||0)).toLocaleString("en-IN"), styles: { fontStyle: "bold", halign: "right" } },
+            c.reading || "-",
+            { content: (c.notes || "-").substring(0, 40), styles: { fontStyle: "italic" } },
+          ]);
+
+          autoTable(doc, {
+            startY: 30,
+            head: [cols],
+            body: body as any,
+            styles: { fontSize: 6.5, font: "helvetica" },
+            columnStyles: { 3: { cellWidth: 35 }, 10: { cellWidth: 35 } },
+            didDrawPage: (data: any) => {
+              doc.setFontSize(7);
+              doc.setTextColor(120);
+              doc.text(`Page ${doc.getNumberOfPages()}`, data.settings.margin.left, doc.internal.pageSize.height - 6);
+            },
+          });
+        });
+
+      doc.save(`Remarks_Report_${new Date().toISOString().slice(0,10)}.pdf`);
+    }
+
     setIsDownloadDialogOpen(false);
   };
 
@@ -376,12 +514,12 @@ export default function DashboardClient({ role, agencies }: DashboardClientProps
       doc.setFontSize(10);
       doc.text(`Total Consumers: ${agencyConsumers.length}`, 14, 20);
 
-      const tableColumn = ["#", "Con ID", "Name", "Address", "Phone", "Device", "Class", "Due Date", "OSD", "Status"];
+      const tableColumn = ["#", "Con ID", "Name", "Address", "Phone", "Device", "Class", "Due Date", "OSD", "Status", "Reading", "Remarks"];
       const tableRows = agencyConsumers.map((c, index) => [
         index + 1,
         c.consumerId || "-",
         c.name || "-",
-        c.address ? c.address.substring(0, 35) + (c.address.length > 35 ? "..." : "") : "-",
+        c.address ? c.address.substring(0, 30) + (c.address.length > 30 ? "..." : "") : "-",
         {
           content: c.mobileNumber || "-",
           styles: { textColor: [0, 0, 255] },
@@ -391,7 +529,9 @@ export default function DashboardClient({ role, agencies }: DashboardClientProps
         c.baseClass || "-",
         c.osDuedateRange || "-",
         { content: `${Math.round(Number(c.d2NetOS || "0")).toLocaleString('en-IN', {maximumFractionDigits: 0})}`, styles: { fontStyle: "bold", halign: "right" } },
-        { content: c.disconStatus || "-", styles: { fillColor: getStatusColorForPDF(c.disconStatus), textColor: [0,0,0] } }
+        { content: c.disconStatus || "-", styles: { fillColor: getStatusColorForPDF(c.disconStatus), textColor: [0,0,0] } },
+        c.reading || "-",
+        { content: (c.notes || "-").substring(0, 35), styles: { fontStyle: "italic" } },
       ]);
 
       autoTable(doc, { startY: 25, head: [tableColumn], body: tableRows as any, styles: { fontSize: isAdmin ? 7 : 7, font: "helvetica" },
@@ -685,39 +825,79 @@ export default function DashboardClient({ role, agencies }: DashboardClientProps
         <Dialog open={isDownloadDialogOpen} onOpenChange={setIsDownloadDialogOpen}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
-              <DialogTitle>Download Defaulter List</DialogTitle>
+              <DialogTitle>Download Report</DialogTitle>
               <DialogDescription>
-                Select the number of top defaulters and the file format.
+                Choose the report type and format.
               </DialogDescription>
             </DialogHeader>
-            
+
             <div className="grid gap-4 py-4">
+              {/* Report type */}
               <div className="grid gap-2">
-                <Label htmlFor="count">Number of Consumers</Label>
-                <Input
-                  id="count"
-                  type="number"
-                  value={downloadCount}
-                  onChange={(e) => setDownloadCount(e.target.value)}
-                  placeholder="e.g. 50"
-                  min="1"
-                />
+                <Label>Report Type</Label>
+                <RadioGroup
+                  value={reportType}
+                  onValueChange={(v: "defaulters" | "remarks") => setReportType(v)}
+                  className="flex gap-4"
+                >
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="defaulters" id="rt-def" />
+                    <Label htmlFor="rt-def">Top Defaulters</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="remarks" id="rt-rem" />
+                    <Label htmlFor="rt-rem">Remarks Report</Label>
+                  </div>
+                </RadioGroup>
               </div>
-              
+
+              {/* Top-N count — only for defaulters */}
+              {reportType === "defaulters" && (
+                <div className="grid gap-2">
+                  <Label htmlFor="count">Number of Consumers</Label>
+                  <Input
+                    id="count"
+                    type="number"
+                    value={downloadCount}
+                    onChange={(e) => setDownloadCount(e.target.value)}
+                    placeholder="e.g. 50"
+                    min="1"
+                  />
+                </div>
+              )}
+
+              {/* Date range — only for remarks */}
+              {reportType === "remarks" && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="grid gap-1">
+                    <Label htmlFor="r-from" className="text-xs uppercase text-gray-500">From Date</Label>
+                    <Input id="r-from" type="date" value={remarksDateFrom}
+                      onChange={(e) => setRemarksDateFrom(e.target.value)} className="h-8" />
+                  </div>
+                  <div className="grid gap-1">
+                    <Label htmlFor="r-to" className="text-xs uppercase text-gray-500">To Date</Label>
+                    <Input id="r-to" type="date" value={remarksDateTo}
+                      onChange={(e) => setRemarksDateTo(e.target.value)} className="h-8" />
+                  </div>
+                  <p className="col-span-2 text-xs text-gray-400">Leave blank to include all dates.</p>
+                </div>
+              )}
+
+              {/* Format */}
               <div className="grid gap-2">
                 <Label>Format</Label>
-                <RadioGroup 
-                  value={downloadFormat} 
+                <RadioGroup
+                  value={downloadFormat}
                   onValueChange={(val: "pdf" | "excel") => setDownloadFormat(val)}
                   className="flex gap-4"
                 >
                   <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="pdf" id="pdf" />
-                    <Label htmlFor="pdf">PDF</Label>
+                    <RadioGroupItem value="pdf" id="fmt-pdf" />
+                    <Label htmlFor="fmt-pdf">PDF</Label>
                   </div>
                   <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="excel" id="excel" />
-                    <Label htmlFor="excel">Excel</Label>
+                    <RadioGroupItem value="excel" id="fmt-excel" />
+                    <Label htmlFor="fmt-excel">Excel</Label>
                   </div>
                 </RadioGroup>
               </div>
@@ -727,7 +907,12 @@ export default function DashboardClient({ role, agencies }: DashboardClientProps
               <Button variant="outline" onClick={() => setIsDownloadDialogOpen(false)}>
                 Cancel
               </Button>
-              <Button onClick={handleDownloadConfirm}>Download</Button>
+              <Button onClick={() => {
+                if (reportType === "remarks") generateRemarksReport();
+                else handleDownloadConfirm();
+              }}>
+                Download
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

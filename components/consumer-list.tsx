@@ -575,19 +575,22 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
 
   // Apply OSD sorting
   const sortedConsumers = useMemo(() => [...filteredConsumers].sort((a, b) => {
-    // 1. Connected First
+    // 0. Urgent rows always appear first (admin-set priority flag)
+    const urgentA = (a.priority || "").toLowerCase() === "urgent"
+    const urgentB = (b.priority || "").toLowerCase() === "urgent"
+    if (urgentA && !urgentB) return -1
+    if (!urgentA && urgentB) return 1
+
+    // 1. Connected next
     const isConnectedA = (a.disconStatus || "").toLowerCase() === "connected"
     const isConnectedB = (b.disconStatus || "").toLowerCase() === "connected"
-    
     if (isConnectedA && !isConnectedB) return -1
     if (!isConnectedA && isConnectedB) return 1
 
     // 2. OSD Sort
     if (sortByOSD === "none") return 0
-
     const aOsd = Number.parseFloat(a.d2NetOS || "0")
     const bOsd = Number.parseFloat(b.d2NetOS || "0")
-
     if (sortByOSD === "asc") return aOsd - bOsd
     if (sortByOSD === "desc") return bOsd - aOsd
     return 0
@@ -1155,11 +1158,16 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
       {viewMode === "card" ? (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {paginatedConsumers.map((consumer) => (
-            <Card key={consumer.consumerId} className="hover:shadow-md transition-shadow overflow-hidden max-w-full">
+            <Card key={consumer.consumerId} className={`hover:shadow-md transition-shadow overflow-hidden max-w-full ${(consumer.priority || "").toLowerCase() === "urgent" ? "ring-2 ring-red-500 border-red-300" : ""}`}>
               <CardHeader className="pb-3 break-words whitespace-normal">
                 <div className="flex items-start justify-between w-full gap-2">
                   <div className="min-w-0 flex-1">
-                    <CardTitle className="text-lg break-words whitespace-normal line-clamp-2 leading-tight">{consumer.name}</CardTitle>
+                    <div className="flex items-center gap-1.5">
+                      <CardTitle className="text-lg break-words whitespace-normal line-clamp-2 leading-tight">{consumer.name}</CardTitle>
+                      {(consumer.priority || "").toLowerCase() === "urgent" && (
+                        <span className="shrink-0 text-[10px] font-bold uppercase tracking-wide bg-red-600 text-white px-1.5 py-0.5 rounded">URGENT</span>
+                      )}
+                    </div>
                     <p className="text-sm text-gray-600">{consumer.consumerId}</p>
                     {consumer.mru ? (
                       <Badge variant="outline" className="mt-2 text-[10px] uppercase tracking-[0.08em]">
@@ -1288,9 +1296,14 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
                 </thead>
                 <tbody className="divide-y">
                   {paginatedConsumers.map((consumer) => (
-                    <tr key={consumer.consumerId} className="hover:bg-gray-50 transition-colors">
+                    <tr key={consumer.consumerId} className={`hover:bg-gray-50 transition-colors ${(consumer.priority || "").toLowerCase() === "urgent" ? "bg-red-50 border-l-4 border-red-500" : ""}`}>
                       <td className="px-4 py-3">
-                        <div className="font-medium text-gray-900">{consumer.consumerId}</div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-medium text-gray-900">{consumer.consumerId}</span>
+                          {(consumer.priority || "").toLowerCase() === "urgent" && (
+                            <span className="text-[9px] font-bold uppercase tracking-wide bg-red-600 text-white px-1 py-0.5 rounded">URGENT</span>
+                          )}
+                        </div>
                         {consumer.mru ? (
                           <div className="text-[10px] text-gray-500 uppercase tracking-[0.08em] truncate max-w-[150px]">
                             {consumer.mru}
@@ -1343,9 +1356,13 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
                     if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
                     setPreviewConsumer(consumer)
                 }}
-                className={`bg-white p-2 rounded-lg shadow-sm border active:bg-gray-50 transition-colors ${
+                className={`p-2 rounded-lg shadow-sm border active:bg-gray-50 transition-colors ${
+                  (consumer.priority || "").toLowerCase() === "urgent"
+                    ? "bg-red-50 border-red-400"
+                    : "bg-white"
+                } ${
                   ((!["connected", "visited", "not found"].includes(consumer.disconStatus.toLowerCase()) && userRole !== "admin" && userRole !== "executive") || userRole === "viewer")
-                    ? "opacity-90" 
+                    ? "opacity-90"
                     : "cursor-pointer"
                 }`}
               >
@@ -1353,6 +1370,9 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
                   <div className="flex items-center gap-2 min-w-0 flex-1 mr-2">
                      <div className="shrink-0">{getStatusIcon(consumer.disconStatus)}</div>
                      <div className="font-semibold text-sm text-gray-900 shrink-0">{consumer.consumerId}</div>
+                     {(consumer.priority || "").toLowerCase() === "urgent" && (
+                       <span className="text-[9px] font-bold uppercase bg-red-600 text-white px-1 py-0.5 rounded shrink-0">URGENT</span>
+                     )}
                      <div className="text-xs text-gray-500 flex flex-col gap-1 min-w-0">
                         <span className="truncate">{consumer.name}</span>
                         {consumer.mru ? (

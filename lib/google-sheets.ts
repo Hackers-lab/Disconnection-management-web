@@ -26,6 +26,16 @@ export interface ConsumerData {
   notes?: string
   reading?: string
   imageUrl?: string
+  // Admin-marked urgency for disconnect (item 5)
+  priority?: string
+  // Payment-tracking fields (items 3 + 13) — populated by the bulk upload
+  // pipeline (Cash Desk / Portal). Optional so existing rows stay backward-compatible.
+  paidAmount?: string
+  paidDate?: string
+  paidType?: 'full' | 'partial' | ''
+  outstandingAfter?: string
+  nextPaymentDate?: string
+  paymentSource?: string
 }
 
 // Helper function to clean and parse numeric values
@@ -218,7 +228,30 @@ const COLUMN_MAPPINGS = {
   imageUrl: ["image", "photo", "link", "url", "imageurl", "imagelink"],
   notes: ["notes"],
   lastUpdated: ["last updated", "last_updated", "timestamp", "modified", "updated_at"],
+  // Item 5: admin urgency flag.
+  priority: ["priority"],
+  // Items 3 + 13: payment-tracking columns.
+  paidAmount: ["paid amount", "paidamount", "amount paid"],
+  paidDate: ["paid date", "paiddate", "payment date"],
+  paidType: ["paid type", "paidtype", "payment type"],
+  outstandingAfter: ["outstanding after", "outstandingafter", "remaining outstanding"],
+  nextPaymentDate: ["next payment date", "nextpaymentdate", "next payment"],
+  paymentSource: ["payment source", "paymentsource", "payment mode"],
 }
+
+// Headers the sheet is expected to have. Used by ensureHeaders() so columns
+// that don't exist yet are appended on first use instead of erroring out.
+export const EXPECTED_CONSUMER_HEADERS = [
+  "off_code", "MRU", "Consumer Id", "Name", "Address",
+  "Base Class", "Class", "Nature of Conn", "Gov/Non-Gov", "Device",
+  "O/S Duedate Range", "D2 Net O/S", "Discon Status", "Discon Date",
+  "GIS Pole", "Mobile Number", "Latitude", "Longitude",
+  "Agency", "Reading", "Image", "Notes", "Last Updated",
+  // Item 5 + items 3/13 — appended only if missing
+  "Priority",
+  "Paid Amount", "Paid Date", "Paid Type",
+  "Outstanding After", "Next Payment Date", "Payment Source",
+] as const
 
 export async function fetchConsumerData(): Promise<ConsumerData[]> {
   if (csvMemo && Date.now() - csvMemo.at < CSV_MEMO_TTL_MS) {
@@ -317,10 +350,17 @@ export async function fetchConsumerData(): Promise<ConsumerData[]> {
           latitude: columnIndices.latitude >= 0 ? values[columnIndices.latitude] || "" : "",
           longitude: columnIndices.longitude >= 0 ? values[columnIndices.longitude] || "" : "",
           agency: columnIndices.agency >= 0 ? values[columnIndices.agency] || "" : "",
-          lastUpdated: lastUpdatedVal, 
+          lastUpdated: lastUpdatedVal,
           notes: columnIndices.notes >= 0 ? values[columnIndices.notes] || "" : "",
           reading: columnIndices.reading >= 0 ? values[columnIndices.reading] || "" : "",
           imageUrl: columnIndices.imageUrl >= 0 ? values[columnIndices.imageUrl] || "" : "",
+          priority: columnIndices.priority >= 0 ? values[columnIndices.priority] || "" : "",
+          paidAmount: columnIndices.paidAmount >= 0 ? values[columnIndices.paidAmount] || "" : "",
+          paidDate: columnIndices.paidDate >= 0 ? values[columnIndices.paidDate] || "" : "",
+          paidType: (columnIndices.paidType >= 0 ? (values[columnIndices.paidType] || "") : "") as ConsumerData["paidType"],
+          outstandingAfter: columnIndices.outstandingAfter >= 0 ? values[columnIndices.outstandingAfter] || "" : "",
+          nextPaymentDate: columnIndices.nextPaymentDate >= 0 ? values[columnIndices.nextPaymentDate] || "" : "",
+          paymentSource: columnIndices.paymentSource >= 0 ? values[columnIndices.paymentSource] || "" : "",
         }
 
         consumers.push(consumer)

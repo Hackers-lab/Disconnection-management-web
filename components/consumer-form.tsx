@@ -353,6 +353,50 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
         </CardContent>
       </Card>
 
+      {/* --- PAYMENT INFO (visible only if any payment data exists) --- */}
+      {(consumer.paidAmount || consumer.paidDate || consumer.outstandingAfter || consumer.paymentSource) && (
+        <Card className="border-emerald-200 bg-emerald-50 shadow-sm">
+          <CardContent className="p-4 space-y-2 text-sm">
+            <div className="flex items-center gap-2 text-emerald-800 font-semibold">
+              <IndianRupee className="h-4 w-4" />
+              Payment on Record
+              {consumer.paidType && (
+                <span className="ml-auto text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full bg-emerald-200 text-emerald-900">
+                  {consumer.paidType}
+                </span>
+              )}
+            </div>
+            <div className="grid grid-cols-2 gap-y-1 gap-x-4 text-xs text-emerald-900">
+              {consumer.paidAmount && (
+                <div><span className="text-emerald-700">Amount:</span> <strong>₹{Number(consumer.paidAmount).toLocaleString("en-IN")}</strong></div>
+              )}
+              {consumer.paidDate && (
+                <div><span className="text-emerald-700">Paid on:</span> <strong>{consumer.paidDate}</strong></div>
+              )}
+              {consumer.outstandingAfter && Number(consumer.outstandingAfter) > 0 && (
+                <div className="col-span-2"><span className="text-emerald-700">Outstanding after:</span> <strong className="text-red-700">₹{Number(consumer.outstandingAfter).toLocaleString("en-IN")}</strong></div>
+              )}
+              {consumer.paymentSource && (
+                <div className="col-span-2"><span className="text-emerald-700">Source:</span> <strong>{consumer.paymentSource}</strong></div>
+              )}
+              {(userRole === "admin" || userRole === "viewer" || userRole === "executive") && (
+                <div className="col-span-2 mt-2">
+                  <Label className="text-[10px] uppercase tracking-wide text-emerald-700">Next Payment Date</Label>
+                  <Input
+                    type="text"
+                    placeholder="DD-MM-YYYY"
+                    value={formData.nextPaymentDate || ""}
+                    onChange={(e) => setFormData(prev => ({ ...prev, nextPaymentDate: e.target.value }))}
+                    className="h-8 mt-1 bg-white"
+                    disabled={userRole === "viewer"}
+                  />
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* --- 2. UPDATE FORM --- */}
       <Card className="border shadow-sm">
         <CardHeader className="pb-3">
@@ -404,18 +448,41 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
               </div>
             </div>
 
-            {/* Admin: Agency Selection */}
+            {/* Admin: Agency Selection + Urgent Priority */}
             {userRole === "admin" && (
-              <div className="space-y-2 pt-2 border-t">
-                <Label>Assign Agency</Label>
-                <select 
-                  value={formData.agency} 
-                  onChange={(e) => setFormData({...formData, agency: e.target.value})}
-                  className="w-full p-2 border rounded-md text-sm"
-                >
-                  <option value="">Select Agency</option>
-                  {availableAgencies.map(a => <option key={a} value={a}>{a}</option>)}
-                </select>
+              <div className="space-y-3 pt-2 border-t">
+                <div className="space-y-2">
+                  <Label>Assign Agency</Label>
+                  <select
+                    value={formData.agency}
+                    onChange={(e) => setFormData({...formData, agency: e.target.value})}
+                    className="w-full p-2 border rounded-md text-sm"
+                  >
+                    <option value="">Select Agency</option>
+                    {availableAgencies.map(a => <option key={a} value={a}>{a}</option>)}
+                  </select>
+                </div>
+                {/* Urgent flag: displayed as a toggle button */}
+                <div className="space-y-1">
+                  <Label className="text-xs font-bold text-gray-500 uppercase">Priority</Label>
+                  <Button
+                    type="button"
+                    variant={formData.priority === "urgent" ? "destructive" : "outline"}
+                    className={`w-full h-10 border-2 font-semibold ${
+                      formData.priority === "urgent"
+                        ? "bg-red-600 hover:bg-red-700 text-white border-red-600"
+                        : "border-gray-300 text-gray-600 hover:border-red-400 hover:text-red-600"
+                    }`}
+                    onClick={() =>
+                      setFormData(prev => ({
+                        ...prev,
+                        priority: prev.priority === "urgent" ? "" : "urgent",
+                      }))
+                    }
+                  >
+                    {formData.priority === "urgent" ? "🔴 URGENT — Click to remove" : "Mark as URGENT"}
+                  </Button>
+                </div>
               </div>
             )}
 

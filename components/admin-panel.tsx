@@ -2,6 +2,7 @@
 
 
 import Papa from "papaparse";
+import * as XLSX from "xlsx";
 import { Table, TableHeader, TableRow, TableHead, TableCell, TableBody } from "@/components/ui/table";
 import React, { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
@@ -11,7 +12,7 @@ import { Badge } from "@/components/ui/badge"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Users, Building2, Upload, List, ArrowLeft, Trash2, Edit, Plus, X, Save, AlertCircle } from "lucide-react"
+import { Users, Building2, Upload, List, ArrowLeft, Trash2, Edit, Plus, X, Save, AlertCircle, CheckCircle2, Loader2 } from "lucide-react"
 import { userStorage } from "@/lib/user-storage";
 
 interface AdminPanelProps {
@@ -208,6 +209,149 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
     description: "",
     isActive: true,
   })
+
+  // --- PAYMENT UPLOAD STATE (items 3 + 13) ---
+  type PaymentParsed = { consumerId: string; paidAmount: number; paidDate: string }
+  const [paymentSource, setPaymentSource] = useState<"Cash Desk" | "Portal">("Cash Desk")
+  const [paymentFileName, setPaymentFileName] = useState<string>("")
+  const [paymentRows, setPaymentRows] = useState<PaymentParsed[]>([])
+  const [paymentParseError, setPaymentParseError] = useState<string | null>(null)
+  const [paymentSubmitting, setPaymentSubmitting] = useState(false)
+  const [paymentResult, setPaymentResult] = useState<{
+    receivedRows: number; matched: number; notFound: number;
+    fullPayments: number; partialPayments: number; notFoundIds: string[];
+  } | null>(null)
+
+  // Auto-detect which columns hold consumer id, amount, date.
+  const detectPaymentColumns = (headers: string[]) => {
+    const norm = (s: string) => String(s ?? "").toLowerCase().replace(/[^a-z0-9]/g, "")
+    const idCandidates = ["consumerid", "conid", "id", "account", "ca"]
+    const amtCandidates = ["paidamount", "amount", "amountpaid", "paid", "received", "credit"]
+    const dateCandidates = ["paiddate", "date", "paymentdate", "txndate", "transactiondate"]
+    const findOne = (cands: string[]) =>
+      headers.findIndex((h) => cands.some((c) => norm(h).includes(c)))
+    return {
+      idIdx: findOne(idCandidates),
+      amtIdx: findOne(amtCandidates),
+      dateIdx: findOne(dateCandidates),
+    }
+  }
+
+  // Convert Excel serial date or string to DD-MM-YYYY (matches app convention).
+  const normalizeDate = (raw: any): string => {
+    if (raw === null || raw === undefined || raw === "") return ""
+    // Excel serial number
+    if (typeof raw === "number") {
+      const d = XLSX.SSF.parse_date_code(raw)
+      if (d) {
+        const dd = String(d.d).padStart(2, "0")
+        const mm = String(d.m).padStart(2, "0")
+        return `${dd}-${mm}-${d.y}`
+      }
+    }
+    const s = String(raw).trim()
+    if (/^\d{2}-\d{2}-\d{4}$/.test(s)) return s
+    if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
+      const [y, m, d] = s.split("-")
+      return `${d}-${m}-${y.slice(0, 4)}`
+    }
+    if (/^\d{2}\/\d{2}\/\d{4}$/.test(s)) return s.replace(/\//g, "-")
+    // Last resort: let Date parse it
+    const parsed = new Date(s)
+    if (!isNaN(parsed.getTime())) {
+      const dd = String(parsed.getDate()).padStart(2, "0")
+      const mm = String(parsed.getMonth() + 1).padStart(2, "0")
+      return `${dd}-${mm}-${parsed.getFullYear()}`
+    }
+    return s
+  }
+
+  const parsePaymentFile = (file: File) => {
+    setPaymentFileName(file.name)
+    setPaymentParseError(null)
+    setPaymentResult(null)
+    setPaymentRows([])
+
+    const isExcel = /\.(xlsx|xls)$/i.test(file.name)
+    if (isExcel) {
+      const reader = new FileReader()
+      reader.onload = (e) => {
+        try {
+          const data = new Uint8Array(e.target?.result as ArrayBuffer)
+          const wb = XLSX.read(data, { type: "array", cellDates: false })
+          const ws = wb.Sheets[wb.SheetNames[0]]
+          const rows = XLSX.utils.sheet_to_json<any[]>(ws, { header: 1, defval: "" })
+          if (!rows || rows.length < 2) {
+            setPaymentParseError("Excel must have at least a header row and one data row.")
+            return
+          }
+          processPaymentRows(rows as any[][])
+        } catch (err: any) {
+          setPaymentParseError(`Excel parse failed: ${err?.message || err}`)
+        }
+      }
+      reader.readAsArrayBuffer(file)
+    } else {
+      Papa.parse<any[]>(file, {
+        header: false,
+        skipEmptyLines: true,
+        complete: (res: any) => {
+          const rows = (res.data as any[][]) || []
+          if (rows.length < 2) {
+            setPaymentParseError("CSV must have at least a header row and one data row.")
+            return
+          }
+          processPaymentRows(rows)
+        },
+        error: (err: any) => setPaymentParseError(`CSV parse failed: ${err?.message || err}`),
+      })
+    }
+  }
+
+  const processPaymentRows = (rows: any[][]) => {
+    const headers = (rows[0] || []).map((h) => String(h ?? ""))
+    const { idIdx, amtIdx, dateIdx } = detectPaymentColumns(headers)
+    if (idIdx === -1 || amtIdx === -1) {
+      setPaymentParseError(
+        `Could not auto-detect required columns. Found headers: [${headers.join(", ")}]. Need at least a Consumer ID and Amount column.`
+      )
+      return
+    }
+    const parsed: PaymentParsed[] = []
+    for (let i = 1; i < rows.length; i++) {
+      const r = rows[i] || []
+      const id = String(r[idIdx] ?? "").trim()
+      if (!id) continue
+      const amtRaw = String(r[amtIdx] ?? "0").replace(/[,\s₹$]/g, "").replace(/[^\d.-]/g, "")
+      const amt = parseFloat(amtRaw)
+      if (!isFinite(amt) || amt <= 0) continue
+      const dateRaw = dateIdx !== -1 ? r[dateIdx] : ""
+      parsed.push({ consumerId: id, paidAmount: amt, paidDate: normalizeDate(dateRaw) })
+    }
+    setPaymentRows(parsed)
+  }
+
+  const submitPayments = async () => {
+    if (paymentRows.length === 0) return
+    setPaymentSubmitting(true)
+    setPaymentResult(null)
+    try {
+      const resp = await fetch("/api/payments/bulk-apply", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ source: paymentSource, payments: paymentRows }),
+      })
+      const data = await resp.json()
+      if (!resp.ok || !data.success) {
+        throw new Error(data?.error || "Bulk apply failed")
+      }
+      setPaymentResult({ ...data.summary, notFoundIds: data.notFoundIds || [] })
+    } catch (err: any) {
+      setMessage({ type: "error", text: err?.message || "Bulk apply failed" })
+    } finally {
+      setPaymentSubmitting(false)
+    }
+  }
 
   // Load agencies when component mounts and when view changes to users
   useEffect(() => {
@@ -865,9 +1009,129 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
       )}
 
       {view === "payments" && (
-        <div>
-          <h2 className="text-xl font-bold mb-4">Upload Payment Data</h2>
-          <p className="text-gray-600">Feature coming soon...</p>
+        <div className="space-y-4">
+          <div>
+            <h2 className="text-xl font-bold">Upload Payment Data</h2>
+            <p className="text-sm text-gray-600 mt-1">
+              Upload a Cash Desk or Portal payment file (Excel / CSV). Matched
+              consumers will be marked Paid with full/partial detection,
+              outstanding-after, and a default next-payment-date (paid date + 30 days).
+            </p>
+          </div>
+
+          <Card>
+            <CardContent className="space-y-4 pt-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Payment Source</Label>
+                  <Select
+                    value={paymentSource}
+                    onValueChange={(v) => setPaymentSource(v as "Cash Desk" | "Portal")}
+                  >
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Cash Desk">Cash Desk</SelectItem>
+                      <SelectItem value="Portal">Portal</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Payment File</Label>
+                  <Input
+                    type="file"
+                    accept=".csv,.xlsx,.xls,text/csv"
+                    onChange={(e) => e.target.files && parsePaymentFile(e.target.files[0])}
+                  />
+                </div>
+              </div>
+
+              {paymentFileName && (
+                <p className="text-xs text-gray-500">Selected: <span className="font-mono">{paymentFileName}</span></p>
+              )}
+
+              {paymentParseError && (
+                <Alert variant="destructive">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>{paymentParseError}</AlertDescription>
+                </Alert>
+              )}
+
+              {paymentRows.length > 0 && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-semibold">Parsed Rows ({paymentRows.length})</h4>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => { setPaymentRows([]); setPaymentFileName(""); setPaymentResult(null); }}
+                    >
+                      <X className="h-4 w-4 mr-1" /> Clear
+                    </Button>
+                  </div>
+                  <div className="border rounded-md max-h-72 overflow-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Consumer ID</TableHead>
+                          <TableHead className="text-right">Paid Amount</TableHead>
+                          <TableHead>Paid Date</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {paymentRows.slice(0, 50).map((r, i) => (
+                          <TableRow key={`${r.consumerId}-${i}`}>
+                            <TableCell className="font-mono">{r.consumerId}</TableCell>
+                            <TableCell className="text-right">{r.paidAmount.toLocaleString("en-IN")}</TableCell>
+                            <TableCell>{r.paidDate || "—"}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                    {paymentRows.length > 50 && (
+                      <p className="text-xs text-gray-500 p-2 text-center">
+                        Showing first 50 of {paymentRows.length} rows
+                      </p>
+                    )}
+                  </div>
+
+                  <Button
+                    onClick={submitPayments}
+                    disabled={paymentSubmitting}
+                    className="w-full sm:w-auto"
+                  >
+                    {paymentSubmitting ? (
+                      <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Applying…</>
+                    ) : (
+                      <><Upload className="h-4 w-4 mr-2" /> Apply {paymentRows.length} Payments</>
+                    )}
+                  </Button>
+                </div>
+              )}
+
+              {paymentResult && (
+                <Alert>
+                  <CheckCircle2 className="h-4 w-4" />
+                  <AlertDescription>
+                    <div className="space-y-1">
+                      <div><strong>{paymentResult.matched}</strong> of <strong>{paymentResult.receivedRows}</strong> consumers updated.</div>
+                      <div className="text-xs">
+                        Full: {paymentResult.fullPayments} &middot; Partial: {paymentResult.partialPayments} &middot; Not found: {paymentResult.notFound}
+                      </div>
+                      {paymentResult.notFoundIds.length > 0 && (
+                        <details className="text-xs mt-2">
+                          <summary className="cursor-pointer">Show unmatched IDs (first {paymentResult.notFoundIds.length})</summary>
+                          <div className="font-mono mt-1 max-h-32 overflow-auto break-all">
+                            {paymentResult.notFoundIds.join(", ")}
+                          </div>
+                        </details>
+                      )}
+                    </div>
+                  </AlertDescription>
+                </Alert>
+              )}
+            </CardContent>
+          </Card>
         </div>
       )}
 
