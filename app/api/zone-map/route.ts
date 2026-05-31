@@ -29,6 +29,9 @@ async function ensureTab(spreadsheetId: string, title: string, headers: string[]
   }
 }
 
+// Normalise an MRU/zone value: trim + uppercase. No truncation — store full MRU.
+const normMru = (s: string) => (s || "").trim().toUpperCase()
+
 type ZoneRow = { zone: string; agency: string; address?: string; updatedOn?: string }
 
 export async function GET() {
@@ -38,13 +41,14 @@ export async function GET() {
   }
   try {
     const id = getSpreadsheetId()
-    await ensureTab(id, TAB, ["Zone", "Agency", "Address", "Updated On"])
+    // Header uses "MRU" — full MRU stored, no truncation.
+    await ensureTab(id, TAB, ["MRU", "Agency", "Address", "Updated On"])
     const resp = await sheets.spreadsheets.values.get({ spreadsheetId: id, range: `${TAB}!A:D` })
     const rows = (resp.data.values || []).slice(1)
     const data: ZoneRow[] = rows
       .map(r => ({
-        zone:      String(r[0] || "").trim().toUpperCase(),
-        agency:    String(r[1] || "").trim().toUpperCase(),
+        zone:      normMru(String(r[0] || "")),
+        agency:    normMru(String(r[1] || "")),
         address:   String(r[2] || "").trim(),
         updatedOn: String(r[3] || "").trim(),
       }))
@@ -65,17 +69,17 @@ export async function POST(request: NextRequest) {
     const id = getSpreadsheetId()
 
     await Promise.all([
-      ensureTab(id, TAB, ["Zone", "Agency", "Address", "Updated On"]),
-      ensureTab(id, HISTORY_TAB, ["Date", "Zone", "Previous Agency", "New Agency", "Changed By"]),
+      ensureTab(id, TAB, ["MRU", "Agency", "Address", "Updated On"]),
+      ensureTab(id, HISTORY_TAB, ["Date", "MRU", "Previous Agency", "New Agency", "Changed By"]),
     ])
 
     const existing = await sheets.spreadsheets.values.get({ spreadsheetId: id, range: `${TAB}!A:D` })
     const existingRows = (existing.data.values || []).slice(1)
     const existingMap = new Map<string, { agency: string; address: string }>()
     existingRows.forEach(r => {
-      const z = String(r[0] || "").trim().toUpperCase()
-      const a = String(r[1] || "").trim().toUpperCase()
-      if (z) existingMap.set(z, { agency: a, address: String(r[2] || "").trim() })
+      const mru = normMru(String(r[0] || ""))
+      const a   = normMru(String(r[1] || ""))
+      if (mru) existingMap.set(mru, { agency: a, address: String(r[2] || "").trim() })
     })
 
     const historyEntries: string[][] = []
@@ -83,13 +87,13 @@ export async function POST(request: NextRequest) {
     const changedBy = session.userId || "admin"
 
     ;(rows || []).forEach(r => {
-      const zone   = (r.zone   || "").trim().toUpperCase()
-      const agency = (r.agency || "").trim().toUpperCase()
-      const prev = existingMap.get(zone)
+      const mru    = normMru(r.zone   || "")
+      const agency = normMru(r.agency || "")
+      const prev = existingMap.get(mru)
       if (prev && prev.agency !== agency) {
-        historyEntries.push([date, zone, prev.agency, agency, changedBy])
+        historyEntries.push([date, mru, prev.agency, agency, changedBy])
       } else if (!prev && agency) {
-        historyEntries.push([date, zone, "", agency, changedBy])
+        historyEntries.push([date, mru, "", agency, changedBy])
       }
     })
 
@@ -100,8 +104,8 @@ export async function POST(request: NextRequest) {
         valueInputOption: "RAW",
         requestBody: {
           values: rows.map(r => [
-            (r.zone    || "").trim().toUpperCase(),
-            (r.agency  || "").trim().toUpperCase(),
+            normMru(r.zone    || ""),
+            normMru(r.agency  || ""),
             (r.address || "").trim(),
             date,
           ]),

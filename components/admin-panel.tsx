@@ -143,7 +143,7 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
     const [parsedData, setParsedData] = useState<any[]>([]);
     const [columnMapping, setColumnMapping] = useState<Record<string, string>>({});
     const [fileName, setFileName] = useState<string>("");
-    const [dcUploadResult, setDcUploadResult] = useState<{ total: number; inserted: number; updated: number; protectedStatusSkipped: number; autoAssigned: number; archivedNotInUpload: number } | null>(null);
+    const [dcUploadResult, setDcUploadResult] = useState<{ total: number; inserted: number; updated: number; protectedStatusSkipped: number; autoAssigned: number; deletedNotInUpload: number } | null>(null);
     const [newCycleUpload, setNewCycleUpload] = useState(false);
     const [backupDownloading, setBackupDownloading] = useState(false);
 
@@ -1457,8 +1457,8 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
                         <span className="text-blue-700">✓ {dcUploadResult.updated} updated</span>
                         <span className="text-orange-700">⚠ {dcUploadResult.protectedStatusSkipped} had protected status (only OSD/base updated)</span>
                         <span className="text-purple-700">✓ {dcUploadResult.autoAssigned} auto-assigned agency</span>
-                        {dcUploadResult.archivedNotInUpload > 0 && (
-                          <span className="text-gray-600">📦 {dcUploadResult.archivedNotInUpload} removed from new list → archived to DC_History tab</span>
+                        {dcUploadResult.deletedNotInUpload > 0 && (
+                          <span className="text-red-700">🗑 {dcUploadResult.deletedNotInUpload} not in new list → saved to history and deleted from sheet</span>
                         )}
                       </div>
                     </div>
@@ -1483,8 +1483,9 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
             <Button size="sm" variant="outline" onClick={() => {
               const wb = XLSX.utils.book_new()
               XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
-                ["Zone (MRU)", "Agency", "Address"],
+                ["MRU", "Agency", "Address"],
                 ["AB01MR", "AGENCY NAME", "Area / locality description"],
+                ["AB02MR", "AGENCY NAME 2", "North zone near substation"],
               ]), "ZoneMap")
               XLSX.writeFile(wb, "ZoneMap_Template.xlsx")
             }}>
@@ -1500,9 +1501,9 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
             <Card className="border-blue-200 bg-blue-50">
               <CardContent className="pt-3 text-xs space-y-2">
                 <p className="font-semibold text-blue-800">CSV / Excel format:</p>
-                <pre className="bg-white rounded p-2 text-[11px] overflow-auto">{`Zone (MRU),Agency,Address\nAB01MR,AGENCY NAME 1,South Zone near main road\nAB02MR,AGENCY NAME 2,North industrial area`}</pre>
+                <pre className="bg-white rounded p-2 text-[11px] overflow-auto">{`MRU,Agency,Address\nAB01MR,AGENCY NAME 1,South Zone near main road\nAB02MR,AGENCY NAME 2,North industrial area`}</pre>
                 <ul className="list-disc pl-4 text-gray-600 space-y-0.5">
-                  <li><strong>Zone</strong>: MRU code from DC list (e.g. <code>AB01MR</code>). Zone key = first 4 chars.</li>
+                  <li><strong>MRU</strong>: Full MRU code from the DC list (e.g. <code>AB01MR</code>). Stored as-is — each MRU maps to one agency.</li>
                   <li><strong>Agency</strong>: Exact name as in Manage Agencies (case-insensitive match on upload).</li>
                   <li><strong>Address</strong>: Optional. Helps decide future agency allocation.</li>
                   <li>Header row required. Changes are logged to <code>ZoneMapHistory</code> sheet.</li>
@@ -1565,10 +1566,10 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
                       <Button size="sm" className="h-8 self-end"
                         disabled={!newZone || !newZoneAgency || zoneMapSaving}
                         onClick={() => {
-                          const zone = newZone.substring(0, 4).toUpperCase()
+                          const mru = newZone.trim().toUpperCase()
                           const updated = [
-                            ...zoneMapRows.filter(r => r.zone !== zone),
-                            { zone, agency: newZoneAgency.toUpperCase(), address: newZoneAddress },
+                            ...zoneMapRows.filter(r => r.zone !== mru),
+                            { zone: mru, agency: newZoneAgency.toUpperCase(), address: newZoneAddress },
                           ].sort((a, b) => a.zone.localeCompare(b.zone))
                           saveZoneMap(updated)
                           setNewZone(""); setNewZoneAgency(""); setNewZoneAddress("")
@@ -1594,8 +1595,8 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
                               const ws = wb.Sheets[wb.SheetNames[0]]
                               const rows = XLSX.utils.sheet_to_json<any[]>(ws, { header: 1, defval: "" }) as any[][]
                               const parsed = rows.slice(1).map(r => ({
-                                zone: String(r[0] || "").trim().toUpperCase().substring(0, 4),
-                                agency: String(r[1] || "").trim().toUpperCase(),
+                                zone:    String(r[0] || "").trim().toUpperCase(), // full MRU, no truncation
+                                agency:  String(r[1] || "").trim().toUpperCase(),
                                 address: String(r[2] || "").trim(),
                               })).filter(r => r.zone && r.agency)
                               setZoneUploadRows(parsed)
