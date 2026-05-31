@@ -19,7 +19,7 @@ interface AdminPanelProps {
   onClose: () => void
 }
 
-type ViewType = "menu" | "users" | "agencies" | "payments" | "dcList"
+type ViewType = "menu" | "users" | "agencies" | "payments" | "dcList" | "zoneMap"
 
 interface User {
   id: string
@@ -60,49 +60,33 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
             setMessage({ type: "error", text: "No data to upload" });
             return;
         }
-
         setIsUploading(true);
+        setDcUploadResult(null);
         try {
-            const response = await fetch("/api/sheets", {
-            method: "POST",
-            headers: { 
-                "Content-Type": "application/json",
-                "Accept": "application/json" // Explicitly ask for JSON
-            },
-            body: JSON.stringify({
-                sheetName,
-                data: parsedData,
-                headers: expectedColumns
-            }),
+            const response = await fetch("/api/consumers/bulk-upsert", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ rows: parsedData }),
             });
-
-            // Check if response is JSON
-            const contentType = response.headers.get('content-type');
-            if (!contentType?.includes('application/json')) {
-            const text = await response.text();
-            throw new Error(`Server returned ${response.status}: ${text.substring(0, 100)}`);
-            }
-
             const result = await response.json();
-            
-            if (!response.ok) {
-            throw new Error(result.error || "Failed to upload data");
+            if (!response.ok || !result.success) {
+                throw new Error(result.error || "Failed to upload data");
             }
-
-            setMessage({ 
-            type: "success", 
-            text: `Data uploaded successfully to sheet "${sheetName}"`
+            setDcUploadResult(result.summary);
+            setMessage({
+                type: "success",
+                text: `Upload complete: ${result.summary.inserted} new, ${result.summary.updated} updated, ${result.summary.autoAssigned} auto-assigned agency.`,
             });
         } catch (error) {
             console.error("Upload error:", error);
-            setMessage({ 
-            type: "error", 
-            text: error instanceof Error ? error.message : "Failed to upload data"
+            setMessage({
+                type: "error",
+                text: error instanceof Error ? error.message : "Failed to upload data",
             });
         } finally {
             setIsUploading(false);
         }
-        };
+    };
 
   const columnRegexMap: Record<string, RegExp> = {
     "off_code": /^\d{7}$/,
@@ -121,6 +105,14 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
     const [parsedData, setParsedData] = useState<any[]>([]);
     const [columnMapping, setColumnMapping] = useState<Record<string, string>>({});
     const [fileName, setFileName] = useState<string>("");
+    const [dcUploadResult, setDcUploadResult] = useState<{ total: number; inserted: number; updated: number; autoAssigned: number } | null>(null);
+
+    // --- ZONE MAP STATE (item 12) ---
+    const [zoneMapRows, setZoneMapRows] = useState<{ zone: string; agency: string }[]>([]);
+    const [zoneMapLoading, setZoneMapLoading] = useState(false);
+    const [zoneMapSaving, setZoneMapSaving] = useState(false);
+    const [newZone, setNewZone] = useState("");
+    const [newZoneAgency, setNewZoneAgency] = useState("");
 
     const detectColumnType = (values: any[]) => {
     for (const [colName, regex] of Object.entries(columnRegexMap)) {
@@ -352,6 +344,31 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
       setPaymentSubmitting(false)
     }
   }
+
+  // Zone map load/save
+  const loadZoneMap = async () => {
+    setZoneMapLoading(true)
+    try {
+      const resp = await fetch("/api/zone-map")
+      if (resp.ok) setZoneMapRows(await resp.json())
+    } catch { /* silent */ }
+    finally { setZoneMapLoading(false) }
+  }
+
+  const saveZoneMap = async (rows: { zone: string; agency: string }[]) => {
+    setZoneMapSaving(true)
+    try {
+      await fetch("/api/zone-map", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rows }),
+      })
+      setZoneMapRows(rows)
+    } catch { /* silent */ }
+    finally { setZoneMapSaving(false) }
+  }
+
+  useEffect(() => { if (view === "zoneMap") loadZoneMap() }, [view])
 
   // Load agencies when component mounts and when view changes to users
   useEffect(() => {
@@ -609,8 +626,14 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
           <DashboardCard
             icon={<List className="h-12 w-12 text-orange-500" />}
             title="Upload DC List"
-            description="Update disconnection list"
+            description="Upload & sync disconnection list"
             onClick={() => setView("dcList")}
+          />
+          <DashboardCard
+            icon={<Building2 className="h-12 w-12 text-teal-500" />}
+            title="Agency Zone Map"
+            description="Map zones to agencies for auto-assign"
+            onClick={() => setView("zoneMap")}
           />
         </div>
       )}
@@ -1136,61 +1159,235 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
       )}
 
       {view === "dcList" && (
-        <div>
-            <CardContent>
-            <Input
-                type="file"
-                accept=".csv,text/csv"
-                onChange={(e) => e.target.files && handleFileUpload(e.target.files[0])}
-            />
-            {fileName && <p className="text-sm mt-2">Uploaded: {fileName}</p>}
+        <div className="space-y-4">
+          <div>
+            <h2 className="text-xl font-bold">Upload DC List</h2>
+            <p className="text-sm text-gray-600 mt-1">
+              Upload a CSV or Excel file. Existing consumers are <strong>updated</strong>;
+              new consumer IDs are <strong>inserted</strong>. Agency is auto-assigned from
+              the Zone Map if configured. Missing sheet columns are created automatically.
+            </p>
+          </div>
 
-            {Object.keys(columnMapping).length > 0 && (
-                <div className="mt-4">
-                <h4 className="font-semibold">Detected Column Mapping:</h4>
-                <ul className="list-disc pl-5">
-                    {Object.entries(columnMapping).map(([gsCol, csvCol]) => (
-                    <li key={gsCol}>
-                        {gsCol} → <span className="font-mono">{csvCol}</span>
-                    </li>
+          <Card>
+            <CardContent className="pt-5 space-y-4">
+              <div className="space-y-2">
+                <Label>DC List File (CSV or Excel)</Label>
+                <Input
+                  type="file"
+                  accept=".csv,.xlsx,.xls,text/csv"
+                  onChange={(e) => {
+                    if (!e.target.files?.[0]) return
+                    const file = e.target.files[0]
+                    setDcUploadResult(null)
+                    if (/\.(xlsx|xls)$/i.test(file.name)) {
+                      const reader = new FileReader()
+                      reader.onload = (ev) => {
+                        const wb = XLSX.read(new Uint8Array(ev.target?.result as ArrayBuffer), { type: "array" })
+                        const ws = wb.Sheets[wb.SheetNames[0]]
+                        const rows = XLSX.utils.sheet_to_json<any[]>(ws, { header: 1, defval: "" }) as any[][]
+                        if (rows.length >= 2) {
+                          handleFileUpload(new File([file], file.name.replace(/xlsx?$/i, "csv")))
+                          // Re-run with parsed rows from XLSX
+                          const csvHeaders = (rows[0] || []).map(String)
+                          const dataRows = rows.slice(1).filter((r: any[]) => r.length > 1)
+                          const columnMap: Record<string, number | null> = {}
+                          expectedColumns.forEach(expectedCol => {
+                            for (let i = 0; i < csvHeaders.length; i++) {
+                              const colValues = dataRows.map((r: any[]) => r[i] || "").slice(0, 20)
+                              if (columnRegexMap[expectedCol].test(String(colValues[0] || ""))) {
+                                columnMap[expectedCol] = i; break
+                              }
+                            }
+                          })
+                          const mappedData = dataRows.map((row: any[]) =>
+                            expectedColumns.map(col => {
+                              const ci = columnMap[col]
+                              return ci !== null && ci !== undefined ? String(row[ci] ?? "") : ""
+                            })
+                          )
+                          const stringMap: Record<string, string> = {}
+                          Object.entries(columnMap).forEach(([k, v]) => { stringMap[k] = v !== null ? String(v) : "" })
+                          setColumnMapping(stringMap)
+                          setParsedData(mappedData)
+                          setFileName(file.name)
+                        }
+                      }
+                      reader.readAsArrayBuffer(file)
+                    } else {
+                      handleFileUpload(file)
+                    }
+                  }}
+                />
+                {fileName && <p className="text-xs text-gray-500">Selected: <span className="font-mono">{fileName}</span></p>}
+              </div>
+
+              {Object.keys(columnMapping).length > 0 && (
+                <div className="rounded-md bg-gray-50 p-3 text-xs space-y-1">
+                  <p className="font-semibold text-gray-700">Detected columns:</p>
+                  <div className="flex flex-wrap gap-2">
+                    {Object.entries(columnMapping).map(([col, idx]) => (
+                      <span key={col} className={`px-2 py-0.5 rounded-full text-[11px] font-medium ${idx ? "bg-green-100 text-green-800" : "bg-red-100 text-red-700"}`}>
+                        {col} {idx ? "✓" : "✗"}
+                      </span>
                     ))}
-                </ul>
+                  </div>
                 </div>
-            )}
+              )}
 
-            {parsedData.length > 0 && (
+              {parsedData.length > 0 && (
                 <>
-                <h4 className="mt-4 font-semibold">Preview (first 5 rows)</h4>
-                <Table>
-                    <TableHeader>
-                    <TableRow>
-                        {parsedData[0].map((_, i) => (
-                        <TableHead key={i}>Col {i + 1}</TableHead>
-                        ))}
-                    </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                    {parsedData.slice(0, 5).map((row, i) => (
-                        <TableRow key={i}>
-                        {row.map((cell: any, j: number) => (
-                            <TableCell key={j}>{cell}</TableCell>
-                        ))}
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-semibold text-sm">{parsedData.length} rows parsed — preview (first 5)</h4>
+                    <Button size="sm" variant="ghost" onClick={() => { setParsedData([]); setFileName(""); setColumnMapping({}); setDcUploadResult(null); }}>
+                      <X className="h-4 w-4 mr-1" /> Clear
+                    </Button>
+                  </div>
+                  <div className="border rounded-md overflow-auto max-h-52">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          {expectedColumns.map(c => <TableHead key={c} className="text-[11px] px-2 py-1 whitespace-nowrap">{c}</TableHead>)}
                         </TableRow>
-                    ))}
-                    </TableBody>
-                </Table>
+                      </TableHeader>
+                      <TableBody>
+                        {parsedData.slice(0, 5).map((row: any, i: number) => (
+                          <TableRow key={i}>
+                            {row.map((cell: any, j: number) => (
+                              <TableCell key={j} className="text-[11px] px-2 py-1 max-w-[100px] truncate">{cell}</TableCell>
+                            ))}
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
 
-                <Button
-                    className="mt-4"
+                  <Button
+                    className="w-full sm:w-auto"
                     onClick={uploadToGoogleSheet}
                     disabled={isUploading || parsedData.length === 0}
-                    >
-                    {isUploading ? "Uploading..." : "Upload to Google Sheet"}
-                </Button>
+                  >
+                    {isUploading
+                      ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Uploading…</>
+                      : <><Upload className="h-4 w-4 mr-2" /> Sync {parsedData.length} rows to Sheet</>
+                    }
+                  </Button>
                 </>
-            )}
-            </CardContent>
+              )}
 
+              {dcUploadResult && (
+                <Alert>
+                  <CheckCircle2 className="h-4 w-4" />
+                  <AlertDescription>
+                    <strong>{dcUploadResult.total}</strong> rows processed —{" "}
+                    <strong>{dcUploadResult.inserted}</strong> new,{" "}
+                    <strong>{dcUploadResult.updated}</strong> updated,{" "}
+                    <strong>{dcUploadResult.autoAssigned}</strong> auto-assigned agency.
+                  </AlertDescription>
+                </Alert>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {view === "zoneMap" && (
+        <div className="space-y-4">
+          <div>
+            <h2 className="text-xl font-bold">Agency Zone Map</h2>
+            <p className="text-sm text-gray-600 mt-1">
+              Map MRU zone codes (first 4 chars of MRU) to agencies. During DC list upload,
+              each row&apos;s zone is looked up here and the agency is auto-filled.
+              Stored in the <span className="font-mono">AgencyZoneMap</span> sheet tab.
+            </p>
+          </div>
+
+          <Card>
+            <CardContent className="pt-5 space-y-4">
+              {zoneMapLoading ? (
+                <div className="flex items-center gap-2 text-sm text-gray-500">
+                  <Loader2 className="h-4 w-4 animate-spin" /> Loading zone map…
+                </div>
+              ) : (
+                <>
+                  {zoneMapRows.length > 0 && (
+                    <div className="border rounded-md overflow-auto max-h-60">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Zone (MRU prefix)</TableHead>
+                            <TableHead>Agency</TableHead>
+                            <TableHead className="w-12"></TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {zoneMapRows.map((row, i) => (
+                            <TableRow key={i}>
+                              <TableCell className="font-mono">{row.zone}</TableCell>
+                              <TableCell>{row.agency}</TableCell>
+                              <TableCell>
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  className="h-6 w-6 text-red-500 hover:text-red-700"
+                                  onClick={() => {
+                                    const updated = zoneMapRows.filter((_, idx) => idx !== i)
+                                    saveZoneMap(updated)
+                                  }}
+                                >
+                                  <X className="h-3 w-3" />
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  )}
+                  {zoneMapRows.length === 0 && <p className="text-sm text-gray-400">No mappings yet. Add one below.</p>}
+
+                  <div className="flex gap-2 items-end">
+                    <div className="space-y-1 flex-1">
+                      <Label className="text-xs">Zone code (e.g. AB01)</Label>
+                      <Input
+                        placeholder="AB01"
+                        value={newZone}
+                        onChange={(e) => setNewZone(e.target.value.toUpperCase())}
+                        className="h-8 font-mono"
+                      />
+                    </div>
+                    <div className="space-y-1 flex-1">
+                      <Label className="text-xs">Agency name</Label>
+                      <Select value={newZoneAgency} onValueChange={setNewZoneAgency}>
+                        <SelectTrigger className="h-8">
+                          <SelectValue placeholder="Select agency" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {agencies.filter(a => a.isActive).map(a => (
+                            <SelectItem key={a.id} value={a.name}>{a.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <Button
+                      size="sm"
+                      className="h-8"
+                      disabled={!newZone || !newZoneAgency || zoneMapSaving}
+                      onClick={() => {
+                        const updated = [...zoneMapRows.filter(r => r.zone !== newZone), { zone: newZone, agency: newZoneAgency }]
+                          .sort((a, b) => a.zone.localeCompare(b.zone))
+                        saveZoneMap(updated)
+                        setNewZone(""); setNewZoneAgency("")
+                      }}
+                    >
+                      <Plus className="h-4 w-4 mr-1" /> Add
+                    </Button>
+                  </div>
+                  {zoneMapSaving && <p className="text-xs text-blue-600">Saving…</p>}
+                </>
+              )}
+            </CardContent>
+          </Card>
         </div>
       )}
     </div>

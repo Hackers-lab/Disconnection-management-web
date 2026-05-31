@@ -905,28 +905,15 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
                           </button>
                           <button
                             type="button"
-                            className="block w-full text-left px-4 py-2 hover:bg-blue-50 text-sm"
+                            className="block w-full text-left px-4 py-2 hover:bg-blue-50 text-sm font-medium text-blue-700"
                             onClick={() => {
                               if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
                               setShowDownloadMenu(false);
-                              setShowReportDialog(true);
+                              onDownloadDefaulters && onDownloadDefaulters();
                             }}
                           >
-                            Daily Report (PDF)
+                            Download Report
                           </button>
-                          {canDownloadDefaulters && (
-                            <button
-                              type="button"
-                              className="block w-full text-left px-4 py-2 hover:bg-blue-50 text-sm"
-                              onClick={() => {
-                                if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
-                                setShowDownloadMenu(false);
-                                onDownloadDefaulters && onDownloadDefaulters();
-                              }}
-                            >
-                              Top Defaulter List
-                            </button>
-                          )}
                         </>
                       )}
                       {isDDView && (
@@ -1013,21 +1000,14 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
                   
                   {isDisconnectionView && (
                     <>
-                      <DropdownMenuItem onClick={() => onDownload && onDownload() }>
+                      <DropdownMenuItem onClick={() => onDownload && onDownload()}>
                         <Download className="mr-2 h-4 w-4" />
-                        <span>Disconnection List</span>
+                        <span>Download DC List</span>
                       </DropdownMenuItem>
 
-                      {canDownloadDefaulters && (
-                        <DropdownMenuItem onClick={() => onDownloadDefaulters && onDownloadDefaulters()}>
-                          <Download className="mr-2 h-4 w-4" />
-                          <span>Top Defaulter List</span>
-                        </DropdownMenuItem>
-                      )}
-
-                      <DropdownMenuItem onClick={() => setShowReportDialog(true)}>
-                        <Download className="mr-2 h-4 w-4" />
-                        <span>Daily Report</span>
+                      <DropdownMenuItem onClick={() => onDownloadDefaulters && onDownloadDefaulters()}>
+                        <Download className="mr-2 h-4 w-4 text-blue-600" />
+                        <span className="font-medium text-blue-700">Download Report</span>
                       </DropdownMenuItem>
                     </>
                   )}

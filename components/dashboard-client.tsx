@@ -43,8 +43,8 @@ export default function DashboardClient({ role, agencies }: DashboardClientProps
   const [isDownloadDialogOpen, setIsDownloadDialogOpen] = useState(false)
   const [downloadCount, setDownloadCount] = useState("50")
   const [downloadFormat, setDownloadFormat] = useState<"pdf" | "excel">("pdf")
-  // "defaulters" = top-N OSD list; "remarks" = group-by-remarks with date filter
-  const [reportType, setReportType] = useState<"defaulters" | "remarks">("defaulters")
+  // "daily" = full agency DC report; "defaulters" = top-N OSD; "remarks" = group-by-remarks
+  const [reportType, setReportType] = useState<"daily" | "defaulters" | "remarks">("daily")
   const [remarksDateFrom, setRemarksDateFrom] = useState("")
   const [remarksDateTo, setRemarksDateTo] = useState("")
 
@@ -90,7 +90,6 @@ export default function DashboardClient({ role, agencies }: DashboardClientProps
       alert("No consumer data available.");
       return;
     }
-    // Open the dialog instead of prompt
     setIsDownloadDialogOpen(true);
   };
 
@@ -837,16 +836,20 @@ export default function DashboardClient({ role, agencies }: DashboardClientProps
                 <Label>Report Type</Label>
                 <RadioGroup
                   value={reportType}
-                  onValueChange={(v: "defaulters" | "remarks") => setReportType(v)}
-                  className="flex gap-4"
+                  onValueChange={(v: "daily" | "defaulters" | "remarks") => setReportType(v)}
+                  className="flex flex-col gap-2"
                 >
                   <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="daily" id="rt-daily" />
+                    <Label htmlFor="rt-daily">Daily Report (agency-wise DC list + summary)</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
                     <RadioGroupItem value="defaulters" id="rt-def" />
-                    <Label htmlFor="rt-def">Top Defaulters</Label>
+                    <Label htmlFor="rt-def">Top Defaulters (by outstanding dues)</Label>
                   </div>
                   <div className="flex items-center space-x-2">
                     <RadioGroupItem value="remarks" id="rt-rem" />
-                    <Label htmlFor="rt-rem">Remarks Report</Label>
+                    <Label htmlFor="rt-rem">Remarks Report (grouped by remarks)</Label>
                   </div>
                 </RadioGroup>
               </div>
@@ -883,24 +886,29 @@ export default function DashboardClient({ role, agencies }: DashboardClientProps
                 </div>
               )}
 
-              {/* Format */}
-              <div className="grid gap-2">
-                <Label>Format</Label>
-                <RadioGroup
-                  value={downloadFormat}
-                  onValueChange={(val: "pdf" | "excel") => setDownloadFormat(val)}
-                  className="flex gap-4"
-                >
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="pdf" id="fmt-pdf" />
-                    <Label htmlFor="fmt-pdf">PDF</Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="excel" id="fmt-excel" />
-                    <Label htmlFor="fmt-excel">Excel</Label>
-                  </div>
-                </RadioGroup>
-              </div>
+              {/* Format — not shown for daily (always PDF) */}
+              {reportType !== "daily" && (
+                <div className="grid gap-2">
+                  <Label>Format</Label>
+                  <RadioGroup
+                    value={downloadFormat}
+                    onValueChange={(val: "pdf" | "excel") => setDownloadFormat(val)}
+                    className="flex gap-4"
+                  >
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="pdf" id="fmt-pdf" />
+                      <Label htmlFor="fmt-pdf">PDF</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="excel" id="fmt-excel" />
+                      <Label htmlFor="fmt-excel">Excel</Label>
+                    </div>
+                  </RadioGroup>
+                </div>
+              )}
+              {reportType === "daily" && (
+                <p className="text-xs text-gray-400">Generates a full agency-wise PDF with summary chart, DC list per agency, and performance ranking.</p>
+              )}
             </div>
 
             <DialogFooter>
@@ -908,7 +916,8 @@ export default function DashboardClient({ role, agencies }: DashboardClientProps
                 Cancel
               </Button>
               <Button onClick={() => {
-                if (reportType === "remarks") generateRemarksReport();
+                if (reportType === "daily") { setIsDownloadDialogOpen(false); downloadPDF(); }
+                else if (reportType === "remarks") generateRemarksReport();
                 else handleDownloadConfirm();
               }}>
                 Download
