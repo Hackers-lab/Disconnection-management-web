@@ -1,7 +1,7 @@
 // app/api/consumers/update/route.ts
 import { type NextRequest, NextResponse } from "next/server"
 import { updateConsumerInGoogleSheet } from "@/lib/google-sheets-api" // Changed import
-import type { ConsumerData } from "@/lib/google-sheets"
+import { invalidateConsumerCache, type ConsumerData } from "@/lib/google-sheets"
 
 export async function POST(request: NextRequest) {
   try {
@@ -11,6 +11,10 @@ export async function POST(request: NextRequest) {
 
     // Use the direct Sheets API function
     const result = await updateConsumerInGoogleSheet(consumer)
+
+    // Invalidate the warm-function memo so the next /base or /patch read
+    // reflects this write immediately within this container.
+    invalidateConsumerCache()
 
     return NextResponse.json(result, { status: 200 })
   } catch (error) {

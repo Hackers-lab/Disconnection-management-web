@@ -1,5 +1,8 @@
 export interface ConsumerData {
-  _syncStatus: string
+  _syncStatus?: 'syncing' | 'error'
+  // Epoch ms set when the client edits this row locally. Used to protect
+  // recent local writes from being overwritten by stale CDN-cached patch data.
+  _localEditedAt?: number
   offCode: string
   mru: string
   consumerId: string
@@ -171,84 +174,94 @@ export async function getAgencyLastUpdates(): Promise<
 
 
 
+// Warm-function in-memory cache: when /base, /patch and /row-count hit the
+// same container within a short window, they share the parsed data instead of
+// each re-fetching and re-parsing it. ~30s keeps responses fresh enough for
+// delta sync while collapsing 3-5 redundant parses into one.
+const CSV_MEMO_TTL_MS = 30_000
+let csvMemo: { at: number; data: ConsumerData[] } | null = null
+
+// Allow other modules (e.g. /api/consumers/update) to invalidate the memo
+// after a successful write so the next read reflects the change immediately.
+export function invalidateConsumerCache() {
+  csvMemo = null
+}
+
+// Lazy import to avoid loading googleapis on cold paths that don't need it.
+async function getSheetsClient() {
+  const { google } = await import("googleapis")
+  const { auth } = await import("./google-drive")
+  return google.sheets({ version: "v4", auth })
+}
+
+const COLUMN_MAPPINGS = {
+  offCode: ["off_code", "offcode", "office code"],
+  mru: ["mru"],
+  consumerId: ["consumer id", "consumerid", "consumer_id"],
+  name: ["name", "consumer name"],
+  address: ["address"],
+  baseClass: ["base class", "baseclass", "base_class"],
+  class: ["class"],
+  natureOfConn: ["nature of conn", "nature of connection", "natureofconn"],
+  govNonGov: ["gov/non-gov", "gov non gov", "government"],
+  device: ["device"],
+  osDuedateRange: ["o/s duedate range", "os duedate range", "due date range"],
+  d2NetOS: ["d2 net o/s", "d2 net os", "net os", "outstanding"],
+  disconStatus: ["discon status", "disconnection status", "status"],
+  disconDate: ["discon date", "disconnection date"],
+  gisPole: ["gis pole", "gispole", "pole"],
+  mobileNumber: ["mobile number", "mobile", "phone"],
+  latitude: ["latitude", "lat"],
+  longitude: ["longitude", "lng", "long"],
+  agency: ["agency"],
+  reading: ["reading"],
+  imageUrl: ["image", "photo", "link", "url", "imageurl", "imagelink"],
+  notes: ["notes"],
+  lastUpdated: ["last updated", "last_updated", "timestamp", "modified", "updated_at"],
+}
+
 export async function fetchConsumerData(): Promise<ConsumerData[]> {
+  if (csvMemo && Date.now() - csvMemo.at < CSV_MEMO_TTL_MS) {
+    return csvMemo.data
+  }
+
   try {
-    const csvUrl = process.env.DISCONNECTION_CSV
-    if (!csvUrl) throw new Error("DISCONNECTION_CSV env variable not set")
+    const spreadsheetId =
+      process.env.DISCONNECTION_SHEET?.trim() || process.env.GOOGLE_SHEET_ID
+    if (!spreadsheetId) {
+      throw new Error("DISCONNECTION_SHEET env variable not set")
+    }
+    const sheetName = process.env.GOOGLE_SHEET_NAME || "Sheet1"
 
-    const separator = csvUrl.includes("?") ? "&" : "?"
-    const freshUrl = `${csvUrl}${separator}t=${Date.now()}`
+    const sheets = await getSheetsClient()
+    // Read the full sheet via Sheets API. This is the same source of truth
+    // /api/system/row-count uses, so count + data always match.
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range: `'${sheetName}'`,
+      valueRenderOption: "FORMATTED_VALUE",
+      majorDimension: "ROWS",
+    })
 
-    const response = await fetch(
-      freshUrl,
-      {
-        // OPTIMIZATION: Cache the CSV from Google for 60 seconds.
-        // This reduces the Patch API time from ~3.6s to ~100ms.
-        next: { revalidate: 0 },
-        headers: {
-          "User-Agent": "Mozilla/5.0 (compatible; NextJS-App/1.0)",
-        },
-      } as any, // Cast to any to allow 'next' property if types are strict
-    )
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`)
+    const rows = (response.data.values || []) as string[][]
+    if (rows.length < 2) {
+      throw new Error("Sheet must have at least header and one data row")
     }
 
-    const csvText = await response.text()
-
-    if (!csvText || csvText.trim().length === 0) {
-      throw new Error("Empty CSV data received")
-    }
-
-    const lines = csvText.split("\n").filter((line) => line.trim().length > 0)
-
-    if (lines.length < 2) {
-      throw new Error("CSV must have at least header and one data row")
-    }
-
-    const headers = parseCSVLine(lines[0])
+    const headers = rows[0].map((h) => String(h ?? "").trim())
 
     const consumers: ConsumerData[] = []
 
-    // Define column mappings with multiple possible names
-    const columnMappings = {
-      offCode: ["off_code", "offcode", "office code"],
-      mru: ["mru"],
-      consumerId: ["consumer id", "consumerid", "consumer_id"],
-      name: ["name", "consumer name"],
-      address: ["address"],
-      baseClass: ["base class", "baseclass", "base_class"],
-      class: ["class"],
-      natureOfConn: ["nature of conn", "nature of connection", "natureofconn"],
-      govNonGov: ["gov/non-gov", "gov non gov", "government"],
-      device: ["device"],
-      osDuedateRange: ["o/s duedate range", "os duedate range", "due date range"],
-      d2NetOS: ["d2 net o/s", "d2 net os", "net os", "outstanding"],
-      disconStatus: ["discon status", "disconnection status", "status"],
-      disconDate: ["discon date", "disconnection date"],
-      gisPole: ["gis pole", "gispole", "pole"],
-      mobileNumber: ["mobile number", "mobile", "phone"],
-      latitude: ["latitude", "lat"],
-      longitude: ["longitude", "lng", "long"],
-      agency: ["agency"],
-      reading: ["reading"],
-      imageUrl: ["image", "photo", "link", "url", "imageurl", "imagelink"],
-      notes: ["notes"],
-      lastUpdated: ["last updated", "last_updated", "timestamp", "modified", "updated_at"],
-
-    }
-
     // Find column indices
     const columnIndices: { [key: string]: number } = {}
-    Object.entries(columnMappings).forEach(([key, searchTerms]) => {
+    Object.entries(COLUMN_MAPPINGS).forEach(([key, searchTerms]) => {
       columnIndices[key] = findColumnIndex(headers, searchTerms)
     })
 
     // Process data rows
-    for (let i = 1; i < lines.length; i++) {
+    for (let i = 1; i < rows.length; i++) {
       try {
-        const values = parseCSVLine(lines[i])
+        const values = (rows[i] || []).map((v) => String(v ?? ""))
 
         // Skip empty rows
         if (values.length === 0 || values.every((v) => !v || v.trim() === "")) {
@@ -256,7 +269,7 @@ export async function fetchConsumerData(): Promise<ConsumerData[]> {
         }
 
         // Get consumer ID to validate this is a valid row
-        const consumerId = columnIndices.consumerId >= 0 ? values[columnIndices.consumerId] : ""
+        const consumerId = columnIndices.consumerId >= 0 ? values[columnIndices.consumerId] || "" : ""
         if (!consumerId || consumerId.trim() === "") {
           continue
         }
@@ -316,6 +329,7 @@ export async function fetchConsumerData(): Promise<ConsumerData[]> {
       }
     }
 
+    csvMemo = { at: Date.now(), data: consumers }
     return consumers
   } catch (error) {
     console.error("Detailed error in fetchConsumerData:", error)

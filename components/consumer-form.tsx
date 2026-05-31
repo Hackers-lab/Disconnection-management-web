@@ -2,6 +2,7 @@
 
 import type React from "react"
 import { useState, useRef, useEffect } from "react"
+import { createPortal } from "react-dom"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -264,6 +265,8 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
           alert("Remarks are required for Visited status.")
           return
         }
+      } else if (formData.disconStatus === "agency paid") {
+        // Paid (Agency Paid): image and meter reading are optional.
       } else {
         if (!formData.imageUrl) {
           alert("Please upload the image first.")
@@ -289,7 +292,7 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
   }
 
   return (
-    <div className="max-w-3xl mx-auto space-y-4 pb-28"> {/* Added padding-bottom for sticky footer */}
+    <div className="max-w-3xl mx-auto space-y-4 pb-28 min-w-0 overflow-x-hidden"> {/* min-w-0 + overflow-x-hidden prevent long text from forcing horizontal scroll on mobile */}
       
       {/* Header */}
       <div className="flex items-center gap-2 mb-2">
@@ -322,9 +325,9 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
                 </div>
             </div>
 
-            <div className="flex items-start gap-2 text-sm text-gray-700">
+            <div className="flex items-start gap-2 text-sm text-gray-700 min-w-0">
                 <MapPin className="h-4 w-4 mt-0.5 text-blue-500 shrink-0" />
-                <span className="leading-snug">{consumer.address}</span>
+                <span className="leading-snug min-w-0 flex-1 break-words">{consumer.address}</span>
             </div>
 
             <div className="grid grid-cols-2 gap-y-2 gap-x-4 text-xs text-gray-600 pt-1">
@@ -419,7 +422,8 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
             {/* Image Upload with Live Camera */}
             <div className="space-y-3 pt-2 border-t">
                 <Label className="text-xs font-bold text-gray-500 uppercase">
-                  Evidence (Auto-Watermarked) {userRole !== "admin" && <span className="text-red-500">*</span>}
+                  Evidence (Auto-Watermarked) {userRole !== "admin" && formData.disconStatus !== "agency paid" && <span className="text-red-500">*</span>}
+                  {userRole !== "admin" && formData.disconStatus === "agency paid" && <span className="text-gray-400 normal-case ml-1">(optional)</span>}
                 </Label>
                 
                 {/* Hidden File Input for Gallery */}
@@ -560,26 +564,30 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
         </Card>
       )}
 
-      {/* --- STICKY FOOTER ACTIONS --- */}
-      <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-gray-200 z-50 flex gap-3 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)]">
-        <Button 
-            variant="outline" 
-            className="flex-1 h-12 border-gray-300 text-gray-700" 
-            onClick={() => {
-                if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
-                onCancel()
-            }}
-        >
-            Cancel
-        </Button>
-        <Button 
-            className="flex-[2] h-12 text-lg shadow-sm bg-blue-600 hover:bg-blue-700 text-white" 
-            onClick={handleSubmit}
-            disabled={uploading}
-        >
-            {uploading ? "Uploading..." : "Save Update"}
-        </Button>
-      </div>
+      {/* Sticky footer is portaled to body so no ancestor transform/filter
+          can break its viewport-fixed positioning. */}
+      {typeof window !== "undefined" && createPortal(
+        <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-gray-200 z-[60] flex gap-3 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)]">
+          <Button
+              variant="outline"
+              className="flex-1 h-12 border-gray-300 text-gray-700"
+              onClick={() => {
+                  if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
+                  onCancel()
+              }}
+          >
+              Cancel
+          </Button>
+          <Button
+              className="flex-[2] h-12 text-lg shadow-sm bg-blue-600 hover:bg-blue-700 text-white"
+              onClick={handleSubmit}
+              disabled={uploading}
+          >
+              {uploading ? "Uploading..." : "Save Update"}
+          </Button>
+        </div>,
+        document.body
+      )}
 
     </div>
   )

@@ -1,14 +1,13 @@
 import { NextResponse } from "next/server"
 import { getDDUpdates } from "@/lib/dd-service"
 
-export const dynamic = "force-dynamic"
-
 export async function GET() {
   const updates = await getDDUpdates()
-  
+
   return NextResponse.json(updates, {
     headers: {
-      "Cache-Control": "no-store, no-cache, must-revalidate",
+      // CDN-cache 15s with SWR so concurrent tabs share one origin call.
+      "Cache-Control": "public, s-maxage=15, stale-while-revalidate=30",
     },
   })
 }

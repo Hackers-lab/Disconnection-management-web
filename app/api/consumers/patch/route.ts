@@ -1,8 +1,6 @@
 import { NextResponse } from "next/server"
 import { fetchConsumerData } from "@/lib/google-sheets"
 
-export const dynamic = 'force-dynamic'
-
 export async function GET() {
   try {
     const data = await fetchConsumerData()
@@ -12,7 +10,7 @@ export async function GET() {
     if (data.length < 100) {
       return NextResponse.json(data, {
         headers: {
-          'Cache-Control': 'no-store',
+          "Cache-Control": "public, s-maxage=15, stale-while-revalidate=30",
         },
       });
     }
@@ -50,8 +48,9 @@ export async function GET() {
     return NextResponse.json(patchData, {
       status: 200,
       headers: {
-        // Ensure patches are never cached by the CDN or browser.
-        "Cache-Control": "no-store",
+        // 15s CDN cache lets many tabs share one origin call; stale-while-
+        // revalidate hides latency while the next refresh runs in the background.
+        "Cache-Control": "public, s-maxage=15, stale-while-revalidate=30",
       },
     })
   } catch (error) {

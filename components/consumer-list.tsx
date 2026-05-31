@@ -198,11 +198,18 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
       // Yield to main thread to prevent UI blocking during heavy processing
       await new Promise(resolve => setTimeout(resolve, 0));
 
-      // Merge local pending/error states with incoming network data to prevent "Silent Reversion"
+      // Merge local pending/error/recent-edit states with incoming network data
+      // to prevent "Silent Reversion" — covers both in-flight writes and the
+      // brief window where /patch may serve CDN-cached pre-write data.
       if (isBackgroundUpdate) {
+        const LOCAL_WIN_WINDOW_MS = 30_000
+        const now = Date.now()
         data = data.map(newC => {
           const existing = consumersRef.current.find(c => c.consumerId === newC.consumerId)
-          if (existing && (existing._syncStatus === 'syncing' || existing._syncStatus === 'error')) {
+          if (!existing) return newC
+          const recentLocal =
+            existing._localEditedAt && now - existing._localEditedAt < LOCAL_WIN_WINDOW_MS
+          if (existing._syncStatus === 'syncing' || existing._syncStatus === 'error' || recentLocal) {
             return existing
           }
           return newC
@@ -351,7 +358,21 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
               
               const currentData = consumersRef.current.length > 0 ? consumersRef.current : (cachedData || []);
               const dataMap = new Map(currentData.map(c => [c.consumerId, c]));
-              patchData.forEach(patchItem => dataMap.set(patchItem.consumerId, patchItem));
+              // Stale-write protection: if this row was edited locally in the
+              // last 30s (longer than the CDN cache window on /patch), keep
+              // the local copy instead of letting potentially-stale patch data win.
+              const LOCAL_WIN_WINDOW_MS = 30_000;
+              const now = Date.now();
+              patchData.forEach(patchItem => {
+                const existing = dataMap.get(patchItem.consumerId);
+                const recentLocal =
+                  existing?._localEditedAt &&
+                  now - existing._localEditedAt < LOCAL_WIN_WINDOW_MS;
+                if (recentLocal || existing?._syncStatus === 'syncing' || existing?._syncStatus === 'error') {
+                  return;
+                }
+                dataMap.set(patchItem.consumerId, patchItem);
+              });
               const mergedData = Array.from(dataMap.values());
 
               await saveToCache(CACHE_KEY, mergedData);
@@ -513,8 +534,14 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
     const matchesConsumerId =
       !filters.consumerId || consumer.consumerId.toLowerCase().includes(filters.consumerId.toLowerCase())
 
-    // Status filter
-    const matchesStatus = filters.status === "All Status" || consumer.disconStatus === filters.status
+    // Status filter (case-insensitive; "paid" matches both "paid" and "agency paid")
+    const consumerStatusLc = (consumer.disconStatus || "").toLowerCase()
+    const filterStatusLc = filters.status.toLowerCase()
+    const matchesStatus =
+      filters.status === "All Status" ||
+      (filterStatusLc === "paid"
+        ? consumerStatusLc === "paid" || consumerStatusLc === "agency paid"
+        : consumerStatusLc === filterStatusLc)
 
     // OSD range filter
     const consumerOsd = Number.parseFloat(consumer.d2NetOS || "0")
@@ -619,8 +646,13 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
 
   const handleUpdateConsumer = async (updatedConsumer: ConsumerData) => {
     if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
-    // 1. Optimistic Update: Mark as syncing and update local state/cache immediately
-    const syncingConsumer = { ...updatedConsumer, _syncStatus: 'syncing' as const };
+    // 1. Optimistic Update: Mark as syncing and stamp a local-edit timestamp
+    //    so a stale CDN-cached patch fetch can't overwrite this row.
+    const syncingConsumer: ConsumerData = {
+      ...updatedConsumer,
+      _syncStatus: 'syncing',
+      _localEditedAt: Date.now(),
+    };
     
     setConsumers((prev) => {
       const newList = prev
@@ -642,10 +674,13 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
 
         if (!response.ok) throw new Error("Update failed");
 
-        // Success: Clear sync status
+        // Success: Clear sync status but keep _localEditedAt so a stale
+        // CDN-cached patch fetch in the next ~30s can't clobber this row.
         setConsumers((prev) => {
-          const newList = prev.map((c) => 
-            c.consumerId === data.consumerId ? { ...data, _syncStatus: undefined } : c
+          const newList = prev.map((c) =>
+            c.consumerId === data.consumerId
+              ? { ...data, _syncStatus: undefined, _localEditedAt: Date.now() }
+              : c
           );
           saveToCache("consumers_data_cache", newList);
           return newList;
@@ -959,8 +994,7 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
                         <SelectItem value="office team">Office Team</SelectItem>
                         <SelectItem value="bill dispute">Bill Dispute</SelectItem>
                         <SelectItem value="pending">Pending</SelectItem>
-                        <SelectItem value="Paid">Paid</SelectItem>
-                        <SelectItem value="agency paid">Agency Paid</SelectItem>
+                        <SelectItem value="paid">Paid</SelectItem>
                         <SelectItem value="not found">Not Found</SelectItem>
                       </SelectContent>
                     </Select>
@@ -1218,15 +1252,15 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
                     setSelectedConsumer(consumer)
                 }} 
                 className={`w-full mt-4 ${
-                    ((consumer.disconStatus.toLowerCase() !== "connected" && userRole !== "admin" && userRole !== "executive") || userRole === "viewer")
+                    ((!["connected", "visited", "not found"].includes(consumer.disconStatus.toLowerCase()) && userRole !== "admin" && userRole !== "executive") || userRole === "viewer")
                       ? "bg-gray-100 text-gray-500 hover:bg-gray-100 cursor-not-allowed" 
                       : ""
                   }`}
                   size="sm"
-                  disabled={(consumer.disconStatus.toLowerCase() !== "connected" && userRole !== "admin" && userRole !== "executive") || userRole === "viewer"}
+                  disabled={(!["connected", "visited", "not found"].includes(consumer.disconStatus.toLowerCase()) && userRole !== "admin" && userRole !== "executive") || userRole === "viewer"}
                 >
                   <Edit className={`h-4 w-4 mr-2 ${
-                      ((consumer.disconStatus.toLowerCase() !== "connected" && userRole !== "admin" && userRole !== "executive") || userRole === "viewer") 
+                      ((!["connected", "visited", "not found"].includes(consumer.disconStatus.toLowerCase()) && userRole !== "admin" && userRole !== "executive") || userRole === "viewer") 
                         ? "text-gray-400" 
                         : ""
                     }`} />
@@ -1288,7 +1322,7 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
                           }} 
                           size="sm"
                           className="h-8 bg-blue-600 hover:bg-blue-700 text-white"
-                          disabled={(consumer.disconStatus.toLowerCase() !== "connected" && userRole !== "admin" && userRole !== "executive") || userRole === "viewer"}
+                          disabled={(!["connected", "visited", "not found"].includes(consumer.disconStatus.toLowerCase()) && userRole !== "admin" && userRole !== "executive") || userRole === "viewer"}
                         >
                           Update
                         </Button>
@@ -1310,7 +1344,7 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
                     setPreviewConsumer(consumer)
                 }}
                 className={`bg-white p-2 rounded-lg shadow-sm border active:bg-gray-50 transition-colors ${
-                  ((consumer.disconStatus.toLowerCase() !== "connected" && userRole !== "admin" && userRole !== "executive") || userRole === "viewer")
+                  ((!["connected", "visited", "not found"].includes(consumer.disconStatus.toLowerCase()) && userRole !== "admin" && userRole !== "executive") || userRole === "viewer")
                     ? "opacity-90" 
                     : "cursor-pointer"
                 }`}
@@ -1348,11 +1382,11 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
                       onClick={(e) => {
                         e.stopPropagation();
                           if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
-                        if (!((consumer.disconStatus.toLowerCase() !== "connected" && userRole !== "admin" && userRole !== "executive") || userRole === "viewer")) {
+                        if (!((!["connected", "visited", "not found"].includes(consumer.disconStatus.toLowerCase()) && userRole !== "admin" && userRole !== "executive") || userRole === "viewer")) {
                           setSelectedConsumer(consumer)
                         }
                       }}
-                      disabled={((consumer.disconStatus.toLowerCase() !== "connected" && userRole !== "admin" && userRole !== "executive") || userRole === "viewer")}
+                      disabled={((!["connected", "visited", "not found"].includes(consumer.disconStatus.toLowerCase()) && userRole !== "admin" && userRole !== "executive") || userRole === "viewer")}
                     >
                       <Edit className="h-4 w-4" />
                     </Button>
@@ -1519,11 +1553,11 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
                   onClick={() => {
                     if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
                     setPreviewConsumer(null);
-                    if (!((previewConsumer.disconStatus.toLowerCase() !== "connected" && userRole !== "admin" && userRole !== "executive") || userRole === "viewer")) {
+                    if (!((!["connected", "visited", "not found"].includes(previewConsumer.disconStatus.toLowerCase()) && userRole !== "admin" && userRole !== "executive") || userRole === "viewer")) {
                       setSelectedConsumer(previewConsumer);
                     }
                   }}
-                  disabled={(previewConsumer.disconStatus.toLowerCase() !== "connected" && userRole !== "admin" && userRole !== "executive") || userRole === "viewer"}
+                  disabled={(!["connected", "visited", "not found"].includes(previewConsumer.disconStatus.toLowerCase()) && userRole !== "admin" && userRole !== "executive") || userRole === "viewer"}
                 >
                   <Edit className="h-4 w-4 mr-2" />
                   Update Status

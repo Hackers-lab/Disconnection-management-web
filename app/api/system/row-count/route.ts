@@ -3,8 +3,6 @@ import { google } from "googleapis";
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 
-export const dynamic = 'force-dynamic'
-
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams
@@ -50,7 +48,16 @@ export async function GET(request: NextRequest) {
     const dataString = JSON.stringify(nonEmptyRows);
     const hash = crypto.createHash('md5').update(dataString).digest('hex');
 
-    return NextResponse.json({ count, version: hash })
+    return NextResponse.json(
+      { count, version: hash },
+      {
+        headers: {
+          // CDN-cache for 20s; many client tabs share one origin call.
+          // Changes propagate within ~20s which is fine for delta sync.
+          "Cache-Control": "public, s-maxage=20, stale-while-revalidate=60",
+        },
+      }
+    )
   } catch (error) {
     console.error(`API Error: Failed to fetch row count or generate hash for '${(request.nextUrl.searchParams.get('type') || 'consumer')}':`, error)
     return NextResponse.json({ count: 0, version: null }, { status: 500 })
