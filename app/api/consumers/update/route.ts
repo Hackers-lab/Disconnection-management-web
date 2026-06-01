@@ -2,10 +2,20 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { updateConsumerInGoogleSheet } from "@/lib/google-sheets-api" // Changed import
 import { invalidateConsumerCache, type ConsumerData } from "@/lib/google-sheets"
+import { appendHistory, nowTimestamp, invalidateHistoryCache } from "@/lib/consumer-history"
+import { verifySession } from "@/lib/session"
+
+// Previous-state fields the client sends so we can log old→new history
+// without an extra sheet read.
+type UpdatePayload = ConsumerData & {
+  previousStatus?: string
+  previousOsd?: string
+  previousNotes?: string
+}
 
 export async function POST(request: NextRequest) {
   try {
-    const consumer: ConsumerData = await request.json()
+    const consumer: UpdatePayload = await request.json()
 
     console.log(`🔄 Updating consumer ${consumer.consumerId}...`)
 
@@ -15,6 +25,29 @@ export async function POST(request: NextRequest) {
     // Invalidate the warm-function memo so the next /base or /patch read
     // reflects this write immediately within this container.
     invalidateConsumerCache()
+
+    // Log a field-action history event when the status actually changed.
+    // Fire-and-forget — non-critical, never blocks the response.
+    const newStatus = String(consumer.disconStatus || "").trim()
+    const oldStatus = String(consumer.previousStatus || "").trim()
+    if (newStatus && newStatus.toLowerCase() !== oldStatus.toLowerCase()) {
+      const session = await verifySession().catch(() => null)
+      appendHistory([{
+        timestamp: nowTimestamp(),
+        consumerId: String(consumer.consumerId || ""),
+        name: String(consumer.name || ""),
+        action: "status_changed",
+        oldStatus,
+        newStatus,
+        oldOsd: String(consumer.previousOsd ?? consumer.d2NetOS ?? ""),
+        oldNotes: String(consumer.previousNotes ?? ""),
+        oldImageUrl: String(consumer.imageUrl || ""),
+        changedBy: session?.role ? `${session.role}${session.agencies?.[0] ? ":" + session.agencies[0] : ""}` : "field",
+        eventDate: String(consumer.disconDate || ""),
+      }])
+        .then(() => invalidateHistoryCache())
+        .catch(e => console.warn("Field history append failed (non-critical):", e))
+    }
 
     return NextResponse.json(result, { status: 200 })
   } catch (error) {

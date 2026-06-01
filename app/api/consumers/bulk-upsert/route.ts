@@ -68,6 +68,10 @@ type UpsertRequest = {
   sheetName?: string
   rows: string[][]
   newCycle?: boolean
+  // Per-consumer conflict decisions chosen by the user in the UI.
+  // "replace" → overwrite existing (incl. status reset); "keep" → protect existing.
+  // Unset consumers fall back to the default newCycle/protection logic.
+  overrides?: Record<string, "keep" | "replace">
 }
 
 export async function POST(request: NextRequest) {
@@ -81,6 +85,7 @@ export async function POST(request: NextRequest) {
   catch { return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 }) }
 
   const newCycle = !!body.newCycle
+  const overrides = body.overrides && typeof body.overrides === "object" ? body.overrides : {}
   const uploadRows = Array.isArray(body.rows) ? body.rows : []
   if (uploadRows.length === 0) {
     return NextResponse.json({ error: "No rows supplied" }, { status: 400 })
@@ -105,13 +110,14 @@ export async function POST(request: NextRequest) {
     const osdColIndex     = findColumn(headers, ["d2 net o/s","d2 net os","outstanding"])
     const lastUpdColIndex = findColumn(headers, ["last updated","lastupdated","updatedAt","timestamp"])
     const nameColIndex    = findColumn(headers, ["name","consumer name"])
+    const imageColIndex   = findColumn(headers, ["image","image url","imageurl","photo","evidence"])
 
     if (idColIndex === -1) {
       return NextResponse.json({ error: "Consumer ID column not found" }, { status: 500 })
     }
 
-    // 3. BatchGet all needed columns in one call (ID + status + OSD + agency + notes + name).
-    const colIndicesToFetch = [idColIndex, statusColIndex, osdColIndex, agencyColIndex, notesColIndex, nameColIndex]
+    // 3. BatchGet all needed columns in one call (ID + status + OSD + agency + notes + name + image).
+    const colIndicesToFetch = [idColIndex, statusColIndex, osdColIndex, agencyColIndex, notesColIndex, nameColIndex, imageColIndex]
       .filter(i => i !== -1)
     const ranges = colIndicesToFetch.map(i => `'${sheetName}'!${colLetter(i)}:${colLetter(i)}`)
 
@@ -127,7 +133,7 @@ export async function POST(request: NextRequest) {
 
     const idValues = colData(idColIndex)
 
-    type ExistingRow = { row: number; status: string; osd: string; agency: string; notes: string; name: string }
+    type ExistingRow = { row: number; status: string; osd: string; agency: string; notes: string; name: string; image: string }
     const existingMap = new Map<string, ExistingRow>()
     for (let i = 1; i < idValues.length; i++) {
       const id = String(idValues[i]?.[0] || "").trim()
@@ -139,6 +145,7 @@ export async function POST(request: NextRequest) {
         agency: String(colData(agencyColIndex)[i]?.[0]  || "").trim(),
         notes:  String(colData(notesColIndex)[i]?.[0]   || "").trim(),
         name:   String(colData(nameColIndex)[i]?.[0]    || "").trim(),
+        image:  String(colData(imageColIndex)[i]?.[0]   || "").trim(),
       })
     }
 
@@ -211,16 +218,32 @@ export async function POST(request: NextRequest) {
             newStatus: "",
             oldOsd: existing.osd,
             oldNotes: existing.notes,
-            oldImageUrl: "",
+            oldImageUrl: existing.image,
             changedBy: "upload",
           })
         }
 
-        const shouldReset = !isAdminHold && newCycle && isFieldWork && (
-          existing.status === "visited" || existing.status === "not found" || osdChanged
+        // User's explicit per-consumer decision from the conflict UI (if any).
+        const decision = overrides[consumerId]
+        const forceReplace = decision === "replace"
+        const forceKeep = decision === "keep"
+
+        // Status reset happens on a new cycle (visited/not found/osd-changed) OR
+        // when the user explicitly chose to replace this consumer.
+        const shouldReset = forceReplace || (
+          !isAdminHold && newCycle && isFieldWork && (
+            existing.status === "visited" || existing.status === "not found" || osdChanged
+          )
         )
 
-        if (isAdminHold || (isFieldWork && !shouldReset)) {
+        // Take the protected (base-only) path when:
+        //  - user forced keep, OR
+        //  - (no explicit decision) the default protection logic applies.
+        const useProtectedPath = !forceReplace && (
+          forceKeep || isAdminHold || (isFieldWork && !shouldReset)
+        )
+
+        if (useProtectedPath) {
           protectedCount++
           BASE_FIELD_UPLOAD_INDICES.forEach(i => {
             const sc = uploadToSheetCol[i]
@@ -269,7 +292,7 @@ export async function POST(request: NextRequest) {
         newStatus: "deleted",
         oldOsd: existing.osd,
         oldNotes: existing.notes,
-        oldImageUrl: "",
+        oldImageUrl: existing.image,
         changedBy: "upload",
       })
       rowsToDelete.push(existing.row)

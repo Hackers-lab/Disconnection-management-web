@@ -5,7 +5,7 @@ import Papa from "papaparse";
 import * as XLSX from "xlsx";
 import { getFromCache, saveToCache } from "@/lib/indexed-db";
 import { Table, TableHeader, TableRow, TableHead, TableCell, TableBody } from "@/components/ui/table";
-import React, { useState, useEffect } from "react"
+import React, { useState, useEffect, useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -13,9 +13,43 @@ import { Badge } from "@/components/ui/badge"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Users, Building2, Upload, List, ArrowLeft, Trash2, Edit, Plus, X, Save, AlertCircle, CheckCircle2, Loader2, Eye, EyeOff, KeyRound } from "lucide-react"
+import { Users, Building2, Upload, List, ArrowLeft, Trash2, Edit, Plus, X, Save, AlertCircle, CheckCircle2, Loader2, Eye, EyeOff, KeyRound, Filter, ChevronDown, ChevronRight, ShieldCheck, ShieldAlert } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
+import { Condition, Group, Operator, rowMatchesGroups, isNumericOp, OPERATOR_LABELS } from "@/lib/upload-filter"
 import { userStorage } from "@/lib/user-storage";
+
+// Optional filter-only source columns (mapped for filtering/conflict, never uploaded).
+const FILTER_COLUMNS = ["Class", "Gov/Non-Gov", "Discon Status"] as const
+
+// Header-name synonyms (normalized) used to auto-suggest the upload column mapping.
+const HEADER_SYNONYMS: Record<string, string[]> = {
+  "off_code": ["off_code", "offcode", "off code"],
+  "MRU": ["mru"],
+  "Consumer Id": ["consumer id", "consumerid", "consumer_id", "ca", "account"],
+  "Name": ["name", "consumer name"],
+  "Address": ["address"],
+  "Base Class": ["base class", "baseclass", "bclass/phase", "bclass", "bclassphase", "phase"],
+  "Device": ["device", "meter", "meter no", "meter number"],
+  "O/S Duedate Range": ["o/s duedate range", "o/s due date range", "os duedate range", "due date range", "duedate range"],
+  "D2 Net O/S": ["d2 net o/s", "d2 net os", "net o/s", "net os", "outstanding"],
+  "Mobile Number": ["mobile number", "mobile", "phone", "mobile no"],
+  "Class": ["class"],
+  "Gov/Non-Gov": ["gov/non-gov", "gov non gov", "govnongov", "gov", "government"],
+  "Discon Status": ["discon status", "disconnection status", "status"],
+}
+
+// Existing-consumer statuses that are "protected" — these reappearing in a new
+// upload trigger the conflict-resolution UI. Mirrors the server-side sets.
+const PROTECTED_STATUSES = new Set([
+  "disconnected", "paid", "agency paid", "visited", "not found",
+  "deemed disconnected", "temprory disconnected", "bill dispute", "office team",
+])
+
+// Categorical filter fields offer multi-select of distinct file values;
+// numeric fields offer comparison inputs.
+const NUMERIC_FILTER_FIELDS = new Set(["D2 Net O/S"])
+
+const normalizeHeader = (s: string) => String(s || "").toLowerCase().replace(/[^a-z0-9]/g, "")
 
 interface AdminPanelProps {
   onClose: () => void
@@ -58,8 +92,8 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
         ] as const;
 
     const uploadToGoogleSheet = async () => {
-        if (parsedData.length === 0) {
-            setMessage({ type: "error", text: "No data to upload" });
+        if (finalUploadRows.length === 0) {
+            setMessage({ type: "error", text: "No rows to upload (check mapping/filters)" });
             return;
         }
         setIsUploading(true);
@@ -68,7 +102,7 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
             const response = await fetch("/api/consumers/bulk-upsert", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ rows: parsedData, newCycle: newCycleUpload }),
+                body: JSON.stringify({ rows: finalUploadRows, newCycle: newCycleUpload, overrides: conflictOverrides }),
             });
             const result = await response.json();
             if (!response.ok || !result.success) {
@@ -148,6 +182,23 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
     const [newCycleUpload, setNewCycleUpload] = useState(false);
     const [backupDownloading, setBackupDownloading] = useState(false);
 
+    // --- DC upload: smart mapping + filters + conflict resolution ---
+    const [rawHeaders, setRawHeaders] = useState<string[]>([]);
+    const [rawRows, setRawRows] = useState<string[][]>([]);
+    // mapping: target/filter column name -> CSV column index (-1 = unmapped)
+    const [mapping, setMapping] = useState<Record<string, number>>({});
+    const [mappingConfidence, setMappingConfidence] = useState<Record<string, "name" | "pattern" | "unmatched">>({});
+    const [mappingConfirmed, setMappingConfirmed] = useState(false);
+    // filter rule engine
+    const [ruleGroups, setRuleGroups] = useState<Group[]>([]);
+    const [presets, setPresets] = useState<{ name: string; groups: Group[] }[]>([]);
+    const [presetName, setPresetName] = useState("");
+    const [savingPreset, setSavingPreset] = useState(false);
+    // conflict resolution
+    const [conflictOverrides, setConflictOverrides] = useState<Record<string, "keep" | "replace">>({});
+    const [expandedStatuses, setExpandedStatuses] = useState<Record<string, boolean>>({});
+    const [cachedConsumers, setCachedConsumers] = useState<any[]>([]);
+
     const ZONE_MAP_CACHE_KEY = "zone_map_cache";
 
     // --- ZONE MAP STATE (item 12) ---
@@ -166,70 +217,84 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
     const [zoneViewMode, setZoneViewMode] = useState<"flat" | "agency">("agency");
     const [mruSearch, setMruSearch] = useState("");
 
-    const detectColumnType = (values: any[]) => {
-    for (const [colName, regex] of Object.entries(columnRegexMap)) {
-        const matches = values.filter(v => regex.test(String(v).trim())).length;
-        
-        // Special case for mobile numbers (30% threshold)
-        if (colName === "Mobile Number") {
-        if (matches / values.length > 0.3) { // Lower threshold
-            return colName;
+    // Auto-suggest the column mapping using a 3-tier match:
+    //  1. exact header-name match (synonyms, normalized)
+    //  2. substring header-name match (still skipping claimed columns)
+    //  3. regex value detection over up to 20 samples (80% / 30% for mobile)
+    // Returns mapping (target -> csv idx, -1 if none) + per-target confidence.
+    const autoSuggestMapping = (headers: string[], dataRows: string[][]) => {
+      const normHeaders = headers.map(normalizeHeader)
+      const claimed = new Set<number>()
+      const map: Record<string, number> = {}
+      const conf: Record<string, "name" | "pattern" | "unmatched"> = {}
+      const allTargets = [...expectedColumns, ...FILTER_COLUMNS]
+      const synFor = (col: string) => (HEADER_SYNONYMS[col] || [col]).map(normalizeHeader)
+
+      // Pass 1: exact name match
+      for (const col of allTargets) {
+        const syns = synFor(col)
+        const found = normHeaders.findIndex((h, i) => !claimed.has(i) && syns.includes(h))
+        if (found !== -1) { map[col] = found; conf[col] = "name"; claimed.add(found) }
+      }
+      // Pass 2: substring name match
+      for (const col of allTargets) {
+        if (map[col] !== undefined) continue
+        const syns = synFor(col)
+        const found = normHeaders.findIndex((h, i) =>
+          !claimed.has(i) && h.length > 1 && syns.some(s => h.includes(s) || s.includes(h)))
+        if (found !== -1) { map[col] = found; conf[col] = "name"; claimed.add(found) }
+      }
+      // Pass 3: regex value detection (target columns only)
+      for (const col of expectedColumns) {
+        if (map[col] !== undefined) continue
+        const regex = columnRegexMap[col]
+        if (!regex) continue
+        const threshold = col === "Mobile Number" ? 0.3 : 0.8
+        for (let i = 0; i < headers.length; i++) {
+          if (claimed.has(i)) continue
+          const sample = dataRows.slice(0, 20).map(r => String(r[i] ?? "").trim()).filter(Boolean)
+          if (sample.length === 0) continue
+          const hit = sample.filter(v => regex.test(v)).length / sample.length
+          if (hit > threshold) { map[col] = i; conf[col] = "pattern"; claimed.add(i); break }
         }
-        } 
-        // Standard 80% threshold for other columns
-        else if (matches / values.length > 0.8) {
-        return colName;
-        }
+      }
+      // Fill the rest as unmatched
+      for (const col of allTargets) {
+        if (map[col] === undefined) { map[col] = -1; conf[col] = "unmatched" }
+      }
+      return { map, conf }
     }
-    return null;
-    };
 
+    // Unified ingest for both CSV and Excel: store the raw grid + auto-suggested
+    // mapping, then let the user confirm/correct before any upload is built.
+    const ingestParsed = (headers: string[], dataRows: string[][], name: string) => {
+      const cleanRows = dataRows.filter(r => Array.isArray(r) && r.length > 1)
+      const { map, conf } = autoSuggestMapping(headers, cleanRows)
+      setRawHeaders(headers.map(String))
+      setRawRows(cleanRows.map(r => r.map(c => String(c ?? ""))))
+      setMapping(map)
+      setMappingConfidence(conf)
+      setMappingConfirmed(false)
+      setRuleGroups([])
+      setConflictOverrides({})
+      setExpandedStatuses({})
+      setParsedData([])
+      setColumnMapping({})
+      setDcUploadResult(null)
+      setFileName(name)
+    }
 
-    
     const handleFileUpload = (file: File) => {
-        setFileName(file.name);
-        Papa.parse(file, {
-            complete: (results: Papa.ParseResult<any[]>) => {
-            const rows = results.data as any[][];
-            if (!rows || rows.length === 0) return;
-
-            const csvHeaders = rows[0];
-            const dataRows = rows.slice(1).filter(r => r.length > 1);
-
-            // Create mapping of our expected columns to CSV column indices
-            const columnMap: Record<string, number | null> = {};
-            
-            expectedColumns.forEach(expectedCol => {
-                // Find which CSV column matches this expected column
-                for (let i = 0; i < csvHeaders.length; i++) {
-                const colValues = dataRows.map(r => r[i] || "").slice(0, 20);
-                if (columnRegexMap[expectedCol].test(String(colValues[0] || ""))) {
-                    columnMap[expectedCol] = i;
-                    break;
-                }
-                }
-            });
-
-            // Transform data to only include expected columns in correct order
-            const mappedData = dataRows.map(row => {
-                return expectedColumns.map(col => {
-                const colIndex = columnMap[col];
-                return colIndex !== null ? row[colIndex] : "";
-                });
-            });
-
-            // Convert columnMap values to string for setColumnMapping
-            const stringColumnMap: Record<string, string> = {};
-            Object.entries(columnMap).forEach(([key, value]) => {
-              stringColumnMap[key] = value !== null ? value.toString() : "";
-            });
-            setColumnMapping(stringColumnMap);
-            setParsedData(mappedData);
-            },
-            header: false,
-            skipEmptyLines: true
-        });
-        };
+      Papa.parse(file, {
+        complete: (results: Papa.ParseResult<any[]>) => {
+          const rows = (results.data as any[][]) || []
+          if (rows.length === 0) return
+          ingestParsed(rows[0] as string[], rows.slice(1) as string[][], file.name)
+        },
+        header: false,
+        skipEmptyLines: true,
+      })
+    }
 
   const [view, setView] = useState<ViewType>("menu")
   const [users, setUsers] = useState<User[]>([])
@@ -691,6 +756,165 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
   }
 
   const activeAgencies = agencies.filter((a) => a.isActive)
+
+  // ---- DC upload derived data (all client-side, zero server CPU) ----
+
+  // Resolve a raw row's value for a mapped field name.
+  const getFieldValue = (row: string[], field: string): string => {
+    const idx = mapping[field]
+    return idx != null && idx >= 0 ? String(row[idx] ?? "") : ""
+  }
+
+  // Fields the user can filter on — those that are actually mapped.
+  const filterableFields = useMemo(() => {
+    const candidates = ["Class", "Gov/Non-Gov", "Discon Status", "Base Class", "D2 Net O/S", "off_code", "MRU"]
+    return candidates.filter(f => (mapping[f] ?? -1) >= 0)
+  }, [mapping])
+
+  // Distinct values for a categorical field (for multi-select chips).
+  const distinctValues = (field: string): string[] => {
+    const idx = mapping[field]
+    if (idx == null || idx < 0) return []
+    const set = new Set<string>()
+    for (const r of rawRows) { const v = String(r[idx] ?? "").trim(); if (v) set.add(v) }
+    return Array.from(set).sort()
+  }
+
+  // Rows that pass the current filter rules.
+  const passingRows = useMemo(
+    () => rawRows.filter(r => rowMatchesGroups(f => getFieldValue(r, f), ruleGroups)),
+    [rawRows, ruleGroups, mapping]
+  )
+
+  // Final upload payload — fixed 10-column order expected by the server.
+  const finalUploadRows = useMemo(
+    () => passingRows.map(r => expectedColumns.map(col => {
+      const idx = mapping[col]
+      return idx != null && idx >= 0 ? String(r[idx] ?? "") : ""
+    })),
+    [passingRows, mapping]
+  )
+
+  // Conflicts: passing consumers that already exist with a protected status.
+  const conflicts = useMemo(() => {
+    const idIdx = mapping["Consumer Id"]
+    if (idIdx == null || idIdx < 0 || cachedConsumers.length === 0) return [] as { consumerId: string; name: string; status: string }[]
+    const existingById = new Map(cachedConsumers.map(c => [String(c.consumerId), c]))
+    const out: { consumerId: string; name: string; status: string }[] = []
+    for (const r of passingRows) {
+      const id = String(r[idIdx] ?? "").trim()
+      if (!id) continue
+      const ex = existingById.get(id)
+      const status = ex ? String(ex.disconStatus || "").toLowerCase().trim() : ""
+      if (ex && PROTECTED_STATUSES.has(status)) {
+        out.push({ consumerId: id, name: ex.name || "", status })
+      }
+    }
+    return out
+  }, [passingRows, cachedConsumers, mapping])
+
+  // Group conflicts by existing status for the status-level controls.
+  const conflictsByStatus = useMemo(() => {
+    const m: Record<string, { consumerId: string; name: string; status: string }[]> = {}
+    for (const c of conflicts) { (m[c.status] ||= []).push(c) }
+    return m
+  }, [conflicts])
+
+  // The decision shown for a status group: keep / replace / mixed.
+  const statusDecision = (status: string): "keep" | "replace" | "mixed" => {
+    const ids = (conflictsByStatus[status] || []).map(c => c.consumerId)
+    if (ids.length === 0) return "keep"
+    const vals = ids.map(id => conflictOverrides[id] === "replace" ? "replace" : "keep")
+    if (vals.every(v => v === "replace")) return "replace"
+    if (vals.every(v => v === "keep")) return "keep"
+    return "mixed"
+  }
+
+  const setStatusDecision = (status: string, decision: "keep" | "replace") => {
+    setConflictOverrides(prev => {
+      const next = { ...prev }
+      for (const c of (conflictsByStatus[status] || [])) next[c.consumerId] = decision
+      return next
+    })
+  }
+
+  const setConsumerDecision = (consumerId: string, decision: "keep" | "replace") => {
+    setConflictOverrides(prev => ({ ...prev, [consumerId]: decision }))
+  }
+
+  // Load cached consumers + saved presets when the upload view opens.
+  useEffect(() => {
+    if (view !== "dcList") return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const cached = await getFromCache<any[]>("consumers_data_cache")
+        if (!cancelled && Array.isArray(cached)) setCachedConsumers(cached)
+      } catch { /* ignore */ }
+      try {
+        const resp = await fetch("/api/admin/upload-rules")
+        if (resp.ok && !cancelled) setPresets(await resp.json())
+      } catch { /* ignore */ }
+    })()
+    return () => { cancelled = true }
+  }, [view])
+
+  // ---- Filter rule builder mutators ----
+  const addRuleGroup = () => setRuleGroups(g => [...g, { conditions: [] }])
+  const removeRuleGroup = (gi: number) => setRuleGroups(g => g.filter((_, i) => i !== gi))
+  const addCondition = (gi: number) => {
+    const field = filterableFields[0] || ""
+    const numeric = NUMERIC_FILTER_FIELDS.has(field)
+    const cond: Condition = numeric ? { field, op: "gt", value: "0" } : { field, op: "in", value: [] }
+    setRuleGroups(g => g.map((grp, i) => i === gi ? { conditions: [...grp.conditions, cond] } : grp))
+  }
+  const updateCondition = (gi: number, ci: number, patch: Partial<Condition>) => {
+    setRuleGroups(g => g.map((grp, i) => i !== gi ? grp : {
+      conditions: grp.conditions.map((c, j) => j === ci ? { ...c, ...patch } : c),
+    }))
+  }
+  const removeCondition = (gi: number, ci: number) => {
+    setRuleGroups(g => g.map((grp, i) => i !== gi ? grp : {
+      conditions: grp.conditions.filter((_, j) => j !== ci),
+    }))
+  }
+
+  const applyPreset = (name: string) => {
+    const p = presets.find(x => x.name === name)
+    if (p) setRuleGroups(Array.isArray(p.groups) ? p.groups : [])
+  }
+
+  const savePreset = async () => {
+    if (!presetName.trim()) return
+    setSavingPreset(true)
+    try {
+      const resp = await fetch("/api/admin/upload-rules", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: presetName.trim(), groups: ruleGroups }),
+      })
+      if (resp.ok) {
+        setMessage({ type: "success", text: `Preset "${presetName.trim()}" saved` })
+        const list = await fetch("/api/admin/upload-rules")
+        if (list.ok) setPresets(await list.json())
+        setPresetName("")
+      } else {
+        const e = await resp.json().catch(() => ({}))
+        throw new Error(e.error || "Failed to save preset")
+      }
+    } catch (err) {
+      setMessage({ type: "error", text: err instanceof Error ? err.message : "Failed to save preset" })
+    } finally {
+      setSavingPreset(false)
+    }
+  }
+
+  const deletePreset = async (name: string) => {
+    try {
+      const resp = await fetch(`/api/admin/upload-rules?name=${encodeURIComponent(name)}`, { method: "DELETE" })
+      if (resp.ok) setPresets(p => p.filter(x => x.name !== name))
+    } catch { /* ignore */ }
+  }
 
   if (loading) {
     return (
@@ -1434,30 +1658,7 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
                         const ws = wb.Sheets[wb.SheetNames[0]]
                         const rows = XLSX.utils.sheet_to_json<any[]>(ws, { header: 1, defval: "" }) as any[][]
                         if (rows.length >= 2) {
-                          handleFileUpload(new File([file], file.name.replace(/xlsx?$/i, "csv")))
-                          // Re-run with parsed rows from XLSX
-                          const csvHeaders = (rows[0] || []).map(String)
-                          const dataRows = rows.slice(1).filter((r: any[]) => r.length > 1)
-                          const columnMap: Record<string, number | null> = {}
-                          expectedColumns.forEach(expectedCol => {
-                            for (let i = 0; i < csvHeaders.length; i++) {
-                              const colValues = dataRows.map((r: any[]) => r[i] || "").slice(0, 20)
-                              if (columnRegexMap[expectedCol].test(String(colValues[0] || ""))) {
-                                columnMap[expectedCol] = i; break
-                              }
-                            }
-                          })
-                          const mappedData = dataRows.map((row: any[]) =>
-                            expectedColumns.map(col => {
-                              const ci = columnMap[col]
-                              return ci !== null && ci !== undefined ? String(row[ci] ?? "") : ""
-                            })
-                          )
-                          const stringMap: Record<string, string> = {}
-                          Object.entries(columnMap).forEach(([k, v]) => { stringMap[k] = v !== null ? String(v) : "" })
-                          setColumnMapping(stringMap)
-                          setParsedData(mappedData)
-                          setFileName(file.name)
+                          ingestParsed((rows[0] || []).map(String), rows.slice(1) as string[][], file.name)
                         }
                       }
                       reader.readAsArrayBuffer(file)
@@ -1469,57 +1670,274 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
                 {fileName && <p className="text-xs text-gray-500">Selected: <span className="font-mono">{fileName}</span></p>}
               </div>
 
-              {Object.keys(columnMapping).length > 0 && (
-                <div className="rounded-md bg-gray-50 p-3 text-xs space-y-1">
-                  <p className="font-semibold text-gray-700">Detected columns:</p>
-                  <div className="flex flex-wrap gap-2">
-                    {Object.entries(columnMapping).map(([col, idx]) => (
-                      <span key={col} className={`px-2 py-0.5 rounded-full text-[11px] font-medium ${idx ? "bg-green-100 text-green-800" : "bg-red-100 text-red-700"}`}>
-                        {col} {idx ? "✓" : "✗"}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {parsedData.length > 0 && (
-                <>
+              {/* STEP 1 — Column mapping */}
+              {rawHeaders.length > 0 && !mappingConfirmed && (
+                <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <h4 className="font-semibold text-sm">{parsedData.length} rows parsed — preview (first 5)</h4>
-                    <Button size="sm" variant="ghost" onClick={() => { setParsedData([]); setFileName(""); setColumnMapping({}); setDcUploadResult(null); }}>
+                    <h4 className="font-semibold text-sm">Map columns — {rawRows.length} rows detected</h4>
+                    <Button size="sm" variant="ghost" onClick={() => {
+                      setRawHeaders([]); setRawRows([]); setMapping({}); setMappingConfidence({})
+                      setFileName(""); setMappingConfirmed(false); setDcUploadResult(null)
+                    }}>
                       <X className="h-4 w-4 mr-1" /> Clear
                     </Button>
                   </div>
-                  <div className="border rounded-md overflow-auto max-h-52">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          {expectedColumns.map(c => <TableHead key={c} className="text-[11px] px-2 py-1 whitespace-nowrap">{c}</TableHead>)}
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {parsedData.slice(0, 5).map((row: any, i: number) => (
-                          <TableRow key={i}>
-                            {row.map((cell: any, j: number) => (
-                              <TableCell key={j} className="text-[11px] px-2 py-1 max-w-[100px] truncate">{cell}</TableCell>
-                            ))}
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
+                  <p className="text-xs text-gray-500">
+                    We auto-matched your file's headers to the system columns. Fix any that are wrong.
+                    The 10 system columns are uploaded; <span className="font-medium">Class / Gov-Non-Gov / Discon Status</span> are
+                    optional and used only for filtering &amp; conflict checks.
+                  </p>
+                  <div className="border rounded-md divide-y">
+                    {[...expectedColumns, ...FILTER_COLUMNS].map((col) => {
+                      const isFilterCol = (FILTER_COLUMNS as readonly string[]).includes(col)
+                      const idx = mapping[col] ?? -1
+                      const c = mappingConfidence[col] || "unmatched"
+                      const sample = idx >= 0 ? String(rawRows[0]?.[idx] ?? "") : ""
+                      return (
+                        <div key={col} className="flex items-center gap-2 px-2 py-1.5 text-xs">
+                          <div className="w-32 shrink-0 font-medium flex items-center gap-1">
+                            {col}
+                            {isFilterCol && <span className="text-[9px] text-gray-400">(filter)</span>}
+                          </div>
+                          <Select value={String(idx)} onValueChange={(v) => {
+                            setMapping(m => ({ ...m, [col]: Number(v) }))
+                            setMappingConfidence(mc => ({ ...mc, [col]: Number(v) >= 0 ? "name" : "unmatched" }))
+                          }}>
+                            <SelectTrigger className="h-7 text-xs flex-1"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="-1">— Not mapped —</SelectItem>
+                              {rawHeaders.map((h, i) => (
+                                <SelectItem key={i} value={String(i)}>{h || `Column ${i + 1}`}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-medium shrink-0 ${
+                            c === "name" ? "bg-green-100 text-green-700"
+                            : c === "pattern" ? "bg-amber-100 text-amber-700"
+                            : "bg-gray-100 text-gray-500"}`}>
+                            {c === "name" ? "matched" : c === "pattern" ? "by pattern" : "unmapped"}
+                          </span>
+                          <span className="w-28 shrink-0 truncate text-gray-400 font-mono">{sample}</span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                  {(() => {
+                    const missing = ["Consumer Id", "MRU", "D2 Net O/S"].filter(c => (mapping[c] ?? -1) < 0)
+                    return (
+                      <>
+                        {missing.length > 0 && (
+                          <p className="text-xs text-red-600">Required columns unmapped: {missing.join(", ")}</p>
+                        )}
+                        <Button size="sm" disabled={missing.length > 0} onClick={() => setMappingConfirmed(true)}>
+                          <CheckCircle2 className="h-4 w-4 mr-1" /> Confirm Mapping
+                        </Button>
+                      </>
+                    )
+                  })()}
+                </div>
+              )}
+
+              {/* STEP 2 — Filters + conflicts + preview + upload */}
+              {rawHeaders.length > 0 && mappingConfirmed && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-semibold text-sm flex items-center gap-1"><Filter className="h-4 w-4" /> Filter rules</h4>
+                    <Button size="sm" variant="ghost" onClick={() => setMappingConfirmed(false)}>
+                      <ArrowLeft className="h-4 w-4 mr-1" /> Re-map columns
+                    </Button>
                   </div>
 
-                  <Button
-                    className="w-full sm:w-auto"
-                    onClick={uploadToGoogleSheet}
-                    disabled={isUploading || parsedData.length === 0}
-                  >
+                  {/* Presets */}
+                  <div className="flex flex-wrap items-center gap-2 text-xs">
+                    <span className="text-gray-500">Presets:</span>
+                    {presets.length === 0 && <span className="text-gray-400">none saved</span>}
+                    {presets.map(p => (
+                      <span key={p.name} className="inline-flex items-center gap-1 bg-gray-100 rounded-full pl-2 pr-1 py-0.5">
+                        <button className="hover:underline" onClick={() => applyPreset(p.name)}>{p.name}</button>
+                        <button className="text-gray-400 hover:text-red-500" onClick={() => deletePreset(p.name)}><X className="h-3 w-3" /></button>
+                      </span>
+                    ))}
+                  </div>
+
+                  {/* Rule groups */}
+                  <div className="space-y-2">
+                    {ruleGroups.length === 0 && (
+                      <p className="text-xs text-gray-500">No rules — all {rawRows.length} rows will upload. Add a group to filter.</p>
+                    )}
+                    {ruleGroups.map((grp, gi) => (
+                      <div key={gi} className="border rounded-md p-2 space-y-2 bg-gray-50">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-semibold text-gray-600">
+                            {gi > 0 && <span className="text-blue-600 mr-1">OR</span>}Group {gi + 1} <span className="text-gray-400">(all conditions must match)</span>
+                          </span>
+                          <Button size="icon" variant="ghost" className="h-6 w-6 text-red-500" onClick={() => removeRuleGroup(gi)}><X className="h-3 w-3" /></Button>
+                        </div>
+                        {grp.conditions.map((cond, ci) => {
+                          const numeric = NUMERIC_FILTER_FIELDS.has(cond.field)
+                          const ops: Operator[] = numeric ? ["gt", "lt", "gte", "lte", "between", "eq"] : ["in", "nin", "eq", "neq"]
+                          return (
+                            <div key={ci} className="flex flex-wrap items-center gap-1.5 text-xs">
+                              {ci > 0 && <span className="text-[10px] text-gray-400">AND</span>}
+                              <Select value={cond.field} onValueChange={(v) => {
+                                const num = NUMERIC_FILTER_FIELDS.has(v)
+                                updateCondition(gi, ci, { field: v, op: num ? "gt" : "in", value: num ? "0" : [] })
+                              }}>
+                                <SelectTrigger className="h-7 text-xs w-36"><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                  {filterableFields.map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}
+                                </SelectContent>
+                              </Select>
+                              <Select value={cond.op} onValueChange={(v) => updateCondition(gi, ci, { op: v as Operator, value: isNumericOp(v as Operator) ? (v === "between" ? ["0", "0"] : "0") : [] })}>
+                                <SelectTrigger className="h-7 text-xs w-28"><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                  {ops.map(o => <SelectItem key={o} value={o}>{OPERATOR_LABELS[o]}</SelectItem>)}
+                                </SelectContent>
+                              </Select>
+                              {/* Value editor */}
+                              {numeric ? (
+                                cond.op === "between" ? (
+                                  <div className="flex items-center gap-1">
+                                    <Input className="h-7 w-20 text-xs" type="number" value={String((cond.value as any[])?.[0] ?? "")}
+                                      onChange={(e) => updateCondition(gi, ci, { value: [e.target.value, String((cond.value as any[])?.[1] ?? "")] as any })} />
+                                    <span className="text-gray-400">–</span>
+                                    <Input className="h-7 w-20 text-xs" type="number" value={String((cond.value as any[])?.[1] ?? "")}
+                                      onChange={(e) => updateCondition(gi, ci, { value: [String((cond.value as any[])?.[0] ?? ""), e.target.value] as any })} />
+                                  </div>
+                                ) : (
+                                  <Input className="h-7 w-24 text-xs" type="number" value={String(cond.value ?? "")}
+                                    onChange={(e) => updateCondition(gi, ci, { value: e.target.value })} />
+                                )
+                              ) : (
+                                <div className="flex flex-wrap gap-1 max-w-md">
+                                  {distinctValues(cond.field).map(v => {
+                                    const selected = Array.isArray(cond.value) && (cond.value as string[]).includes(v)
+                                    return (
+                                      <button key={v} type="button"
+                                        className={`px-1.5 py-0.5 rounded-full text-[10px] border ${selected ? "bg-blue-100 border-blue-300 text-blue-700" : "bg-white border-gray-200 text-gray-500"}`}
+                                        onClick={() => {
+                                          const cur = Array.isArray(cond.value) ? (cond.value as string[]) : []
+                                          updateCondition(gi, ci, { value: selected ? cur.filter(x => x !== v) : [...cur, v] })
+                                        }}>{v}</button>
+                                    )
+                                  })}
+                                </div>
+                              )}
+                              <Button size="icon" variant="ghost" className="h-6 w-6 text-gray-400" onClick={() => removeCondition(gi, ci)}><X className="h-3 w-3" /></Button>
+                            </div>
+                          )
+                        })}
+                        <Button size="sm" variant="outline" className="h-6 text-[11px]" onClick={() => addCondition(gi)} disabled={filterableFields.length === 0}>
+                          <Plus className="h-3 w-3 mr-1" /> Add condition
+                        </Button>
+                      </div>
+                    ))}
+                    <Button size="sm" variant="outline" onClick={addRuleGroup}>
+                      <Plus className="h-4 w-4 mr-1" /> Add rule group {ruleGroups.length > 0 && "(OR)"}
+                    </Button>
+                  </div>
+
+                  {/* Save preset */}
+                  <div className="flex items-center gap-2">
+                    <Input className="h-7 w-44 text-xs" placeholder="Preset name…" value={presetName} onChange={(e) => setPresetName(e.target.value)} />
+                    <Button size="sm" variant="outline" className="h-7 text-xs" onClick={savePreset} disabled={!presetName.trim() || savingPreset}>
+                      {savingPreset ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Save className="h-3 w-3 mr-1" />} Save preset
+                    </Button>
+                  </div>
+
+                  {/* Live count */}
+                  <div className="rounded-md bg-blue-50 border border-blue-200 p-2 text-xs text-blue-800">
+                    <strong>{finalUploadRows.length}</strong> of {rawRows.length} rows will be uploaded.
+                  </div>
+
+                  {/* Conflict resolution */}
+                  {conflicts.length > 0 && (
+                    <div className="space-y-2">
+                      <h4 className="font-semibold text-sm flex items-center gap-1">
+                        <ShieldAlert className="h-4 w-4 text-amber-600" /> {conflicts.length} protected consumers in this upload
+                      </h4>
+                      <p className="text-xs text-gray-500">
+                        These already have a field/admin status. Choose <strong>Keep</strong> (protect existing) or
+                        <strong> Replace</strong> (overwrite with new list). Default is Keep. Expand to decide per consumer.
+                      </p>
+                      {Object.entries(conflictsByStatus).map(([status, list]) => {
+                        const decision = statusDecision(status)
+                        const expanded = !!expandedStatuses[status]
+                        return (
+                          <div key={status} className="border rounded-md">
+                            <div className="flex items-center gap-2 px-2 py-1.5 text-xs">
+                              <button onClick={() => setExpandedStatuses(s => ({ ...s, [status]: !expanded }))} className="text-gray-500">
+                                {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                              </button>
+                              <span className="flex-1 font-medium capitalize">{status} <span className="text-gray-400">({list.length})</span></span>
+                              <div className="flex gap-1">
+                                <button onClick={() => setStatusDecision(status, "keep")}
+                                  className={`px-2 py-0.5 rounded-full text-[10px] flex items-center gap-1 ${decision === "keep" ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
+                                  <ShieldCheck className="h-3 w-3" /> Keep
+                                </button>
+                                <button onClick={() => setStatusDecision(status, "replace")}
+                                  className={`px-2 py-0.5 rounded-full text-[10px] flex items-center gap-1 ${decision === "replace" ? "bg-red-100 text-red-700" : "bg-gray-100 text-gray-500"}`}>
+                                  <Upload className="h-3 w-3" /> Replace
+                                </button>
+                                {decision === "mixed" && <span className="text-[10px] text-amber-600 self-center">mixed</span>}
+                              </div>
+                            </div>
+                            {expanded && (
+                              <div className="border-t divide-y max-h-48 overflow-auto">
+                                {list.map(c => {
+                                  const d = conflictOverrides[c.consumerId] === "replace" ? "replace" : "keep"
+                                  return (
+                                    <div key={c.consumerId} className="flex items-center gap-2 px-2 py-1 text-[11px]">
+                                      <span className="font-mono text-gray-500 w-24 shrink-0">{c.consumerId}</span>
+                                      <span className="flex-1 truncate">{c.name}</span>
+                                      <div className="flex gap-1">
+                                        <button onClick={() => setConsumerDecision(c.consumerId, "keep")}
+                                          className={`px-1.5 py-0.5 rounded-full ${d === "keep" ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>Keep</button>
+                                        <button onClick={() => setConsumerDecision(c.consumerId, "replace")}
+                                          className={`px-1.5 py-0.5 rounded-full ${d === "replace" ? "bg-red-100 text-red-700" : "bg-gray-100 text-gray-500"}`}>Replace</button>
+                                      </div>
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+
+                  {/* Preview */}
+                  {finalUploadRows.length > 0 && (
+                    <>
+                      <h4 className="font-semibold text-sm">Preview (first 5 of {finalUploadRows.length})</h4>
+                      <div className="border rounded-md overflow-auto max-h-52">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              {expectedColumns.map(c => <TableHead key={c} className="text-[11px] px-2 py-1 whitespace-nowrap">{c}</TableHead>)}
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {finalUploadRows.slice(0, 5).map((row, i) => (
+                              <TableRow key={i}>
+                                {row.map((cell, j) => (
+                                  <TableCell key={j} className="text-[11px] px-2 py-1 max-w-[100px] truncate">{cell}</TableCell>
+                                ))}
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </>
+                  )}
+
+                  <Button className="w-full sm:w-auto" onClick={uploadToGoogleSheet} disabled={isUploading || finalUploadRows.length === 0}>
                     {isUploading
                       ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Uploading…</>
-                      : <><Upload className="h-4 w-4 mr-2" /> Sync {parsedData.length} rows to Sheet</>
-                    }
+                      : <><Upload className="h-4 w-4 mr-2" /> Sync {finalUploadRows.length} rows to Sheet</>}
                   </Button>
-                </>
+                </div>
               )}
 
               {dcUploadResult && (

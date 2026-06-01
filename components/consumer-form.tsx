@@ -10,7 +10,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
 import {
   ArrowLeft, Upload, Camera, MapPin, Power, Clock, CircleX, Check, RotateCcw,
-  Smartphone, IndianRupee, Box, Monitor, AlertCircle, Calendar, Loader2, History
+  Smartphone, IndianRupee, Box, Monitor, AlertCircle, Calendar, Loader2, History,
+  PlusCircle, PowerOff, Wallet, Footprints, Trash2, Image as ImageIcon
 } from "lucide-react"
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
@@ -47,6 +48,7 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
   const [historyEntries, setHistoryEntries] = useState<{
     timestamp: string; action: string; oldStatus: string; newStatus: string;
     oldOsd: string; oldNotes: string; oldImageUrl: string; changedBy: string;
+    amount?: string; eventDate?: string;
   }[]>([])
 
   const loadHistory = async () => {
@@ -58,6 +60,27 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
       if (resp.ok) setHistoryEntries(await resp.json())
     } catch { /* silent */ }
     finally { setHistoryLoading(false) }
+  }
+
+  // Normalize a stored image link the same way the consumer list does, so the
+  // "View Uploaded Image" link opens the Drive/share URL in a new tab.
+  const getValidUrl = (url: string | undefined) => {
+    if (!url) return "#"
+    const clean = url.trim()
+    if (clean.startsWith("http://") || clean.startsWith("https://")) return clean
+    return `https://${clean}`
+  }
+
+  // Map a history action to a friendly label, icon and accent colour.
+  const eventMeta = (h: { action: string; newStatus: string }) => {
+    const a = (h.action || "").toLowerCase()
+    const ns = (h.newStatus || "").toLowerCase()
+    if (a === "paid" || ns === "paid") return { label: "Paid", Icon: Wallet, color: "text-green-600", ring: "bg-green-100" }
+    if (a === "removed_from_upload") return { label: "Removed from list", Icon: Trash2, color: "text-red-600", ring: "bg-red-100" }
+    if (a.startsWith("in_new_list")) return { label: "Listed in cycle", Icon: PlusCircle, color: "text-blue-600", ring: "bg-blue-100" }
+    if (ns === "disconnected" || ns.includes("disconnect")) return { label: "Disconnected", Icon: PowerOff, color: "text-red-600", ring: "bg-red-100" }
+    if (ns === "visited" || ns === "not found") return { label: ns === "visited" ? "Visited" : "Not found", Icon: Footprints, color: "text-amber-600", ring: "bg-amber-100" }
+    return { label: (h.action || "Updated").replace(/_/g, " "), Icon: Clock, color: "text-gray-500", ring: "bg-gray-100" }
   }
   
   const videoRef = useRef<HTMLVideoElement | null>(null)
@@ -347,41 +370,62 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
             <p className="text-sm text-gray-400 py-6 text-center">No history recorded yet.</p>
           )}
           {!historyLoading && historyEntries.length > 0 && (
-            <div className="space-y-3 mt-2">
-              {historyEntries.map((h, i) => (
-                <div key={i} className="border rounded-lg p-3 space-y-2 bg-gray-50">
-                  <div className="flex items-center justify-between gap-2 flex-wrap">
-                    <span className="text-xs font-mono text-gray-500">{h.timestamp}</span>
-                    <div className="flex items-center gap-1.5">
-                      <Badge variant="outline" className="text-[10px]">{h.action.replace(/_/g," ")}</Badge>
-                      <span className="text-[10px] text-gray-400">by {h.changedBy}</span>
+            <div className="mt-2 relative pl-5">
+              {/* vertical timeline rail */}
+              <span className="absolute left-[9px] top-1 bottom-1 w-px bg-gray-200" aria-hidden />
+              <div className="space-y-3">
+                {historyEntries.map((h, i) => {
+                  const meta = eventMeta(h)
+                  const Icon = meta.Icon
+                  return (
+                    <div key={i} className="relative border rounded-lg p-3 space-y-2 bg-gray-50">
+                      {/* timeline node */}
+                      <span className={`absolute -left-[18px] top-3 h-5 w-5 rounded-full flex items-center justify-center ${meta.ring}`}>
+                        <Icon className={`h-3 w-3 ${meta.color}`} />
+                      </span>
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <span className={`text-xs font-semibold ${meta.color}`}>{meta.label}</span>
+                        <span className="text-[10px] font-mono text-gray-400">{h.timestamp}</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs flex-wrap">
+                        {h.oldStatus && (
+                          <span className="bg-red-100 text-red-700 px-2 py-0.5 rounded-full">{h.oldStatus}</span>
+                        )}
+                        {h.newStatus && h.newStatus !== h.oldStatus && (
+                          <>
+                            <span className="text-gray-400">→</span>
+                            <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded-full">{h.newStatus}</span>
+                          </>
+                        )}
+                        {h.amount && Number(h.amount) > 0 && (
+                          <span className="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-medium">₹{Number(h.amount).toLocaleString("en-IN")}</span>
+                        )}
+                        {h.oldOsd && (
+                          <span className="text-gray-500">OSD: ₹{Number(h.oldOsd).toLocaleString("en-IN")}</span>
+                        )}
+                        {h.eventDate && <span className="text-gray-400">on {h.eventDate}</span>}
+                      </div>
+                      {h.oldNotes && (
+                        <p className="text-xs text-gray-600 italic">Remarks: {h.oldNotes}</p>
+                      )}
+                      <div className="flex items-center justify-between">
+                        {h.oldImageUrl ? (
+                          <a
+                            href={getValidUrl(h.oldImageUrl)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center space-x-1.5 text-xs font-medium text-blue-600 hover:text-blue-800 hover:underline transition-colors cursor-pointer"
+                          >
+                            <ImageIcon className="h-3.5 w-3.5" />
+                            <span>View Uploaded Image</span>
+                          </a>
+                        ) : <span />}
+                        <span className="text-[10px] text-gray-400">by {h.changedBy}</span>
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex items-center gap-2 text-xs flex-wrap">
-                    {h.oldStatus && (
-                      <span className="bg-red-100 text-red-700 px-2 py-0.5 rounded-full">{h.oldStatus}</span>
-                    )}
-                    {h.newStatus && h.newStatus !== h.oldStatus && (
-                      <>
-                        <span className="text-gray-400">→</span>
-                        <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded-full">{h.newStatus}</span>
-                      </>
-                    )}
-                    {h.oldOsd && (
-                      <span className="text-gray-500">OSD: ₹{Number(h.oldOsd).toLocaleString("en-IN")}</span>
-                    )}
-                  </div>
-                  {h.oldNotes && (
-                    <p className="text-xs text-gray-600 italic">Remarks: {h.oldNotes}</p>
-                  )}
-                  {h.oldImageUrl && (
-                    <a href={h.oldImageUrl} target="_blank" rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline">
-                      View evidence image
-                    </a>
-                  )}
-                </div>
-              ))}
+                  )
+                })}
+              </div>
             </div>
           )}
         </DialogContent>

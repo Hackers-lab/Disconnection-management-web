@@ -649,6 +649,15 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
 
   const handleUpdateConsumer = async (updatedConsumer: ConsumerData) => {
     if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
+    // Capture the pre-edit state so the server can log an accurate old→new
+    // history entry without an extra sheet read.
+    const prev = consumers.find((c) => c.consumerId === updatedConsumer.consumerId)
+    const withPrev: any = {
+      ...updatedConsumer,
+      previousStatus: prev?.disconStatus ?? "",
+      previousOsd: prev?.d2NetOS ?? "",
+      previousNotes: prev?.notes ?? "",
+    }
     // 1. Optimistic Update: Mark as syncing and stamp a local-edit timestamp
     //    so a stale CDN-cached patch fetch can't overwrite this row.
     const syncingConsumer: ConsumerData = {
@@ -705,7 +714,7 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
       }
     };
 
-    attemptSync(updatedConsumer, 3);
+    attemptSync(withPrev, 3);
   }
 
   const clearFilters = () => {

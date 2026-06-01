@@ -6,23 +6,26 @@ const sheets = google.sheets({ version: "v4", auth })
 
 export const HISTORY_TAB = "DC_History"
 
-// Schema: Timestamp | ConsumerId | Name | Action | OldStatus | NewStatus | OldOSD | OldNotes | OldImageUrl | ChangedBy
+// Schema: Timestamp | ConsumerId | Name | Action | OldStatus | NewStatus | OldOSD | OldNotes | OldImageUrl | ChangedBy | Amount | EventDate
 export const HISTORY_HEADERS = [
   "Timestamp", "Consumer Id", "Name", "Action",
   "Old Status", "New Status", "Old OSD", "Old Notes", "Old Image URL", "Changed By",
+  "Amount", "Event Date",
 ]
 
 export interface HistoryEntry {
   timestamp: string
   consumerId: string
   name: string
-  action: string        // "status_changed" | "removed_from_upload" | "cycle_reset"
+  action: string        // "in_new_list" | "removed_from_upload" | "status_changed" | "paid" | ...
   oldStatus: string
   newStatus: string
   oldOsd: string
   oldNotes: string
   oldImageUrl: string
   changedBy: string
+  amount?: string       // payment amount (for "paid" events)
+  eventDate?: string    // date the event occurred (e.g. paid date, disconnect date)
 }
 
 // Warm-function in-memory cache. History reads are rare (user-triggered) but
@@ -37,16 +40,32 @@ export function invalidateHistoryCache() {
 
 async function ensureHistoryTab(spreadsheetId: string) {
   const meta = await sheets.spreadsheets.get({ spreadsheetId })
-  if (meta.data.sheets?.some(s => s.properties?.title === HISTORY_TAB)) return
-  await sheets.spreadsheets.batchUpdate({
-    spreadsheetId,
-    requestBody: { requests: [{ addSheet: { properties: { title: HISTORY_TAB } } }] },
+  const exists = meta.data.sheets?.some(s => s.properties?.title === HISTORY_TAB)
+  if (!exists) {
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId,
+      requestBody: { requests: [{ addSheet: { properties: { title: HISTORY_TAB } } }] },
+    })
+    await sheets.spreadsheets.values.update({
+      spreadsheetId, range: `${HISTORY_TAB}!A1`,
+      valueInputOption: "RAW",
+      requestBody: { values: [HISTORY_HEADERS] },
+    })
+    return
+  }
+  // Migration: if an existing tab still has the old 10-column header,
+  // rewrite row 1 to include the new Amount / Event Date columns.
+  const headerResp = await sheets.spreadsheets.values.get({
+    spreadsheetId, range: `${HISTORY_TAB}!A1:L1`,
   })
-  await sheets.spreadsheets.values.update({
-    spreadsheetId, range: `${HISTORY_TAB}!A1`,
-    valueInputOption: "RAW",
-    requestBody: { values: [HISTORY_HEADERS] },
-  })
+  const currentHeader = headerResp.data.values?.[0] || []
+  if (currentHeader.length < HISTORY_HEADERS.length) {
+    await sheets.spreadsheets.values.update({
+      spreadsheetId, range: `${HISTORY_TAB}!A1`,
+      valueInputOption: "RAW",
+      requestBody: { values: [HISTORY_HEADERS] },
+    })
+  }
 }
 
 async function fetchAllHistory(): Promise<HistoryEntry[]> {
@@ -54,7 +73,7 @@ async function fetchAllHistory(): Promise<HistoryEntry[]> {
   await ensureHistoryTab(id)
   const resp = await sheets.spreadsheets.values.get({
     spreadsheetId: id,
-    range: `${HISTORY_TAB}!A:J`,
+    range: `${HISTORY_TAB}!A:L`,
   })
   const rows = (resp.data.values || []).slice(1) // skip header
   return rows.map(r => ({
@@ -68,6 +87,8 @@ async function fetchAllHistory(): Promise<HistoryEntry[]> {
     oldNotes:    String(r[7] || ""),
     oldImageUrl: String(r[8] || ""),
     changedBy:   String(r[9] || ""),
+    amount:      String(r[10] || ""),
+    eventDate:   String(r[11] || ""),
   }))
 }
 
@@ -91,12 +112,13 @@ export async function appendHistory(entries: HistoryEntry[]): Promise<void> {
   await ensureHistoryTab(id)
   await sheets.spreadsheets.values.append({
     spreadsheetId: id,
-    range: `${HISTORY_TAB}!A:J`,
+    range: `${HISTORY_TAB}!A:L`,
     valueInputOption: "RAW",
     requestBody: {
       values: entries.map(e => [
         e.timestamp, e.consumerId, e.name, e.action,
         e.oldStatus, e.newStatus, e.oldOsd, e.oldNotes, e.oldImageUrl, e.changedBy,
+        e.amount ?? "", e.eventDate ?? "",
       ]),
     },
   })
