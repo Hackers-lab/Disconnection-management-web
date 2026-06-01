@@ -8,6 +8,7 @@ import { DashboardMenu } from "@/components/dashboard-menu"
 import { ConsumerList } from "@/components/consumer-list"
 import { AdminPanel } from "@/components/admin-panel"
 import { DDList } from "@/components/dd-list"
+import { AnalysisDashboard } from "@/components/analysis-dashboard"
 import { ConsumerData } from "@/lib/google-sheets"
 import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
@@ -951,6 +952,10 @@ export default function DashboardClient({ role, agencies }: DashboardClientProps
              <h3 className="text-xl font-medium">NSC Inspection</h3>
              <p className="mt-2">This feature is coming soon.</p>
            </div>
+        )}
+
+        {activeView === "analysis" && role === "admin" && (
+           <AnalysisDashboard userRole={role} />
         )}
 
         {activeView === "admin" && (

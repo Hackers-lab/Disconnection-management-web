@@ -1,13 +1,14 @@
 "use client"
 
-import { 
+import {
   Zap,             // For Disconnection
   RotateCcw,       // For Reconnection (Reissue)
   ClipboardCheck,  // For NSC Inspection
   LayoutDashboard, // For Dashboard
   Menu,
   Settings,
-  UserX
+  UserX,
+  BarChart3        // For Analysis
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from "@/components/ui/sheet"
@@ -16,7 +17,7 @@ import { getFromCache } from "@/lib/indexed-db"
 import { Badge } from "@/components/ui/badge"
 
 // Define the available views
-export type ViewType = "disconnection" | "reconnection" | "deemed" | "nsc" | "admin" | "home"
+export type ViewType = "disconnection" | "reconnection" | "deemed" | "nsc" | "admin" | "home" | "analysis"
 
 interface AppSidebarProps {
   activeView: ViewType
@@ -91,11 +92,17 @@ export function AppSidebar({ activeView, setActiveView, userRole, isMobile = fal
       icon: UserX, 
       allowedRoles: ["admin", "executive", "agency"]
     },
-    { 
-      id: "nsc", 
-      label: "NSC Visit", 
-      icon: ClipboardCheck, 
+    {
+      id: "nsc",
+      label: "NSC Visit",
+      icon: ClipboardCheck,
       allowedRoles: ["admin", "executive"] // Example roles
+    },
+    {
+      id: "analysis",
+      label: "Analysis",
+      icon: BarChart3,
+      allowedRoles: ["admin"]
     },
     // Only show Admin Panel button here if you want it in the menu
     {
