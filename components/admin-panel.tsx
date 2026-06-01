@@ -13,7 +13,8 @@ import { Badge } from "@/components/ui/badge"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Users, Building2, Upload, List, ArrowLeft, Trash2, Edit, Plus, X, Save, AlertCircle, CheckCircle2, Loader2 } from "lucide-react"
+import { Users, Building2, Upload, List, ArrowLeft, Trash2, Edit, Plus, X, Save, AlertCircle, CheckCircle2, Loader2, Eye, EyeOff, KeyRound } from "lucide-react"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { userStorage } from "@/lib/user-storage";
 
 interface AdminPanelProps {
@@ -239,6 +240,14 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
   const [showAddAgency, setShowAddAgency] = useState(false)
   const [editingUser, setEditingUser] = useState<User | null>(null)
   const [editingAgency, setEditingAgency] = useState<Agency | null>(null)
+  const [showNewPassword, setShowNewPassword] = useState(false)
+  const [showEditPassword, setShowEditPassword] = useState(false)
+  const [visiblePasswordId, setVisiblePasswordId] = useState<string | null>(null)
+  const [changingPasswordUser, setChangingPasswordUser] = useState<User | null>(null)
+  const [changePasswordValue, setChangePasswordValue] = useState("")
+  const [changePasswordConfirm, setChangePasswordConfirm] = useState("")
+  const [showChangePwdField, setShowChangePwdField] = useState(false)
+  const [showChangePwdConfirm, setShowChangePwdConfirm] = useState(false)
 
   const [newUser, setNewUser] = useState({
     username: "",
@@ -569,6 +578,20 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
     }
   }
 
+  const changePassword = async () => {
+    if (!changingPasswordUser || !changePasswordValue) return
+    if (changePasswordValue !== changePasswordConfirm) {
+      setMessage({ type: "error", text: "Passwords do not match" })
+      return
+    }
+    await updateUser({ ...changingPasswordUser, password: changePasswordValue })
+    setChangingPasswordUser(null)
+    setChangePasswordValue("")
+    setChangePasswordConfirm("")
+    setShowChangePwdField(false)
+    setShowChangePwdConfirm(false)
+  }
+
   // Delete user
   const deleteUser = async (id: string) => {
     if (!confirm("Are you sure you want to delete this user?")) return
@@ -765,13 +788,24 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="password">Password</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  value={newUser.password}
-                  onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
-                  placeholder="Enter password"
-                />
+                <div className="relative">
+                  <Input
+                    id="password"
+                    type={showNewPassword ? "text" : "password"}
+                    value={newUser.password}
+                    onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
+                    placeholder="Enter password"
+                    className="pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowNewPassword(!showNewPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    tabIndex={-1}
+                  >
+                    {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -857,13 +891,24 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
                       </div>
                       <div className="space-y-2">
                         <Label>Password</Label>
-                        <Input
-                          type="password"
-                          value={editingUser.password}
-                          onChange={(e) =>
-                            setEditingUser({ ...editingUser, password: e.target.value })
-                          }
-                        />
+                        <div className="relative">
+                          <Input
+                            type={showEditPassword ? "text" : "password"}
+                            value={editingUser.password}
+                            onChange={(e) =>
+                              setEditingUser({ ...editingUser, password: e.target.value })
+                            }
+                            className="pr-10"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowEditPassword(!showEditPassword)}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                            tabIndex={-1}
+                          >
+                            {showEditPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                          </button>
+                        </div>
                       </div>
                       <div className="space-y-2">
                         <Label>Role</Label>
@@ -939,8 +984,39 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
                           </div>
                         )}
                       </div>
+                      <div className="flex items-center gap-1 mt-1">
+                        <span className="text-xs text-gray-500 font-mono">
+                          {visiblePasswordId === user.id ? user.password : "••••••••"}
+                        </span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-5 w-5"
+                          onClick={() => setVisiblePasswordId(visiblePasswordId === user.id ? null : user.id)}
+                          title={visiblePasswordId === user.id ? "Hide password" : "Show password"}
+                        >
+                          {visiblePasswordId === user.id
+                            ? <EyeOff className="h-3 w-3 text-gray-400" />
+                            : <Eye className="h-3 w-3 text-gray-400" />}
+                        </Button>
+                      </div>
                     </div>
                     <div className="flex gap-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        title="Change Password"
+                        onClick={() => {
+                          setChangingPasswordUser({ ...user })
+                          setChangePasswordValue("")
+                          setChangePasswordConfirm("")
+                          setShowChangePwdField(false)
+                          setShowChangePwdConfirm(false)
+                        }}
+                      >
+                        <KeyRound className="h-4 w-4" />
+                      </Button>
                       <Button
                         variant="ghost"
                         size="sm"
@@ -1736,6 +1812,70 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
           </Card>
         </div>
       )}
+
+      {/* Change Password Dialog */}
+      <Dialog open={!!changingPasswordUser} onOpenChange={(open) => { if (!open) setChangingPasswordUser(null) }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Change Password — {changingPasswordUser?.username}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label>New Password</Label>
+              <div className="relative">
+                <Input
+                  type={showChangePwdField ? "text" : "password"}
+                  value={changePasswordValue}
+                  onChange={(e) => setChangePasswordValue(e.target.value)}
+                  placeholder="Enter new password"
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowChangePwdField(!showChangePwdField)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  tabIndex={-1}
+                >
+                  {showChangePwdField ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Confirm Password</Label>
+              <div className="relative">
+                <Input
+                  type={showChangePwdConfirm ? "text" : "password"}
+                  value={changePasswordConfirm}
+                  onChange={(e) => setChangePasswordConfirm(e.target.value)}
+                  placeholder="Confirm new password"
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowChangePwdConfirm(!showChangePwdConfirm)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  tabIndex={-1}
+                >
+                  {showChangePwdConfirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+            </div>
+            {changePasswordValue && changePasswordConfirm && changePasswordValue !== changePasswordConfirm && (
+              <p className="text-xs text-red-500">Passwords do not match</p>
+            )}
+          </div>
+          <DialogFooter className="flex gap-2">
+            <Button variant="outline" onClick={() => setChangingPasswordUser(null)}>Cancel</Button>
+            <Button
+              onClick={changePassword}
+              disabled={!changePasswordValue || !changePasswordConfirm || changePasswordValue !== changePasswordConfirm}
+            >
+              <Save className="h-4 w-4 mr-2" />
+              Save Password
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

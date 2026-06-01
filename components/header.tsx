@@ -2,23 +2,26 @@
 
 import { Button } from "@/components/ui/button"
 import { logout } from "@/app/actions/auth"
-import { 
-  Power, 
+import {
+  Power,
   HomeIcon,
-  User, 
-  Settings, 
-  Download, 
-  LogOut, 
-  List, 
-  Building2, 
-  Calendar, 
-  Clock, 
+  User,
+  Settings,
+  Download,
+  LogOut,
+  List,
+  Building2,
+  Calendar,
+  Clock,
   LayoutDashboard,
-  MoreVertical, // New Icon for Mobile Menu
+  MoreVertical,
   FileDown,
   RefreshCw,
   FileSpreadsheet,
-  FileText
+  FileText,
+  KeyRound,
+  Eye,
+  EyeOff
 } from "lucide-react"
 import { useState, useEffect } from "react"
 import {
@@ -26,6 +29,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogFooter,
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -115,6 +119,59 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
   const [reportAgency, setReportAgency] = useState<string>("All Agencies")
   const [availableAgencies, setAvailableAgencies] = useState<string[]>(["All Agencies"])
   const [cachedAgencyDescription, setCachedAgencyDescription] = useState<string | null>(null)
+  const [showChangePwdDialog, setShowChangePwdDialog] = useState(false)
+  const [changePwdCurrent, setChangePwdCurrent] = useState("")
+  const [changePwdNew, setChangePwdNew] = useState("")
+  const [changePwdConfirm, setChangePwdConfirm] = useState("")
+  const [showPwdCurrent, setShowPwdCurrent] = useState(false)
+  const [showPwdNew, setShowPwdNew] = useState(false)
+  const [showPwdConfirm, setShowPwdConfirm] = useState(false)
+  const [changePwdError, setChangePwdError] = useState<string | null>(null)
+  const [changePwdSuccess, setChangePwdSuccess] = useState(false)
+  const [changePwdLoading, setChangePwdLoading] = useState(false)
+
+  const openChangePwdDialog = () => {
+    setChangePwdCurrent("")
+    setChangePwdNew("")
+    setChangePwdConfirm("")
+    setShowPwdCurrent(false)
+    setShowPwdNew(false)
+    setShowPwdConfirm(false)
+    setChangePwdError(null)
+    setChangePwdSuccess(false)
+    setShowChangePwdDialog(true)
+  }
+
+  const handleChangePassword = async () => {
+    if (!changePwdCurrent || !changePwdNew || !changePwdConfirm) {
+      setChangePwdError("All fields are required")
+      return
+    }
+    if (changePwdNew !== changePwdConfirm) {
+      setChangePwdError("New passwords do not match")
+      return
+    }
+    setChangePwdLoading(true)
+    setChangePwdError(null)
+    try {
+      const res = await fetch("/api/user/change-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currentPassword: changePwdCurrent, newPassword: changePwdNew }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setChangePwdError(data.error || "Failed to change password")
+      } else {
+        setChangePwdSuccess(true)
+        setTimeout(() => setShowChangePwdDialog(false), 1500)
+      }
+    } catch {
+      setChangePwdError("Failed to change password")
+    } finally {
+      setChangePwdLoading(false)
+    }
+  }
 
   const isDisconnectionView = activeView === "disconnection";
   const isDDView = activeView === 'deemed';
@@ -982,6 +1039,15 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
               <Button
                 variant="ghost"
                 size="sm"
+                onClick={openChangePwdDialog}
+                title="Change Password"
+              >
+                <KeyRound className="h-4 w-4" />
+              </Button>
+
+              <Button
+                variant="ghost"
+                size="sm"
                 onClick={handleLogout}
                 title="Logout"
                 disabled={loggingOut}
@@ -1081,6 +1147,11 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
                     </>
                   )}
 
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={openChangePwdDialog}>
+                    <KeyRound className="mr-2 h-4 w-4" />
+                    <span>Change Password</span>
+                  </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={handleLogout} className="text-red-600 focus:text-red-600">
                     <LogOut className="mr-2 h-4 w-4" />
@@ -1225,6 +1296,105 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
           </div>
         </div>
       )}
+
+      {/* Change Password Dialog — available to all roles */}
+      <Dialog open={showChangePwdDialog} onOpenChange={(open) => { if (!open) setShowChangePwdDialog(false) }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <KeyRound className="h-5 w-5" />
+              Change Password
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            {changePwdSuccess ? (
+              <p className="text-sm text-green-600 font-medium text-center py-4">Password changed successfully!</p>
+            ) : (
+              <>
+                <div className="space-y-2">
+                  <Label>Current Password</Label>
+                  <div className="relative">
+                    <Input
+                      type={showPwdCurrent ? "text" : "password"}
+                      value={changePwdCurrent}
+                      onChange={(e) => setChangePwdCurrent(e.target.value)}
+                      placeholder="Enter current password"
+                      className="pr-10"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPwdCurrent(!showPwdCurrent)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      tabIndex={-1}
+                    >
+                      {showPwdCurrent ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>New Password</Label>
+                  <div className="relative">
+                    <Input
+                      type={showPwdNew ? "text" : "password"}
+                      value={changePwdNew}
+                      onChange={(e) => setChangePwdNew(e.target.value)}
+                      placeholder="Enter new password"
+                      className="pr-10"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPwdNew(!showPwdNew)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      tabIndex={-1}
+                    >
+                      {showPwdNew ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Confirm New Password</Label>
+                  <div className="relative">
+                    <Input
+                      type={showPwdConfirm ? "text" : "password"}
+                      value={changePwdConfirm}
+                      onChange={(e) => setChangePwdConfirm(e.target.value)}
+                      placeholder="Confirm new password"
+                      className="pr-10"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPwdConfirm(!showPwdConfirm)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      tabIndex={-1}
+                    >
+                      {showPwdConfirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                </div>
+                {changePwdNew && changePwdConfirm && changePwdNew !== changePwdConfirm && (
+                  <p className="text-xs text-red-500">Passwords do not match</p>
+                )}
+                {changePwdError && (
+                  <p className="text-xs text-red-500">{changePwdError}</p>
+                )}
+              </>
+            )}
+          </div>
+          {!changePwdSuccess && (
+            <DialogFooter className="flex gap-2">
+              <Button variant="outline" onClick={() => setShowChangePwdDialog(false)} disabled={changePwdLoading}>
+                Cancel
+              </Button>
+              <Button
+                onClick={handleChangePassword}
+                disabled={changePwdLoading || !changePwdCurrent || !changePwdNew || !changePwdConfirm || changePwdNew !== changePwdConfirm}
+              >
+                {changePwdLoading ? "Saving..." : "Save Password"}
+              </Button>
+            </DialogFooter>
+          )}
+        </DialogContent>
+      </Dialog>
     </header>
   )
 }

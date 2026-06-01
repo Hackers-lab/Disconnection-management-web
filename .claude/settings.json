@@ -1,7 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Bash(node -e ' *)"
+      "Bash(node -e ' *)",
+      "Bash(head -5 \"data/K4_9_05.08.2025.csv\")",
+      "Bash(wc -l \"data/K4_9_05.08.2025.csv\")"
     ]
   }
 }

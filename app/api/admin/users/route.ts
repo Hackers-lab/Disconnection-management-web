@@ -11,12 +11,7 @@ export async function GET() {
   }
 
   const users = await userStorage.getUsers()
-  // Return users with masked passwords for security
-  const safeUsers = users.map((user) => ({
-    ...user,
-    password: "••••••••",
-  }))
-  return NextResponse.json(safeUsers)
+  return NextResponse.json(users)
 }
 
 // POST - Add new user
@@ -81,10 +76,9 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: "Username already exists" }, { status: 400 })
     }
 
-    // Update user - keep original password if masked password is sent
     const updatedUser = await userStorage.updateUser(id, {
       username,
-      password: password === "••••••••" ? existingUser.password : password,
+      password: password || existingUser.password,
       role,
       agencies: agencies || [],
     })
