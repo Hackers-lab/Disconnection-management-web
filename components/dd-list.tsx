@@ -6,9 +6,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
-import { Search, MapPin, Phone, IndianRupee, RefreshCw, AlertCircle, X, Filter, CheckCircle2, Power, Clock, HelpCircle, Edit, LayoutGrid, List, ChevronLeft, ChevronRight, Calendar as CalendarIcon, UserX, Image as ImageIcon, Check, Loader2, DownloadCloud, Activity } from "lucide-react"
+import {
+  Search, MapPin, Phone, IndianRupee, RefreshCw, AlertCircle, X, Filter,
+  CheckCircle2, Power, Clock, HelpCircle, Edit, LayoutGrid, List,
+  ChevronLeft, ChevronRight, Calendar as CalendarIcon, UserX, Image as ImageIcon,
+  Check, Loader2, DownloadCloud, Activity,
+} from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { getFromCache, saveToCache } from "@/lib/indexed-db"
+import { getFromCache, saveToCache, clearAllCache } from "@/lib/indexed-db"
 import type { DeemedVisitData } from "@/lib/dd-service"
 import { DDStats } from "./dd-stats"
 import { DDForm } from "./dd-form"
@@ -25,29 +30,18 @@ import { useToast } from "@/components/ui/use-toast"
 
 function useBackNavigation(isOpen: boolean, onClose: () => void) {
   const onCloseRef = useRef(onClose)
-  useEffect(() => {
-    onCloseRef.current = onClose
-  }, [onClose])
-
+  useEffect(() => { onCloseRef.current = onClose }, [onClose])
   const isBackRef = useRef(false)
 
   useEffect(() => {
     if (isOpen) {
       isBackRef.current = false
       window.history.pushState(null, "", window.location.href)
-
-      const onPopState = () => {
-        isBackRef.current = true
-        onCloseRef.current()
-      }
-
+      const onPopState = () => { isBackRef.current = true; onCloseRef.current() }
       window.addEventListener("popstate", onPopState)
-
       return () => {
         window.removeEventListener("popstate", onPopState)
-        if (!isBackRef.current) {
-          window.history.back()
-        }
+        if (!isBackRef.current) window.history.back()
       }
     }
   }, [isOpen])
@@ -71,17 +65,13 @@ export function DDList({ userRole, userAgencies }: DDListProps) {
   const [currentPage, setCurrentPage] = useState(1)
   const [selectedConsumer, setSelectedConsumer] = useState<DeemedVisitData | null>(null)
   const [baseClasses, setBaseClasses] = useState<string[]>([])
+  const [refreshKey, setRefreshKey] = useState(0)
   const [dateFilter, setDateFilter] = useState<{
     from: Date | null
     to: Date | null
     isActive: boolean
-  }>({
-    from: null,
-    to: null,
-    isActive: false
-  })
-  
-  // Filters
+  }>({ from: null, to: null, isActive: false })
+
   const [filters, setFilters] = useState({
     agency: "All Agencies",
     status: "All Status",
@@ -90,155 +80,154 @@ export function DDList({ userRole, userAgencies }: DDListProps) {
 
   const consumersRef = useRef<DeemedVisitData[]>([])
 
-  // Back Navigation Hooks
   useBackNavigation(isFilterOpen, () => setIsFilterOpen(false))
   useBackNavigation(!!selectedConsumer, () => setSelectedConsumer(null))
 
-  // --- Data Loading Logic (Isolated from ConsumerList) ---
+  // Persist view mode preference
+  useEffect(() => {
+    const saved = localStorage.getItem("ddListViewMode") as "card" | "list"
+    if (saved === "card" || saved === "list") setViewMode(saved)
+  }, [])
+
+  // --- Data Loading ---
   useEffect(() => {
     const CACHE_KEY = "dd_data_cache"
     const BASE_DATE_KEY = "dd_base_date"
     const ROW_COUNT_KEY = "dd_row_count"
+    const VERSION_KEY = "dd_version_hash"
 
     async function loadData() {
       let finalStatus = 'idle'
+      setError(null)
       try {
-        // 1. Instant Load (Cache)
+        // 1. Instant cache hit
         const cachedData = await getFromCache<DeemedVisitData[]>(CACHE_KEY)
         if (cachedData && cachedData.length > 0) {
           setConsumers(cachedData)
-          // Extract unique base classes
-          const uniqueBaseClasses = Array.from(
-            new Set(
-              cachedData
-                .map(c => (c.baseClass || "").toUpperCase().trim())
-                .filter(bc => bc !== "")
-            )
-          ).sort()
-          setBaseClasses(uniqueBaseClasses)
           consumersRef.current = cachedData
+          setBaseClasses(extractBaseClasses(cachedData))
           setLoading(false)
         }
 
-        // 2. Background Sync
+        // 2. Check server version
         setSyncStatus('checking')
-        
-        // Fetch Server Row Count
         const countRes = await fetch("/api/system/row-count?type=dd")
         if (!countRes.ok) throw new Error(`Row count fetch failed: ${countRes.status}`)
-        
-        const countData = await countRes.json().catch(() => ({ count: 0 }))
+
+        const countData = await countRes.json().catch(() => ({ count: 0, version: null }))
         const serverCount = countData?.count ?? 0
+        const serverVersion = countData?.version ?? null
         const localCount = parseInt(localStorage.getItem(ROW_COUNT_KEY) || "0")
+        const localVersion = localStorage.getItem(VERSION_KEY) || null
 
-        if (serverCount !== localCount) {
-          setSyncStatus('found')
-          await new Promise(resolve => setTimeout(resolve, 800)) // UX Delay to show "Update Found"
-          console.log("Row count changed. Fetching fresh Base...")
+        const isCacheEmpty = !cachedData || cachedData.length === 0
+        const isMismatch = serverCount !== localCount || serverVersion !== localVersion
+
+        if (isCacheEmpty || isMismatch) {
+          if (isMismatch) setSyncStatus('found')
           setSyncStatus('syncing')
-          const res = await fetch(`/api/dd/base?t=${Date.now()}`)
+
+          const res = await fetch(`/api/dd/base?t=${serverCount}`)
           if (!res.ok) throw new Error("Failed to fetch base data")
-          const baseData = await res.json().catch(() => [])
+          const baseData: DeemedVisitData[] = await res.json().catch(() => [])
 
-          await saveToCache(CACHE_KEY, baseData)
-          await saveToCache(BASE_DATE_KEY, new Date().toISOString().split("T")[0])
-          localStorage.setItem(ROW_COUNT_KEY, serverCount.toString())
-
-          // MERGE LOGIC: Preserve local edits (syncing/error) when new base arrives
-          const mergedBase = baseData.map((newC: DeemedVisitData) => {
+          // Preserve local edits (syncing/error + 30s stale-write window)
+          const LOCAL_WIN_MS = 30_000
+          const now = Date.now()
+          const merged = baseData.map(newC => {
             const existing = consumersRef.current.find(c => c.consumerId === newC.consumerId)
-            if (existing && (existing._syncStatus === 'syncing' || existing._syncStatus === 'error')) {
-              return existing
-            }
+            if (!existing) return newC
+            const recentLocal = existing._localEditedAt && now - existing._localEditedAt < LOCAL_WIN_MS
+            if (existing._syncStatus === 'syncing' || existing._syncStatus === 'error' || recentLocal) return existing
             return newC
           })
 
-          setConsumers(mergedBase)
-          consumersRef.current = mergedBase
-          
-          // Re-calc classes
-          const uniqueBaseClasses = Array.from(new Set(mergedBase.map((c: any) => (c.baseClass || "").toUpperCase().trim()).filter((bc: any) => bc !== ""))).sort()
-          setBaseClasses(uniqueBaseClasses as string[])
+          await saveToCache(CACHE_KEY, merged)
+          await saveToCache(BASE_DATE_KEY, new Date().toISOString().split("T")[0])
+          localStorage.setItem(ROW_COUNT_KEY, serverCount.toString())
+          if (serverVersion) localStorage.setItem(VERSION_KEY, serverVersion)
 
+          setConsumers(merged)
+          consumersRef.current = merged
+          setBaseClasses(extractBaseClasses(merged))
           setSyncStatus('updated')
           finalStatus = 'updated'
         } else {
-          console.log("Row count matches. Checking for patches...")
+          // 3. Counts match — check for recent patches
           const patchRes = await fetch("/api/dd/patch")
           if (patchRes.ok) {
             const patchData: DeemedVisitData[] = await patchRes.json().catch(() => [])
             if (patchData.length > 0) {
               setSyncStatus('syncing')
-              setConsumers(prev => {
-                const dataMap = new Map(prev.map(c => [c.consumerId, c]))
-                patchData.forEach(p => dataMap.set(p.consumerId, p))
-                const merged = Array.from(dataMap.values())
-                saveToCache(CACHE_KEY, merged)
-                consumersRef.current = merged
-                return merged
+              const LOCAL_WIN_MS = 30_000
+              const now = Date.now()
+              const current = consumersRef.current.length > 0 ? consumersRef.current : (cachedData || [])
+              const dataMap = new Map(current.map(c => [c.consumerId, c]))
+              patchData.forEach(p => {
+                const existing = dataMap.get(p.consumerId)
+                const recentLocal = existing?._localEditedAt && now - existing._localEditedAt < LOCAL_WIN_MS
+                if (recentLocal || existing?._syncStatus === 'syncing' || existing?._syncStatus === 'error') return
+                dataMap.set(p.consumerId, p)
               })
+              const merged = Array.from(dataMap.values())
+              await saveToCache(CACHE_KEY, merged)
+              setConsumers(merged)
+              consumersRef.current = merged
               setSyncStatus('updated')
               finalStatus = 'updated'
             }
           }
         }
-
       } catch (err) {
         console.error(err)
         if (consumersRef.current.length === 0) setError("Failed to load Deemed Visit data")
       } finally {
-        if (finalStatus !== 'updated') {
-           setTimeout(() => setSyncStatus('idle'), 2000)
-        } else {
-           setTimeout(() => setSyncStatus('idle'), 4000)
-        }
         setLoading(false)
+        if (finalStatus !== 'updated') {
+          setTimeout(() => setSyncStatus('idle'), 2000)
+        } else {
+          setTimeout(() => setSyncStatus('idle'), 4000)
+        }
       }
     }
 
     loadData()
-  }, [])
+  }, [refreshKey])
 
-  // --- Filtering Logic (Updated) ---
+  function extractBaseClasses(data: DeemedVisitData[]) {
+    return Array.from(new Set(data.map(c => (c.baseClass || "").toUpperCase().trim()).filter(Boolean))).sort()
+  }
+
+  // --- Filtering ---
   const filteredConsumers = useMemo(() => {
     return consumers.filter(c => {
-      // Role Filter
       if (userRole !== "admin" && userRole !== "viewer") {
         const myAgencies = userAgencies.map(a => a.toUpperCase())
-        const cAgency = (c.agency || "").toUpperCase()
-        if (!myAgencies.includes(cAgency)) return false
+        if (!myAgencies.includes((c.agency || "").toUpperCase())) return false
       }
 
-      // Search
       const searchLower = searchTerm.toLowerCase()
-      const matchesSearch = !searchTerm || 
+      const matchesSearch = !searchTerm ||
         c.name.toLowerCase().includes(searchLower) ||
         c.consumerId.toLowerCase().includes(searchLower) ||
         c.address.toLowerCase().includes(searchLower) ||
         (c.agency || "").toLowerCase().includes(searchLower)
 
-      // Dropdown Filters
       const matchesAgency = filters.agency === "All Agencies" || c.agency === filters.agency
       const matchesStatus = filters.status === "All Status" || c.disconStatus === filters.status
       const matchesBaseClass = filters.baseClass === "All Classes" || (c.baseClass || "").toUpperCase() === filters.baseClass.toUpperCase()
 
-      // Date Filter
       const matchesDate = !dateFilter.isActive || (() => {
         if (!c.disconDate) return false
-        // Normalize date formats
         let dateStr = c.disconDate
         if (dateStr.match(/^\d{2}-\d{2}-\d{4}$/)) {
-           const [d, m, y] = dateStr.split("-")
-           dateStr = `${y}-${m}-${d}`
+          const [d, m, y] = dateStr.split("-")
+          dateStr = `${y}-${m}-${d}`
         }
         const d = new Date(dateStr)
         if (isNaN(d.getTime())) return false
-        
-        const from = dateFilter.from
-        const to = dateFilter.to
-        
-        if (from && d < from) return false
-        if (to && d > to) return false
+        if (dateFilter.from && d < dateFilter.from) return false
+        if (dateFilter.to && d > dateFilter.to) return false
         return true
       })()
 
@@ -246,98 +235,88 @@ export function DDList({ userRole, userAgencies }: DDListProps) {
     })
   }, [consumers, searchTerm, filters, userRole, userAgencies, dateFilter])
 
-  // --- Unique Values for Dropdowns ---
-  const uniqueAgencies = useMemo(() => 
-    Array.from(new Set(consumers.map(c => c.agency).filter(Boolean))).sort(), 
+  const uniqueAgencies = useMemo(() =>
+    Array.from(new Set(consumers.map(c => c.agency).filter(Boolean))).sort(),
   [consumers])
 
-  const uniqueStatuses = useMemo(() => 
-    Array.from(new Set(consumers.map(c => c.disconStatus).filter(Boolean))).sort(), 
+  const uniqueStatuses = useMemo(() =>
+    Array.from(new Set(consumers.map(c => c.disconStatus).filter(Boolean))).sort(),
   [consumers])
 
-  // --- Helpers ---
   const getStatusColor = (status: string) => {
     const s = (status || "").toLowerCase()
     if (s === "deemed disconnected") return "bg-red-100 text-red-800"
-    
     if (s === "connected (meter running)" || s === "physically live") return "bg-yellow-100 text-yellow-800"
     if (s === "disconnected (using neighbor source)" || s.includes("enjoying power")) return "bg-orange-100 text-orange-800"
     if (s === "permanently disconnected" || s === "disconnected") return "bg-green-100 text-green-800"
     if (s === "premises locked") return "bg-blue-100 text-blue-800"
     if (s === "consumer not found" || s === "not found") return "bg-gray-100 text-gray-800"
-    
     return "bg-blue-50 text-blue-800"
   }
 
-  // --- Pagination ---
   const itemsPerPage = viewMode === "list" ? 100 : 12
   const totalPages = Math.ceil(filteredConsumers.length / itemsPerPage)
   const paginatedConsumers = filteredConsumers.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
 
-  useEffect(() => { setCurrentPage(1) }, [filters, searchTerm])
+  useEffect(() => { setCurrentPage(1) }, [filters, searchTerm, viewMode])
 
-  // --- Agency Locking Logic ---
   const isRowLocked = (consumer: DeemedVisitData) => {
-    // Admin can always edit
     if (userRole === "admin" || userRole === "executive") return false
-    
-    // Agency can ONLY edit if status is "Deemed Disconnected"
-    // Strict Rule: If status is NOT "Deemed Disconnected", hide/disable update
-    if ((consumer.disconStatus || "Deemed Disconnected").toLowerCase() !== "deemed disconnected") return true
-    
-    return false
+    return (consumer.disconStatus || "").trim().toLowerCase() !== "deemed disconnected"
   }
 
-  // Helper to ensure links work even if "https://" is missing
   const getValidUrl = (url: string | undefined) => {
-    if (!url) return "#";
-    const cleanUrl = url.trim();
-    if (cleanUrl.startsWith("http://") || cleanUrl.startsWith("https://")) {
-      return cleanUrl;
-    }
-    return `https://${cleanUrl}`;
-  };
+    if (!url) return "#"
+    const clean = url.trim()
+    return clean.startsWith("http://") || clean.startsWith("https://") ? clean : `https://${clean}`
+  }
 
   const handleUpdateConsumer = async (updatedConsumer: DeemedVisitData) => {
     if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
-    // Optimistic Update
-    const syncingConsumer = { ...updatedConsumer, _syncStatus: 'syncing' as const }
+
+    const syncingConsumer: DeemedVisitData = {
+      ...updatedConsumer,
+      _syncStatus: 'syncing',
+      _localEditedAt: Date.now(),
+    }
 
     setConsumers(prev => {
       const next = prev.map(c => c.consumerId === updatedConsumer.consumerId ? syncingConsumer : c)
       saveToCache("dd_data_cache", next)
+      consumersRef.current = next
       return next
     })
     setSelectedConsumer(null)
 
-    // Background Sync with Retry Logic (3 Attempts)
     const attemptSync = async (data: DeemedVisitData, retriesLeft: number) => {
       try {
         const res = await fetch("/api/dd/update", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(data)
+          body: JSON.stringify(data),
         })
-        
         if (!res.ok) throw new Error("Update failed")
-        
-        // Success: Clear sync status
+
+        const saved: DeemedVisitData = { ...data, _syncStatus: undefined, _localEditedAt: Date.now() }
         setConsumers(prev => {
-          const next = prev.map(c => c.consumerId === data.consumerId ? { ...data, _syncStatus: undefined } : c)
+          const next = prev.map(c => c.consumerId === data.consumerId ? saved : c)
           saveToCache("dd_data_cache", next)
+          consumersRef.current = next
           return next
         })
+        toast({ title: "Saved", description: "Record updated successfully." })
       } catch (e) {
         if (retriesLeft > 0) {
-          console.warn(`Sync failed for ${data.consumerId}. Retrying in 5s...`)
           setTimeout(() => attemptSync(data, retriesLeft - 1), 5000)
         } else {
-          // Permanent Failure: Mark as error
+          const errConsumer: DeemedVisitData = { ...data, _syncStatus: 'error' }
           setConsumers(prev => {
-            const next = prev.map(c => c.consumerId === data.consumerId ? { ...data, _syncStatus: 'error' as const } : c)
+            const next = prev.map(c => c.consumerId === data.consumerId ? errConsumer : c)
             saveToCache("dd_data_cache", next)
+            consumersRef.current = next
             return next
           })
+          toast({ title: "Sync Failed", description: "Saved locally. Will retry on next load.", variant: "destructive" })
         }
       }
     }
@@ -345,12 +324,21 @@ export function DDList({ userRole, userAgencies }: DDListProps) {
     attemptSync(updatedConsumer, 3)
   }
 
+  const handleManualRefresh = async () => {
+    if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
+    await clearAllCache()
+    localStorage.removeItem("dd_row_count")
+    localStorage.removeItem("dd_version_hash")
+    setLoading(true)
+    setRefreshKey(k => k + 1)
+  }
+
   if (loading && consumers.length === 0) {
     return (
       <div className="space-y-6">
         <DDStats consumers={[]} loading={true} />
         <div className="flex justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-600"></div>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-600" />
         </div>
       </div>
     )
@@ -388,7 +376,7 @@ export function DDList({ userRole, userAgencies }: DDListProps) {
             <Input
               placeholder="Search Deemed Visits..."
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={e => setSearchTerm(e.target.value)}
               className="pl-10 pr-8"
             />
             {searchTerm && (
@@ -399,6 +387,7 @@ export function DDList({ userRole, userAgencies }: DDListProps) {
             )}
           </div>
 
+          {/* Filter Sheet */}
           <Sheet open={isFilterOpen} onOpenChange={setIsFilterOpen}>
             <SheetTrigger asChild>
               <Button variant="outline" size="icon">
@@ -413,38 +402,27 @@ export function DDList({ userRole, userAgencies }: DDListProps) {
               <div className="space-y-4 mt-6">
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Agency</label>
-                  <Select 
-                    value={filters.agency} 
-                    onValueChange={(v) => setFilters(prev => ({ ...prev, agency: v }))}
-                  >
+                  <Select value={filters.agency} onValueChange={v => setFilters(p => ({ ...p, agency: v }))}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="All Agencies">All Agencies</SelectItem>
-                      {uniqueAgencies.map(a => <SelectItem key={a} value={a}>{a}</SelectItem>)}
+                      {uniqueAgencies.map(a => <SelectItem key={a} value={a!}>{a}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Status</label>
-                  <Select 
-                    value={filters.status} 
-                    onValueChange={(v) => setFilters(prev => ({ ...prev, status: v }))}
-                  >
+                  <Select value={filters.status} onValueChange={v => setFilters(p => ({ ...p, status: v }))}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="All Status">All Status</SelectItem>
-                      {uniqueStatuses.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                      {uniqueStatuses.map(s => <SelectItem key={s} value={s!}>{s}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
-                
-                {/* Base Class Filter */}
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Base Class</label>
-                  <Select 
-                    value={filters.baseClass} 
-                    onValueChange={(v) => setFilters(prev => ({ ...prev, baseClass: v }))}
-                  >
+                  <Select value={filters.baseClass} onValueChange={v => setFilters(p => ({ ...p, baseClass: v }))}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="All Classes">All Classes</SelectItem>
@@ -452,8 +430,6 @@ export function DDList({ userRole, userAgencies }: DDListProps) {
                     </SelectContent>
                   </Select>
                 </div>
-
-                {/* Date Filter */}
                 <div className="space-y-3">
                   <label className="text-sm font-medium">Disconnection Date</label>
                   <div className="grid grid-cols-2 gap-2">
@@ -462,7 +438,7 @@ export function DDList({ userRole, userAgencies }: DDListProps) {
                       <Input
                         type="date"
                         value={dateFilter.from ? format(dateFilter.from, 'yyyy-MM-dd') : ''}
-                        onChange={(e) => setDateFilter(prev => ({ ...prev, from: e.target.value ? new Date(e.target.value) : null, isActive: true }))}
+                        onChange={e => setDateFilter(p => ({ ...p, from: e.target.value ? new Date(e.target.value) : null, isActive: true }))}
                         className="h-8"
                       />
                     </div>
@@ -471,67 +447,52 @@ export function DDList({ userRole, userAgencies }: DDListProps) {
                       <Input
                         type="date"
                         value={dateFilter.to ? format(dateFilter.to, 'yyyy-MM-dd') : ''}
-                        onChange={(e) => setDateFilter(prev => ({ ...prev, to: e.target.value ? new Date(e.target.value) : null, isActive: true }))}
+                        onChange={e => setDateFilter(p => ({ ...p, to: e.target.value ? new Date(e.target.value) : null, isActive: true }))}
                         className="h-8"
                       />
                     </div>
                   </div>
                   <div className="flex justify-end">
-                    <Button 
-                      size="sm" 
-                      variant="outline" 
-                      className="h-7 text-xs" 
-                      onClick={() => {
-                        setDateFilter({
-                          from: null,
-                          to: null,
-                          isActive: false
-                        });
-                      }}
-                    >
+                    <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setDateFilter({ from: null, to: null, isActive: false })}>
                       Clear Date
                     </Button>
                   </div>
                 </div>
-
-                <Button 
-                  variant="destructive" 
-                  className="w-full"
-                  onClick={() => {
-                    setFilters({ agency: "All Agencies", status: "All Status", baseClass: "All Classes" })
-                    setDateFilter({ from: null, to: null, isActive: false })
-                  }}
-                >
+                <Button variant="destructive" className="w-full" onClick={() => { setFilters({ agency: "All Agencies", status: "All Status", baseClass: "All Classes" }); setDateFilter({ from: null, to: null, isActive: false }) }}>
                   Clear Filters
                 </Button>
               </div>
             </SheetContent>
           </Sheet>
 
+          {/* View mode toggle */}
           <div className="flex items-center border rounded-md bg-white ml-2 shrink-0">
             <Button
-              variant="ghost"
-              size="icon"
+              variant="ghost" size="icon"
               className={`h-9 w-9 rounded-none rounded-l-md ${viewMode === "card" ? "bg-gray-100 text-blue-600" : "text-gray-500"}`}
-              onClick={() => setViewMode("card")}
+              onClick={() => { setViewMode("card"); localStorage.setItem("ddListViewMode", "card") }}
             >
               <LayoutGrid className="h-4 w-4" />
             </Button>
             <div className="w-px h-5 bg-gray-200" />
             <Button
-              variant="ghost"
-              size="icon"
+              variant="ghost" size="icon"
               className={`h-9 w-9 rounded-none rounded-r-md ${viewMode === "list" ? "bg-gray-100 text-blue-600" : "text-gray-500"}`}
-              onClick={() => setViewMode("list")}
+              onClick={() => { setViewMode("list"); localStorage.setItem("ddListViewMode", "list") }}
             >
               <List className="h-4 w-4" />
             </Button>
           </div>
+
+          {/* Refresh button */}
+          <Button variant="ghost" size="icon" onClick={handleManualRefresh} title="Force refresh">
+            <RefreshCw className="h-4 w-4 text-gray-500" />
+          </Button>
         </div>
+
         <div className="mt-2 flex justify-start items-center gap-4 text-xs text-gray-500">
           <span>{filteredConsumers.length} records found</span>
-          
-          {/* Live Status Indicator */}
+
           {syncStatus === 'checking' ? (
             <div className="flex items-center gap-1 text-yellow-600 font-medium animate-pulse">
               <Loader2 className="h-3 w-3 animate-spin" />
@@ -560,11 +521,16 @@ export function DDList({ userRole, userAgencies }: DDListProps) {
         </div>
       </div>
 
-      {/* List View */}
+      {/* Card View */}
       {viewMode === "card" ? (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {paginatedConsumers.map((consumer) => (
-            <Card key={consumer.consumerId} className="hover:shadow-md transition-shadow overflow-hidden max-w-full">
+          {paginatedConsumers.map(consumer => (
+            <Card
+              key={consumer.consumerId}
+              className={`hover:shadow-md transition-shadow overflow-hidden max-w-full ${
+                consumer._syncStatus === 'error' ? "border-red-400 border-2" : ""
+              }`}
+            >
               <CardHeader className="pb-3">
                 <div className="flex justify-between items-start">
                   <div>
@@ -577,10 +543,16 @@ export function DDList({ userRole, userAgencies }: DDListProps) {
                     ) : null}
                   </div>
                   <div className="flex flex-col items-end gap-1">
-                    <Badge className={getStatusColor(consumer.disconStatus)}>
-                      {consumer.disconStatus}
-                    </Badge>
-                    <Badge variant="outline" className="text-xs">{consumer.agency}</Badge>
+                    <div className="flex items-center gap-1">
+                      {consumer._syncStatus === 'syncing' && (
+                        <RefreshCw className="h-3 w-3 animate-spin text-blue-500" title="Syncing..." />
+                      )}
+                      {consumer._syncStatus === 'error' && (
+                        <AlertCircle className="h-3 w-3 text-red-500" title="Sync failed — saved locally" />
+                      )}
+                      <Badge className={getStatusColor(consumer.disconStatus)}>{consumer.disconStatus}</Badge>
+                    </div>
+                    <Badge variant="outline" className="text-xs max-w-[120px] truncate block">{consumer.agency}</Badge>
                   </div>
                 </div>
               </CardHeader>
@@ -589,7 +561,7 @@ export function DDList({ userRole, userAgencies }: DDListProps) {
                   <MapPin className="h-4 w-4 text-gray-400 mt-0.5 shrink-0" />
                   <p className="text-sm text-gray-600 line-clamp-2">{consumer.address}</p>
                 </div>
-                
+
                 {consumer.mobileNumber && (
                   <div className="flex items-center gap-2">
                     <Phone className="h-4 w-4 text-gray-400" />
@@ -602,9 +574,7 @@ export function DDList({ userRole, userAgencies }: DDListProps) {
                 <div className="flex items-center gap-2">
                   <IndianRupee className="h-4 w-4 text-gray-400" />
                   <div>
-                    <p className="text-sm font-medium text-red-600">
-                      ₹{Number(consumer.totalArrears || 0).toLocaleString()}
-                    </p>
+                    <p className="text-sm font-medium text-red-600">₹{Number(consumer.totalArrears || 0).toLocaleString()}</p>
                     <p className="text-xs text-gray-500">Outstanding Dues</p>
                   </div>
                 </div>
@@ -640,7 +610,7 @@ export function DDList({ userRole, userAgencies }: DDListProps) {
                       target="_blank"
                       rel="noopener noreferrer"
                       className="inline-flex items-center space-x-2 text-xs font-medium text-blue-600 hover:text-blue-800 hover:underline transition-colors cursor-pointer"
-                      onClick={(e) => e.stopPropagation()}
+                      onClick={e => e.stopPropagation()}
                     >
                       <ImageIcon className="h-3.5 w-3.5" />
                       <span>View Uploaded Image</span>
@@ -648,10 +618,10 @@ export function DDList({ userRole, userAgencies }: DDListProps) {
                   </div>
                 )}
 
-                <Button 
+                <Button
                   className="w-full mt-2"
                   size="sm"
-                  disabled={isRowLocked(consumer)} // Disable if locked
+                  disabled={isRowLocked(consumer)}
                   onClick={() => setSelectedConsumer(consumer)}
                 >
                   <Edit className="h-4 w-4 mr-2" />
@@ -662,6 +632,7 @@ export function DDList({ userRole, userAgencies }: DDListProps) {
           ))}
         </div>
       ) : (
+        /* List View */
         <div className="bg-white rounded-lg shadow-sm border overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm text-left">
@@ -676,11 +647,17 @@ export function DDList({ userRole, userAgencies }: DDListProps) {
                 </tr>
               </thead>
               <tbody className="divide-y">
-                {paginatedConsumers.map((consumer) => (
-                  <tr key={consumer.consumerId} className="hover:bg-gray-50">
+                {paginatedConsumers.map(consumer => (
+                  <tr key={consumer.consumerId} className={`hover:bg-gray-50 ${consumer._syncStatus === 'error' ? "bg-red-50" : ""}`}>
                     <td className="px-4 py-3">
-                      <div className="font-medium">{consumer.consumerId}</div>
-                      <div className="text-xs text-gray-500">{consumer.name}</div>
+                      <div className="flex items-center gap-1">
+                        {consumer._syncStatus === 'syncing' && <RefreshCw className="h-3 w-3 animate-spin text-blue-500 shrink-0" />}
+                        {consumer._syncStatus === 'error' && <AlertCircle className="h-3 w-3 text-red-500 shrink-0" />}
+                        <div>
+                          <div className="font-medium">{consumer.consumerId}</div>
+                          <div className="text-xs text-gray-500">{consumer.name}</div>
+                        </div>
+                      </div>
                     </td>
                     <td className="px-4 py-3 max-w-[200px] truncate">{consumer.address}</td>
                     <td className="px-4 py-3 text-right font-medium text-red-600">
@@ -696,12 +673,8 @@ export function DDList({ userRole, userAgencies }: DDListProps) {
                       <Badge className={getStatusColor(consumer.disconStatus)}>{consumer.disconStatus}</Badge>
                     </td>
                     <td className="px-4 py-3 text-center">
-                      <Button 
-                        size="sm" 
-                        disabled={isRowLocked(consumer)} // Disable if locked
-                        onClick={() => setSelectedConsumer(consumer)}
-                      >
-                        Update
+                      <Button size="sm" disabled={isRowLocked(consumer)} onClick={() => setSelectedConsumer(consumer)}>
+                        {isRowLocked(consumer) ? "Locked" : "Update"}
                       </Button>
                     </td>
                   </tr>
@@ -715,21 +688,11 @@ export function DDList({ userRole, userAgencies }: DDListProps) {
       {/* Pagination */}
       {totalPages > 1 && (
         <div className="flex items-center justify-between bg-white p-4 rounded-lg shadow-sm border">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-            disabled={currentPage === 1}
-          >
+          <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}>
             <ChevronLeft className="h-4 w-4 mr-1" /> Previous
           </Button>
           <span className="text-sm text-gray-600">Page {currentPage} of {totalPages}</span>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-            disabled={currentPage === totalPages}
-          >
+          <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}>
             Next <ChevronRight className="h-4 w-4 ml-1" />
           </Button>
         </div>

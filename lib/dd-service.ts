@@ -1,9 +1,11 @@
 export interface DeemedVisitData {
+  _syncStatus?: 'syncing' | 'error'
+  _localEditedAt?: number
   consumerId: string
   name: string
   address: string
   mobileNumber: string
-  totalArrears: string // Mapped from 'Outstanding' or 'd2NetOS'
+  totalArrears: string
   disconStatus: string
   disconDate?: string
   remarks?: string
@@ -11,113 +13,165 @@ export interface DeemedVisitData {
   reading?: string
   agency?: string
   lastUpdated?: string
-  // Additional fields for filtering/display matching ConsumerData
   offCode?: string
   mru?: string
   baseClass?: string
   device?: string
   osDuedateRange?: string
   imageUrl?: string
-  _syncStatus?: 'syncing' | 'error'
+}
+
+// 30-second in-memory memo shared across /base, /patch, /row-count calls
+const DD_MEMO_TTL_MS = 30_000
+let ddMemo: { at: number; data: DeemedVisitData[] } | null = null
+
+export function invalidateDDCache() {
+  ddMemo = null
+}
+
+const DD_COLUMN_MAPPINGS = {
+  offCode:        ["off_code", "offcode", "office code"],
+  mru:            ["mru"],
+  consumerId:     ["consumer id", "consumerid", "consumer_id"],
+  name:           ["name", "consumer name"],
+  address:        ["address"],
+  baseClass:      ["base class", "baseclass", "bclass", "bclass/phase"],
+  device:         ["device", "meter"],
+  osDuedateRange: ["o/s duedate range", "os duedate range", "o/s due date range", "due date range"],
+  totalArrears:   ["d2 net o/s", "d2 net os", "outstanding", "d2netos"],
+  disconStatus:   ["discon status", "disconnection status", "status"],
+  disconDate:     ["discon date", "disconnection date"],
+  mobileNumber:   ["mobile number", "mobile", "phone"],
+  agency:         ["agency"],
+  remarks:        ["remarks", "notes"],
+  visitDate:      ["visit date", "visitdate"],
+  reading:        ["reading", "meter reading", "meterreading"],
+  imageUrl:       ["image", "photo", "imageurl", "imagelink", "url", "link"],
+  lastUpdated:    ["last updated", "last_updated", "updated_at", "timestamp"],
+}
+
+async function getSheetsClient() {
+  const { google } = await import("googleapis")
+  const { auth } = await import("./google-drive")
+  return google.sheets({ version: "v4", auth })
+}
+
+function findColumnIndex(headers: string[], searchTerms: string[]): number {
+  for (const term of searchTerms) {
+    const idx = headers.findIndex(h =>
+      h.toLowerCase().replace(/[^a-z0-9]/g, "").includes(term.toLowerCase().replace(/[^a-z0-9]/g, ""))
+    )
+    if (idx !== -1) return idx
+  }
+  return -1
+}
+
+function parseNumericValue(value: string): string {
+  if (!value || typeof value !== "string") return "0"
+  const cleaned = value.replace(/[,\s₹$]/g, "").replace(/[^\d.-]/g, "")
+  const parsed = parseFloat(cleaned)
+  return isNaN(parsed) ? "0" : parsed.toString()
 }
 
 export async function fetchDDData(): Promise<DeemedVisitData[]> {
-  const url = process.env.DD_CSV
-  if (!url) {
-    console.warn("DD_CSV environment variable is not set")
-    return []
+  if (ddMemo && Date.now() - ddMemo.at < DD_MEMO_TTL_MS) {
+    return ddMemo.data
   }
 
   try {
-    const res = await fetch(url, { next: { revalidate: 10 } })
-    if (!res.ok) throw new Error(`Failed to fetch CSV: ${res.statusText}`)
-    
-    const text = await res.text()
-    const rows = text.split(/\r?\n/).filter(row => row.trim() !== "")
-    
+    const spreadsheetId = process.env.DISCONNECTION_SHEET?.trim()
+    if (!spreadsheetId) throw new Error("DISCONNECTION_SHEET env variable not set")
+
+    const sheets = await getSheetsClient()
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range: "DD",
+      valueRenderOption: "FORMATTED_VALUE",
+      majorDimension: "ROWS",
+    })
+
+    const rows = (response.data.values || []) as string[][]
     if (rows.length < 2) return []
 
-    // Helper to clean and parse numeric values (Cloned from google-sheets.ts)
-    const parseNumericValue = (value: string): string => {
-      if (!value || typeof value !== "string") return "0"
-      const cleaned = value.replace(/[,\s₹$]/g, "").replace(/[^\d.-]/g, "")
-      const parsed = Number.parseFloat(cleaned)
-      return isNaN(parsed) ? "0" : parsed.toString()
-    }
+    const headers = rows[0].map(h => String(h ?? "").trim())
 
-    // Helper to parse CSV line handling quotes (Cloned from google-sheets.ts)
-    const parseCSVLine = (line: string): string[] => {
-      const result: string[] = []
-      let current = ""
-      let inQuotes = false
-
-      for (let i = 0; i < line.length; i++) {
-        const char = line[i]
-
-        if (char === '"') {
-          if (inQuotes && line[i + 1] === '"') {
-            current += '"'
-            i++ 
-          } else {
-            inQuotes = !inQuotes
-          }
-        } else if (char === "," && !inQuotes) {
-          result.push(current.trim())
-          current = ""
-        } else {
-          current += char
-        }
-      }
-      result.push(current.trim())
-      return result
-    }
-
-    const headers = parseCSVLine(rows[0]).map(h => h.replace(/^"|"$/g, "").trim().toLowerCase())
-    
-    return rows.slice(1).map(row => {
-      const values = parseCSVLine(row).map(v => v.replace(/^"|"$/g, "").trim())
-      
-      const data: any = {}
-      
-      headers.forEach((header, index) => {
-        const value = values[index] || ""
-        
-        // Strict mapping based on provided CSV headers
-        if (header === "consumer id" || header === "consumerid") data.consumerId = value
-        else if (header === "name") data.name = value
-        else if (header === "address") data.address = value
-        else if (header === "mobile number" || header === "mobile") data.mobileNumber = value
-        else if (header === "d2 net o/s" || header === "outstanding" || header === "d2netos") data.totalArrears = parseNumericValue(value)
-        else if (header === "discon status" || header === "status") data.disconStatus = value
-        else if (header === "discon date" || header === "date") data.disconDate = value
-        else if (header === "remarks" || header === "notes") data.remarks = value
-        else if (header === "visit date" || header === "visitdate") data.visitDate = value
-        else if (header === "reading" || header === "meter reading" || header === "meterreading") data.reading = value
-        else if (header === "agency") data.agency = value
-        else if (header === "mru") data.mru = value
-        else if (header === "base class" || header === "class") data.baseClass = value
-        else if (header === "device") data.device = value
-        else if (header === "o/s duedate range" || header === "due date") data.osDuedateRange = value
-        else if (header === "image" || header === "imageurl") data.imageUrl = value
-        else if (header === "off_code" || header === "offcode") data.offCode = value
-        else if (header === "last updated") data.lastUpdated = value
-      })
-
-      // Defaults
-      if (!data.disconStatus) data.disconStatus = "Deemed Disconnected"
-      if (!data.totalArrears) data.totalArrears = "0"
-
-      return data as DeemedVisitData
+    const colIdx: Record<string, number> = {}
+    Object.entries(DD_COLUMN_MAPPINGS).forEach(([key, terms]) => {
+      colIdx[key] = findColumnIndex(headers, terms)
     })
+
+    const records: DeemedVisitData[] = []
+
+    for (let i = 1; i < rows.length; i++) {
+      try {
+        const values = (rows[i] || []).map(v => String(v ?? ""))
+
+        if (values.length === 0 || values.every(v => !v || v.trim() === "")) continue
+
+        const consumerId = colIdx.consumerId >= 0 ? values[colIdx.consumerId]?.trim() || "" : ""
+        if (!consumerId) continue
+
+        // Normalize lastUpdated to YYYY-MM-DD for consistent date comparisons
+        let lastUpdated = colIdx.lastUpdated >= 0 ? values[colIdx.lastUpdated] || "" : ""
+        if (lastUpdated.match(/^\d{2}-\d{2}-\d{4}$/)) {
+          const [d, m, y] = lastUpdated.split("-")
+          lastUpdated = `${y}-${m}-${d}`
+        }
+
+        records.push({
+          consumerId,
+          name:           colIdx.name >= 0           ? values[colIdx.name] || ""           : "",
+          address:        colIdx.address >= 0         ? values[colIdx.address] || ""         : "",
+          mobileNumber:   colIdx.mobileNumber >= 0    ? values[colIdx.mobileNumber] || ""    : "",
+          totalArrears:   parseNumericValue(colIdx.totalArrears >= 0 ? values[colIdx.totalArrears] || "0" : "0"),
+          disconStatus:   colIdx.disconStatus >= 0    ? values[colIdx.disconStatus] || "Deemed Disconnected" : "Deemed Disconnected",
+          disconDate:     colIdx.disconDate >= 0      ? values[colIdx.disconDate] || ""      : "",
+          remarks:        colIdx.remarks >= 0         ? values[colIdx.remarks] || ""         : "",
+          visitDate:      colIdx.visitDate >= 0       ? values[colIdx.visitDate] || ""       : "",
+          reading:        colIdx.reading >= 0         ? values[colIdx.reading] || ""         : "",
+          agency:         colIdx.agency >= 0          ? values[colIdx.agency] || ""          : "",
+          lastUpdated,
+          offCode:        colIdx.offCode >= 0         ? values[colIdx.offCode] || ""         : "",
+          mru:            colIdx.mru >= 0             ? values[colIdx.mru] || ""             : "",
+          baseClass:      colIdx.baseClass >= 0       ? values[colIdx.baseClass] || ""       : "",
+          device:         colIdx.device >= 0          ? values[colIdx.device] || ""          : "",
+          osDuedateRange: colIdx.osDuedateRange >= 0  ? values[colIdx.osDuedateRange] || ""  : "",
+          imageUrl:       colIdx.imageUrl >= 0        ? values[colIdx.imageUrl] || ""        : "",
+        })
+      } catch {
+        // Skip malformed rows silently
+      }
+    }
+
+    ddMemo = { at: Date.now(), data: records }
+    return records
   } catch (error) {
-    console.error("Error fetching Deemed Visit data:", error)
+    console.error("Error fetching DD data from Google Sheets:", error)
     return []
   }
 }
 
-export async function getDDUpdates() {
+export async function getDDUpdates(): Promise<DeemedVisitData[]> {
   const allData = await fetchDDData()
-  const today = new Date().toISOString().split("T")[0]
-  // Return rows updated today (Delta Sync logic)
-  return allData.filter(d => d.lastUpdated && d.lastUpdated.includes(today))
+
+  // 48-hour window — same as consumer patch, covers timezone differences
+  const cutoff = new Date()
+  cutoff.setHours(cutoff.getHours() - 48)
+
+  return allData.filter(d => {
+    if (!d.lastUpdated) return false
+    let updatedDate: Date | null = null
+    const s = d.lastUpdated
+
+    if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
+      updatedDate = new Date(s)
+    } else if (/^\d{2}-\d{2}-\d{4}/.test(s)) {
+      const [day, month, year] = s.split(/[-/]/)
+      updatedDate = new Date(`${year}-${month}-${day}`)
+    } else {
+      updatedDate = new Date(s)
+    }
+
+    return updatedDate && !isNaN(updatedDate.getTime()) && updatedDate >= cutoff
+  })
 }

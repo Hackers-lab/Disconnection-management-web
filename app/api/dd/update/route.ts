@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { DeemedVisitData } from "@/lib/dd-service"
+import { DeemedVisitData, invalidateDDCache } from "@/lib/dd-service"
 import { google } from "googleapis"
 import { auth } from "@/lib/google-drive"
 
@@ -107,6 +107,7 @@ export async function POST(request: Request) {
       })
     }
 
+    invalidateDDCache()
     return NextResponse.json({ success: true, message: "Sheet updated successfully" })
     
   } catch (error: any) {
