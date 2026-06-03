@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
+import { getFromCache, saveToCache } from "@/lib/indexed-db"
 import { DashboardShell } from "@/components/dashboard-shell"
 import { ViewType } from "@/components/app-sidebar"
 import { DashboardProvider } from "@/components/dashboard-context"
@@ -51,6 +52,44 @@ export default function DashboardClient({ role, agencies }: DashboardClientProps
 
   // Reference to ConsumerList to access data
   const consumerListRef = useRef<{ getCurrentConsumers: () => ConsumerData[] }>(null)
+
+  // Background prefetch: warm up IndexedDB as soon as user is on dashboard
+  useEffect(() => {
+    const CACHE_KEY = "consumers_data_cache"
+    const ROW_COUNT_KEY = "consumer_row_count"
+    const CONSUMER_VERSION_KEY = "consumer_version_hash"
+    const BASE_DATE_KEY = "consumers_base_date"
+
+    async function prefetch() {
+      try {
+        const [cachedData, countRes] = await Promise.all([
+          getFromCache<any[]>(CACHE_KEY),
+          fetch("/api/system/row-count?type=consumer"),
+        ])
+        if (!countRes.ok) return
+        const { count: serverCount, version: serverVersion } = await countRes.json()
+        const localCount = parseInt(localStorage.getItem(ROW_COUNT_KEY) || "0")
+        const localVersion = localStorage.getItem(CONSUMER_VERSION_KEY) || null
+        const needsUpdate = !cachedData || cachedData.length === 0 || serverCount !== localCount || serverVersion !== localVersion
+        if (!needsUpdate) return
+
+        const baseRes = await fetch(`/api/consumers/base?v=${serverCount}`)
+        if (!baseRes.ok) return
+        const cacheControl = baseRes.headers.get("Cache-Control")
+        const baseData = await baseRes.json()
+        await saveToCache(CACHE_KEY, baseData)
+        if (cacheControl !== "no-store") {
+          await saveToCache(BASE_DATE_KEY, new Date().toISOString().split("T")[0])
+          localStorage.setItem(ROW_COUNT_KEY, serverCount.toString())
+          if (serverVersion) localStorage.setItem(CONSUMER_VERSION_KEY, serverVersion)
+        }
+      } catch {
+        // Prefetch is best-effort — errors are intentionally swallowed
+      }
+    }
+
+    prefetch()
+  }, [])
 
   // --- HELPER FUNCTIONS ---
   const calculateAgencyPerformance = (consumers: ConsumerData[]) => {

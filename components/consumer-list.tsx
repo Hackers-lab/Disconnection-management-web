@@ -310,7 +310,6 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
           if (isMismatch) {
              console.log("[Data Sync] Count or Version mismatch. Triggering full download.");
              setSyncStatus('found');
-             await new Promise(resolve => setTimeout(resolve, 800));
           } else {
              console.log("[Data Sync] Cache is empty. Triggering full download.");
           }

@@ -50,6 +50,6 @@ export async function login(formData: FormData) {
 }
 
 export async function logout() {
-  deleteSession()
+  await deleteSession()
   redirect("/login")
 }

@@ -15,31 +15,47 @@ async function getSheetsClient() {
   return google.sheets({ version: "v4", auth })
 }
 
+type CachedUsers = { users: ReturnType<UserStorage["_parseRows"]>, timestamp: number }
+
 export class UserStorage {
   static instance: UserStorage
+  private _cache: CachedUsers | null = null
+  private readonly _CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes
 
   static getInstance() {
     if (!UserStorage.instance) UserStorage.instance = new UserStorage()
     return UserStorage.instance
   }
 
+  _parseRows(rows: any[][]) {
+    return rows
+      .filter(row => row && row.length > 0 && row[1])
+      .map(([id, username, password, role, agencies]) => ({
+        id,
+        username,
+        password,
+        role,
+        agencies: agencies ? agencies.split(",") : [] as string[],
+      }))
+  }
+
+  invalidateCache() {
+    this._cache = null
+  }
+
   async getUsers() {
+    if (this._cache && Date.now() - this._cache.timestamp < this._CACHE_TTL_MS) {
+      return this._cache.users
+    }
     const sheets = await getSheetsClient()
     const res = await sheets.spreadsheets.values.get({
       spreadsheetId: SHEET_ID,
       range: `${SHEET_NAME}!A2:E`,
     })
     const rows = res.data.values || []
-    // Filter out empty rows or rows where the username (index 1) is missing
-    return rows
-      .filter(row => row && row.length > 0 && row[1])
-      .map(([id, username, password, role, agencies]) => ({
-      id,
-      username,
-      password,
-      role,
-      agencies: agencies ? agencies.split(",") : [],
-    }))
+    const users = this._parseRows(rows)
+    this._cache = { users, timestamp: Date.now() }
+    return users
   }
 
   async findUserByCredentials(username: string, password: string) {
@@ -59,6 +75,7 @@ export class UserStorage {
         values: [[newId, user.username, user.password, user.role, user.agencies.join(",")]],
       },
     })
+    this.invalidateCache()
     return { id: newId, ...user }
   }
 
@@ -77,6 +94,7 @@ export class UserStorage {
         values: [[updated.id, updated.username, updated.password, updated.role, updated.agencies.join(",")]],
       },
     })
+    this.invalidateCache()
     return updated
   }
 
@@ -114,6 +132,7 @@ export class UserStorage {
       }
     })
 
+    this.invalidateCache()
     return users[idx]
   }
 }
