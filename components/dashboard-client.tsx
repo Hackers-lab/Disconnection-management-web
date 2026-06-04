@@ -53,6 +53,11 @@ export default function DashboardClient({ role, agencies }: DashboardClientProps
   // Reference to ConsumerList to access data
   const consumerListRef = useRef<{ getCurrentConsumers: () => ConsumerData[] }>(null)
 
+  // Daily session heartbeat — logs once per day for users who stay logged in
+  useEffect(() => {
+    fetch("/api/auth/heartbeat").catch(() => {})
+  }, [])
+
   // Background prefetch: warm up IndexedDB as soon as user is on dashboard
   useEffect(() => {
     const CACHE_KEY = "consumers_data_cache"

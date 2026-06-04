@@ -6,6 +6,7 @@ const encodedKey = new TextEncoder().encode(secretKey)
 
 export interface SessionPayload {
   userId: string
+  username: string
   role: string
   agencies: string[]
   expiresAt: Date
@@ -31,9 +32,9 @@ export async function decrypt(session: string | undefined = "") {
   }
 }
 
-export async function createSession(userId: string, role: string, agencies: string[]) {
+export async function createSession(userId: string, username: string, role: string, agencies: string[]) {
   const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
-  const session = await encrypt({ userId, role, agencies, expiresAt })
+  const session = await encrypt({ userId, username, role, agencies, expiresAt })
   const cookieStore = await cookies()
 
   cookieStore.set("session", session, {
@@ -61,6 +62,7 @@ export async function verifySession() {
 
   return {
     userId: session.userId,
+    username: session.username,
     role: session.role,
     agencies: session.agencies,
   }

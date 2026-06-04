@@ -61,7 +61,7 @@ export async function login(formData: FormData) {
   }
 
   console.log("✅ Login successful for:", username, "Role:", user.role)
-  await createSession(user.id, user.role, user.agencies)
+  await createSession(user.id, username, user.role, user.agencies)
 
   // Fire-and-forget: log the successful login, never await
   appendLoginLog({
