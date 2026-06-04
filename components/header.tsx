@@ -747,8 +747,10 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
                       <th>Consumer ID</th>
                       <th>Name</th>
                       <th style="text-align: right;">OSD (₹)</th>
+                      <th>Class</th>
                       <th>Status</th>
                       <th style="width: 70px;">Date</th>
+                      <th>Reading</th>
                       <th>Remarks</th>
                     </tr>
                   </thead>
@@ -759,8 +761,10 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
                         <td>${item.consumerId}</td>
                         <td>${item.name}</td>
                         <td style="text-align: right;">${Number(item.d2NetOS).toLocaleString()}</td>
+                        <td>${item.baseClass || '-'}</td>
                         <td>${item.disconStatus}</td>
                         <td>${formatDate(item.disconDate)}</td>
+                        <td>${item.reading || '-'}</td>
                         <td>${item.notes || ''}</td>
                       </tr>
                     `).join('')}

@@ -158,8 +158,8 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
     excludeTemproryDisconnected: false,
   })
   const [baseClasses, setBaseClasses] = useState<string[]>([])
-  const [mrus, setMrus] = useState<string[]>([])
   const [isCachedData, setIsCachedData] = useState(false)
+  const [sortByMRU, setSortByMRU] = useState(false)
   const [isBackgroundUpdating, setIsBackgroundUpdating] = useState(false)
   const [syncStatus, setSyncStatus] = useState<'idle' | 'checking' | 'found' | 'syncing' | 'updated'>('idle')
   const [viewMode, setViewMode] = useState<"card" | "list">("card")
@@ -240,7 +240,7 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
           }
         } catch (error) {
           console.warn("Failed to load agencies, using default list")
-          agencyList = Array.from(new Set(data.map((c) => c.agency).filter(Boolean)))
+          agencyList = Array.from(new Set(data.map((c) => c.agency).filter((a): a is string => !!a)))
         }
       } else {
         agencyList = userAgencies
@@ -255,15 +255,6 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
 
       // NOTE: We no longer filter data here. State must hold 100% of rows.
       // Filtering happens in useMemo (filteredConsumers) below.
-      const uniqueMrus = Array.from(
-        new Set(
-          data
-            .map(c => (c.mru || "").trim())
-            .filter(m => m !== "")
-        )
-      ).sort()
-      setMrus(uniqueMrus)
-
       setConsumers(data)
     }
 
@@ -572,7 +563,23 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
     })
   }, [consumers, searchTerm, filters, minOsd, excludeFilters, dateFilter, userRole, userAgencies])
 
-  // Apply OSD sorting
+  // MRUs scoped to what this role can actually see (before search/filter criteria)
+  const mrus = useMemo(() => {
+    let base = consumers
+    if (userRole !== "admin" && userRole !== "viewer") {
+      const upper = userAgencies.map(a => a.toUpperCase())
+      if (userRole === "executive") {
+        base = consumers.filter(c => {
+          const ca = (c.agency || "").toUpperCase()
+          return upper.includes(ca) || c.disconStatus?.toLowerCase() === "bill dispute"
+        })
+      } else {
+        base = consumers.filter(c => upper.includes((c.agency || "").toUpperCase()) && c.disconStatus !== "&")
+      }
+    }
+    return Array.from(new Set(base.map(c => (c.mru || "").trim()).filter(Boolean))).sort()
+  }, [consumers, userRole, userAgencies])
+
   const sortedConsumers = useMemo(() => [...filteredConsumers].sort((a, b) => {
     // 0. Urgent rows always appear first (admin-set priority flag)
     const urgentA = (a.priority || "").toLowerCase() === "urgent"
@@ -586,14 +593,20 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
     if (isConnectedA && !isConnectedB) return -1
     if (!isConnectedA && isConnectedB) return 1
 
-    // 2. OSD Sort
+    // 2. MRU A-Z sort (when active, groups by MRU before applying OSD)
+    if (sortByMRU) {
+      const mruCmp = (a.mru || "").localeCompare(b.mru || "")
+      if (mruCmp !== 0) return mruCmp
+    }
+
+    // 3. OSD Sort
     if (sortByOSD === "none") return 0
     const aOsd = Number.parseFloat(a.d2NetOS || "0")
     const bOsd = Number.parseFloat(b.d2NetOS || "0")
     if (sortByOSD === "asc") return aOsd - bOsd
     if (sortByOSD === "desc") return bOsd - aOsd
     return 0
-  }), [filteredConsumers, sortByOSD])
+  }), [filteredConsumers, sortByOSD, sortByMRU])
 
     // Helper to ensure links work even if "https://" is missing in the sheet
   const getValidUrl = (url: string | undefined) => {
@@ -625,7 +638,7 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
   // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1)
-  }, [filters, searchTerm, minOsd, excludeFilters, sortByOSD, viewMode])
+  }, [filters, searchTerm, minOsd, excludeFilters, sortByOSD, sortByMRU, viewMode])
 
   const getStatusColor = (status: string) => {
     switch (status.toLowerCase()) {
@@ -734,6 +747,7 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
       excludeTemproryDisconnected: false,
     })
     setSortByOSD("desc")
+    setSortByMRU(false)
     setDateFilter({
       from: null,
       to: null,
@@ -847,7 +861,7 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
                 {(Object.values(filters).some((f) => f !== "All Agencies" && f !== "All Status" && f !== "All Classes" && f !== "All MRUs" && f !== "") ||
                   minOsd > 0 ||
                   dateFilter.isActive ||
-                  sortByOSD !== "desc") && (
+                  sortByOSD !== "desc" || sortByMRU) && (
                   <span className="absolute -top-1 -right-1 h-3 w-3 bg-blue-600 rounded-full border-2 border-white" />
                 )}
               </Button>
@@ -966,6 +980,7 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
 
                 {/* Dropdowns */}
                 <div className="space-y-3">
+                  {(userRole === "admin" || userRole === "viewer") && (
                   <div className="grid grid-cols-3 items-center gap-2">
                     <label className="text-sm font-medium col-span-1">Agency</label>
                     <div className="col-span-2">
@@ -987,6 +1002,7 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
                     </Select>
                     </div>
                   </div>
+                  )}
 
                   <div className="grid grid-cols-3 items-center gap-2">
                     <label className="text-sm font-medium col-span-1">Status</label>
@@ -1067,6 +1083,14 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
                   >
                     <span>Sort by Outstanding Dues</span>
                     {getSortIcon()}
+                  </Button>
+                  <Button
+                    variant={sortByMRU ? "default" : "outline"}
+                    onClick={() => setSortByMRU(v => !v)}
+                    className="w-full justify-between"
+                  >
+                    <span>Sort by MRU A–Z</span>
+                    <ArrowUpDown className="h-4 w-4" />
                   </Button>
                 </div>
 
@@ -1186,10 +1210,10 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
                   <div className="flex flex-col items-end space-y-1 shrink-0">
                     <div className="flex items-center gap-1">
                       {consumer._syncStatus === 'syncing' && (
-                        <RefreshCw className="h-3 w-3 animate-spin text-blue-500" title="Syncing..." />
+                        <RefreshCw className="h-3 w-3 animate-spin text-blue-500" aria-label="Syncing..." />
                       )}
                       {consumer._syncStatus === 'error' && (
-                        <AlertCircle className="h-3 w-3 text-red-500" title="Sync failed (saved locally)" />
+                        <AlertCircle className="h-3 w-3 text-red-500" aria-label="Sync failed (saved locally)" />
                       )}
                       <Badge className={getStatusColor(consumer.disconStatus)}>{consumer.disconStatus}</Badge>
                     </div>

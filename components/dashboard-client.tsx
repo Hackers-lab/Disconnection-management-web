@@ -46,7 +46,7 @@ export default function DashboardClient({ role, agencies }: DashboardClientProps
   const [downloadCount, setDownloadCount] = useState("50")
   const [downloadFormat, setDownloadFormat] = useState<"pdf" | "excel">("pdf")
   // "defaulters" = top-N OSD; "remarks" = group-by-remarks with date filter
-  const [reportType, setReportType] = useState<"defaulters" | "remarks">("defaulters")
+  const [reportType, setReportType] = useState<"defaulters" | "status">("defaulters")
   const [remarksDateFrom, setRemarksDateFrom] = useState("")
   const [remarksDateTo, setRemarksDateTo] = useState("")
 
@@ -160,11 +160,12 @@ export default function DashboardClient({ role, agencies }: DashboardClientProps
         "Mobile": c.mobileNumber,
         "Outstanding Dues": Number(c.d2NetOS || 0),
         "Agency": c.agency,
+        "Class": c.baseClass,
         "Status": c.disconStatus,
         "Due Date": c.osDuedateRange,
         "Device": c.device,
-        "Class": c.baseClass,
-        "Notes": c.notes
+        "Meter Reading": c.reading || "-",
+        "Notes": c.notes,
       }));
 
       // Create Worksheet
@@ -179,10 +180,11 @@ export default function DashboardClient({ role, agencies }: DashboardClientProps
         { wch: 12 }, // Mobile
         { wch: 15 }, // OSD
         { wch: 15 }, // Agency
+        { wch: 10 }, // Class
         { wch: 15 }, // Status
         { wch: 15 }, // Due Date
         { wch: 10 }, // Device
-        { wch: 10 }, // Class
+        { wch: 12 }, // Meter Reading
         { wch: 30 }, // Notes
       ];
       worksheet['!cols'] = wscols;
@@ -201,7 +203,7 @@ export default function DashboardClient({ role, agencies }: DashboardClientProps
       doc.setTextColor(40, 53, 147);
       doc.text(`Top ${topN} Defaulters`, doc.internal.pageSize.width / 2, 15, { align: "center" });
 
-      const tableColumn = ["#", "Con ID", "Name", "Address", "Phone", "Device", "Class", "Due Date", "OSD", "Agency", "Status", "Notes"];
+      const tableColumn = ["#", "Con ID", "Name", "Address", "Phone", "Device", "Class", "Due Date", "OSD", "Agency", "Status", "Reading", "Notes"];
       const tableRows = topConsumers.map((c, index) => [
         index + 1,
         c.consumerId || "-",
@@ -220,13 +222,12 @@ export default function DashboardClient({ role, agencies }: DashboardClientProps
           styles: { fontStyle: "bold", halign: "right" }
         },
         c.agency || "-",
-        { 
-          content: c.disconStatus || "-", 
-          styles: { fillColor: getStatusColorForPDF(c.disconStatus), textColor: [0, 0, 0] } 
-        },
         {
-          content: c.notes || "-",
+          content: c.disconStatus || "-",
+          styles: { fillColor: getStatusColorForPDF(c.disconStatus), textColor: [0, 0, 0] }
         },
+        c.reading || "-",
+        { content: c.notes || "-" },
       ]);
 
       autoTable(doc, {
@@ -252,12 +253,11 @@ export default function DashboardClient({ role, agencies }: DashboardClientProps
     setIsDownloadDialogOpen(false);
   };
 
-  // --- REMARKS REPORT (items 7 + 8) ---
-  const generateRemarksReport = () => {
+  // --- STATUS REPORT ---
+  const generateStatusReport = () => {
     if (!consumerListRef.current) return;
     let consumers = [...consumerListRef.current.getCurrentConsumers()];
 
-    // Date filter (uses disconDate; matches the app's DD-MM-YYYY or YYYY-MM-DD)
     const normDate = (s: string) => {
       if (!s) return null;
       if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
@@ -276,24 +276,22 @@ export default function DashboardClient({ role, agencies }: DashboardClientProps
       });
     }
 
-    // Only rows that have a remark
-    consumers = consumers.filter(c => c.notes && c.notes.trim() !== "");
     if (consumers.length === 0) {
-      alert("No consumers with remarks found for the selected date range.");
+      alert("No consumers found for the selected date range.");
       return;
     }
 
-    // Group by remarks text
+    // Group by status
     const groups: Record<string, ConsumerData[]> = {};
     consumers.forEach(c => {
-      const key = (c.notes || "").trim();
+      const key = (c.disconStatus || "Unknown").trim();
       if (!groups[key]) groups[key] = [];
       groups[key].push(c);
     });
 
     if (downloadFormat === "excel") {
       const wb = XLSX.utils.book_new();
-      // Sheet 1: all rows with remarks
+      // Sheet 1: all rows
       const allRows = consumers.map((c, i) => ({
         "#": i + 1,
         "Consumer ID": c.consumerId,
@@ -301,40 +299,41 @@ export default function DashboardClient({ role, agencies }: DashboardClientProps
         "Address": c.address,
         "Mobile": c.mobileNumber,
         "Agency": c.agency || "-",
+        "Class": c.baseClass || "-",
         "Status": c.disconStatus,
         "Discon Date": c.disconDate || "-",
         "OSD (₹)": Number(c.d2NetOS || 0),
         "Meter Reading": c.reading || "-",
         "Remarks": c.notes || "-",
       }));
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(allRows), "All Remarks");
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(allRows), "All Records");
 
-      // Sheet 2: summary count per remark
+      // Sheet 2: summary per status
       const summaryRows = Object.entries(groups)
         .sort((a, b) => b[1].length - a[1].length)
-        .map(([remark, rows]) => ({
-          "Remarks": remark,
+        .map(([status, rows]) => ({
+          "Status": status,
           "Count": rows.length,
           "Total OSD (₹)": rows.reduce((s, c) => s + Number(c.d2NetOS || 0), 0),
         }));
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summaryRows), "Remarks Summary");
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summaryRows), "Status Summary");
 
-      XLSX.writeFile(wb, `Remarks_Report_${new Date().toISOString().slice(0,10)}.xlsx`);
+      XLSX.writeFile(wb, `Status_Report_${new Date().toISOString().slice(0,10)}.xlsx`);
     } else {
-      // PDF
+      // PDF — one page per status group
       const doc = new jsPDF({ orientation: "landscape" });
       const pageW = doc.internal.pageSize.width;
       let firstPage = true;
 
       Object.entries(groups)
         .sort((a, b) => b[1].length - a[1].length)
-        .forEach(([remark, rows]) => {
+        .forEach(([status, rows]) => {
           if (!firstPage) doc.addPage();
           firstPage = false;
 
           doc.setFontSize(13);
           doc.setTextColor(40, 53, 147);
-          doc.text("Remarks Report", pageW / 2, 12, { align: "center" });
+          doc.text("Status Report", pageW / 2, 12, { align: "center" });
 
           const dateLabel = (remarksDateFrom || remarksDateTo)
             ? ` | ${remarksDateFrom || "—"} to ${remarksDateTo || "—"}`
@@ -346,24 +345,25 @@ export default function DashboardClient({ role, agencies }: DashboardClientProps
           doc.setFontSize(10);
           doc.setTextColor(30, 30, 30);
           doc.setFont("helvetica", "bold");
-          doc.text(`Remarks: ${remark.substring(0, 80)}${remark.length > 80 ? "…" : ""}`, 14, 20);
+          doc.text(`Status: ${status}`, 14, 20);
           doc.setFont("helvetica", "normal");
           doc.setFontSize(8);
           doc.text(`${rows.length} consumer(s)  |  Total OSD: ₹${Math.round(rows.reduce((s, c) => s + Number(c.d2NetOS || 0), 0)).toLocaleString("en-IN")}`, 14, 26);
 
-          const cols = ["#", "Con ID", "Name", "Address", "Mobile", "Agency", "Status", "Date", "OSD", "Reading", "Remarks"];
+          const cols = ["#", "Con ID", "Name", "Address", "Mobile", "Agency", "Class", "Status", "Date", "OSD", "Reading", "Remarks"];
           const body = rows.map((c, i) => [
             i + 1,
             c.consumerId || "-",
             c.name || "-",
-            c.address ? c.address.substring(0, 30) + (c.address.length > 30 ? "…" : "") : "-",
+            c.address ? c.address.substring(0, 28) + (c.address.length > 28 ? "…" : "") : "-",
             c.mobileNumber || "-",
             c.agency || "-",
+            c.baseClass || "-",
             { content: c.disconStatus || "-", styles: { fillColor: getStatusColorForPDF(c.disconStatus), textColor: [0,0,0] } },
             c.disconDate || "-",
             { content: Math.round(Number(c.d2NetOS||0)).toLocaleString("en-IN"), styles: { fontStyle: "bold", halign: "right" } },
             c.reading || "-",
-            { content: (c.notes || "-").substring(0, 40), styles: { fontStyle: "italic" } },
+            { content: (c.notes || "-").substring(0, 35), styles: { fontStyle: "italic" } },
           ]);
 
           autoTable(doc, {
@@ -371,7 +371,7 @@ export default function DashboardClient({ role, agencies }: DashboardClientProps
             head: [cols],
             body: body as any,
             styles: { fontSize: 6.5, font: "helvetica" },
-            columnStyles: { 3: { cellWidth: 35 }, 10: { cellWidth: 35 } },
+            columnStyles: { 3: { cellWidth: 30 }, 11: { cellWidth: 30 } },
             didDrawPage: (data: any) => {
               doc.setFontSize(7);
               doc.setTextColor(120);
@@ -380,7 +380,7 @@ export default function DashboardClient({ role, agencies }: DashboardClientProps
           });
         });
 
-      doc.save(`Remarks_Report_${new Date().toISOString().slice(0,10)}.pdf`);
+      doc.save(`Status_Report_${new Date().toISOString().slice(0,10)}.pdf`);
     }
 
     setIsDownloadDialogOpen(false);
@@ -876,7 +876,7 @@ export default function DashboardClient({ role, agencies }: DashboardClientProps
                 <Label>Report Type</Label>
                 <RadioGroup
                   value={reportType}
-                  onValueChange={(v: "defaulters" | "remarks") => setReportType(v)}
+                  onValueChange={(v: "defaulters" | "status") => setReportType(v)}
                   className="flex flex-col gap-2"
                 >
                   <div className="flex items-center space-x-2">
@@ -884,8 +884,8 @@ export default function DashboardClient({ role, agencies }: DashboardClientProps
                     <Label htmlFor="rt-def">Top Defaulters (by outstanding dues)</Label>
                   </div>
                   <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="remarks" id="rt-rem" />
-                    <Label htmlFor="rt-rem">Remarks Report (grouped by remarks)</Label>
+                    <RadioGroupItem value="status" id="rt-sta" />
+                    <Label htmlFor="rt-sta">Status Report (grouped by status)</Label>
                   </div>
                 </RadioGroup>
               </div>
@@ -905,8 +905,8 @@ export default function DashboardClient({ role, agencies }: DashboardClientProps
                 </div>
               )}
 
-              {/* Date range — only for remarks */}
-              {reportType === "remarks" && (
+              {/* Date range — only for status report */}
+              {reportType === "status" && (
                 <div className="grid grid-cols-2 gap-3">
                   <div className="grid gap-1">
                     <Label htmlFor="r-from" className="text-xs uppercase text-gray-500">From Date</Label>
@@ -947,7 +947,7 @@ export default function DashboardClient({ role, agencies }: DashboardClientProps
                 Cancel
               </Button>
               <Button onClick={() => {
-                if (reportType === "remarks") generateRemarksReport();
+                if (reportType === "status") generateStatusReport();
                 else handleDownloadConfirm();
               }}>
                 Download
