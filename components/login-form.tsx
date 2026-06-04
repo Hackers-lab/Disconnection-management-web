@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -14,8 +14,19 @@ export function LoginForm() {
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
-  const [showDevModal, setShowDevModal] = useState(false) // State for the floating window
+  const [showDevModal, setShowDevModal] = useState(false)
+  const [deviceId, setDeviceId] = useState("")
   const router = useRouter()
+
+  // Generate a stable device UUID on first visit, persist in localStorage
+  useEffect(() => {
+    let id = localStorage.getItem("deviceId")
+    if (!id) {
+      id = crypto.randomUUID()
+      localStorage.setItem("deviceId", id)
+    }
+    setDeviceId(id)
+  }, [])
 
   async function handleSubmit(formData: FormData) {
     setLoading(true)
@@ -89,6 +100,9 @@ export function LoginForm() {
                 </button>
               </div>
             </div>
+
+            {/* Device fingerprint — sent to server for audit logging, invisible to user */}
+            <input type="hidden" name="deviceId" value={deviceId} />
 
             {error && (
               <Alert variant="destructive" className="border-red-200 bg-red-50">
