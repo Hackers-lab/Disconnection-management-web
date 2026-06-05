@@ -304,11 +304,6 @@ export function MeterList({ userRole, userAgencies, username, agencies }: Props)
               placeholder="Search issue ID, serial, consumer, agency..." className="pl-10 pr-8" />
             {search && <X className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-red-500 cursor-pointer" onClick={() => setSearch("")} />}
           </div>
-          {isAdmin && (
-            <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white shrink-0" onClick={() => setView("issue")}>
-              <Plus className="h-4 w-4" />
-            </Button>
-          )}
           {isAdmin && selectedForSlip.size > 0 && (
             <Button size="sm" variant="outline" onClick={printSelected} className="shrink-0">
               <Printer className="h-4 w-4 mr-1" /> Print ({selectedForSlip.size})
@@ -462,6 +457,19 @@ export function MeterList({ userRole, userAgencies, username, agencies }: Props)
       {/* ─── Reports tab ──────────────────────────────────────────────────────── */}
       {tab === "reports" && isAdmin && (
         <ReportsPanel issues={issues} summary={summary} onExport={exportIssues} />
+      )}
+
+      {/* Sticky bottom — Issue Meter */}
+      {isAdmin && (
+        <div className="fixed bottom-0 left-0 right-0 z-40 p-4 pointer-events-none">
+          <div className="max-w-xl mx-auto pointer-events-auto">
+            <Button
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white shadow-lg rounded-2xl text-base font-semibold flex items-center justify-center gap-2 py-3"
+              onClick={() => setView("issue")}>
+              <Plus className="h-5 w-5" /> Issue Meter
+            </Button>
+          </div>
+        </div>
       )}
 
       {/* Finalize modal */}

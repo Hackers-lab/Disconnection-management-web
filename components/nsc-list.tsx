@@ -180,11 +180,6 @@ export function NscList({ userRole, userAgencies, username, agencies }: Props) {
               className="pl-10 pr-8" />
             {search && <X className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-red-500 cursor-pointer" onClick={() => setSearch("")} />}
           </div>
-          {isAdmin && (
-            <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white shrink-0" onClick={() => setView("create")}>
-              <Plus className="h-4 w-4" />
-            </Button>
-          )}
           {tab !== "reports" && (
             <Button size="sm" variant="ghost" onClick={exportData} className="shrink-0" title="Export">
               <FileDown className="h-4 w-4" />
@@ -314,6 +309,19 @@ export function NscList({ userRole, userAgencies, username, agencies }: Props) {
               </CardContent>
             </Card>
           ))}
+        </div>
+      )}
+
+      {/* Sticky bottom — Add NSC */}
+      {isAdmin && (
+        <div className="fixed bottom-0 left-0 right-0 z-40 p-4 pointer-events-none">
+          <div className="max-w-xl mx-auto pointer-events-auto">
+            <Button
+              className="w-full bg-green-600 hover:bg-green-700 text-white shadow-lg rounded-2xl text-base font-semibold flex items-center justify-center gap-2 py-3"
+              onClick={() => setView("create")}>
+              <Plus className="h-5 w-5" /> Add NSC
+            </Button>
+          </div>
         </div>
       )}
 
