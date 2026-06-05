@@ -1,6 +1,7 @@
 import { google } from "googleapis"
 import { auth } from "./google-drive"
 import { getSpreadsheetId } from "./google-sheets-api"
+import { nowTs, parseTs } from "./date-utils"
 
 const sheets = google.sheets({ version: "v4", auth })
 const TAB = "Reconnection"
@@ -32,7 +33,7 @@ export interface ReconnectionRequest {
 }
 
 // 60s memo
-const MEMO_TTL = 60_000
+const MEMO_TTL = 120_000
 let memo: { at: number; data: ReconnectionRequest[] } | null = null
 let tabReady = false
 
@@ -169,26 +170,3 @@ export async function getBlockedConsumerIds(): Promise<string[]> {
     .map(r => r.consumerId)
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-function nowTs(): string {
-  const d = new Date()
-  return [
-    String(d.getDate()).padStart(2, "0"),
-    String(d.getMonth() + 1).padStart(2, "0"),
-    d.getFullYear(),
-  ].join("-") + " " + [
-    String(d.getHours()).padStart(2, "0"),
-    String(d.getMinutes()).padStart(2, "0"),
-  ].join(":")
-}
-
-// Parse "DD-MM-YYYY HH:MM" → epoch ms
-function parseTs(ts: string): number {
-  if (!ts) return 0
-  try {
-    const [datePart, timePart] = ts.split(" ")
-    const [d, m, y] = datePart.split("-").map(Number)
-    const [h, min] = (timePart || "00:00").split(":").map(Number)
-    return new Date(y, m - 1, d, h, min).getTime()
-  } catch { return 0 }
-}

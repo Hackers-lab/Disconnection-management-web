@@ -22,7 +22,7 @@ export interface DeemedVisitData {
 }
 
 // 30-second in-memory memo shared across /base, /patch, /row-count calls
-const DD_MEMO_TTL_MS = 30_000
+const DD_MEMO_TTL_MS = 60_000
 let ddMemo: { at: number; data: DeemedVisitData[] } | null = null
 
 export function invalidateDDCache() {

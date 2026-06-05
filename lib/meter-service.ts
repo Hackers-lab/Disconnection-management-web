@@ -5,6 +5,7 @@ import { auth } from "./google-drive"
 import { getSpreadsheetId } from "./google-sheets-api"
 import { METER_TYPES } from "./meter-types"
 import { updateNSCMeterIssued, updateNSCConnectionEffected } from "./nsc-service"
+import { nowDate } from "./date-utils"
 import type {
   MeterStock, MeterIssue, StockSummary,
   MeterTypeLabel, MeterCondition, IssuePurpose, IssueStatus,
@@ -32,7 +33,7 @@ const ISSUES_HEADERS = [
 ]
 
 // ─── Memo cache ───────────────────────────────────────────────────────────────
-const TTL = 60_000
+const TTL = 120_000
 let stockMemo:  { at: number; data: MeterStock[]  } | null = null
 let issuesMemo: { at: number; data: MeterIssue[] } | null = null
 let tabsReady = false
@@ -355,8 +356,8 @@ export async function bulkFinalizeMeterInstallations(req: {
     })
   }
   invalidateMeterCache()
-  for (const rcvNo of nscReceiveNos) {
-    await updateNSCConnectionEffected(rcvNo)
+  if (nscReceiveNos.length > 0) {
+    await Promise.all(nscReceiveNos.map(rcvNo => updateNSCConnectionEffected(rcvNo)))
   }
   return { succeeded: req.issueIds.length - failed.length, failed }
 }
@@ -405,10 +406,6 @@ export async function returnMeterToStock(req: {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-function nowDate(): string {
-  const d = new Date(Date.now() + 5.5 * 60 * 60 * 1000)
-  return [String(d.getUTCDate()).padStart(2, "0"), String(d.getUTCMonth() + 1).padStart(2, "0"), d.getUTCFullYear()].join("-")
-}
 
 export function expandSerialRange(prefix: string, start: string, end: string): string[] {
   const s = parseInt(start, 10), e = parseInt(end, 10)

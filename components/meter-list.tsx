@@ -159,7 +159,7 @@ export function MeterList({ userRole, userAgencies, username, agencies }: Props)
   }, [issues, tab, search, purposeFilter, isAdmin, userAgencies])
 
   const totalPages = Math.ceil(filteredIssues.length / PAGE)
-  const paginated  = filteredIssues.slice((page - 1) * PAGE, page * PAGE)
+  const paginated  = useMemo(() => filteredIssues.slice((page - 1) * PAGE, page * PAGE), [filteredIssues, page])
   useEffect(() => { setPage(1); setSelectedForFinalize(new Set()) }, [tab, search, purposeFilter])
 
   // ── Slip selection ────────────────────────────────────────────────────────

@@ -31,7 +31,7 @@ export interface HistoryEntry {
 // Warm-function in-memory cache. History reads are rare (user-triggered) but
 // when the consumer form is open, several rows may be requested in sequence.
 // 30s TTL matches the consumer data cache.
-const HISTORY_MEMO_TTL_MS = 30_000
+const HISTORY_MEMO_TTL_MS = 60_000
 let historyMemo: { at: number; data: HistoryEntry[] } | null = null
 
 export function invalidateHistoryCache() {

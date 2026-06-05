@@ -3,6 +3,7 @@ import { google } from "googleapis"
 import { auth } from "./google-drive"
 import { getSpreadsheetId } from "./google-sheets-api"
 import type { NSCApplication } from "./nsc-types"
+import { nowTs, currentFY } from "./date-utils"
 
 export type { NSCApplication }
 
@@ -33,7 +34,7 @@ const NSC_HEADERS = [
 ]
 
 // ─── Cache ───────────────────────────────────────────────────────────────────
-const TTL = 30_000
+const TTL = 120_000
 let nscMemo: { at: number; data: NSCApplication[] } | null = null
 let tabReady = false
 
@@ -120,14 +121,6 @@ export async function fetchApplications(): Promise<NSCApplication[]> {
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-function currentFY(): string {
-  const d = new Date(Date.now() + 5.5 * 3600000) // IST
-  const y = d.getUTCFullYear(), m = d.getUTCMonth() + 1
-  return m >= 4
-    ? `${String(y).slice(2)}-${String(y + 1).slice(2)}`
-    : `${String(y - 1).slice(2)}-${String(y).slice(2)}`
-}
-
 async function nextReceiveNo(id: string): Promise<string> {
   const all = await fetchApplications()
   const fy = currentFY()
@@ -140,11 +133,6 @@ async function nextReceiveNo(id: string): Promise<string> {
   return `${prefix}${String(max + 1).padStart(4, "0")}`
 }
 
-function nowTs(): string {
-  const d = new Date(Date.now() + 5.5 * 3600000)
-  const p = (n: number) => String(n).padStart(2, "0")
-  return `${p(d.getUTCDate())}-${p(d.getUTCMonth() + 1)}-${d.getUTCFullYear()} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}`
-}
 
 // ─── Create application ───────────────────────────────────────────────────────
 export async function createApplication(req: {

@@ -1,0 +1,10 @@
+{
+  "functions": {
+    "app/api/meters/finalize/route.ts": { "maxDuration": 60 },
+    "app/api/meters/route.ts":          { "maxDuration": 30 },
+    "app/api/nsc/route.ts":             { "maxDuration": 30 },
+    "app/api/nsc/inspect/route.ts":     { "maxDuration": 30 },
+    "app/api/nsc/process/route.ts":     { "maxDuration": 30 },
+    "app/api/notifications/route.ts":   { "maxDuration": 30 }
+  }
+}

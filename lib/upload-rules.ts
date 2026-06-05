@@ -19,7 +19,7 @@ export interface SavedRuleSet {
 
 // Reads are rare (only when the admin opens the upload screen). Short memo
 // keeps repeated opens within a container cheap.
-const MEMO_TTL_MS = 30_000
+const MEMO_TTL_MS = 60_000
 let memo: { at: number; rows: string[][] } | null = null
 
 export function invalidateRulesCache() {

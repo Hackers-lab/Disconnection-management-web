@@ -15,7 +15,7 @@ export interface SavedTemplate {
   updatedAt?: string
 }
 
-const MEMO_TTL_MS = 30_000
+const MEMO_TTL_MS = 60_000
 let memo: { at: number; rows: string[][] } | null = null
 
 export function invalidateTemplatesCache() {

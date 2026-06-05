@@ -179,7 +179,9 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
     }
 
     fetchFresh()
-    const id = setInterval(fetchFresh, 60_000)
+    const id = setInterval(() => {
+      if (!document.hidden) fetchFresh()
+    }, 60_000)
 
     // Refresh when tab regains focus (user switches back)
     const onFocus = () => fetchFresh()
