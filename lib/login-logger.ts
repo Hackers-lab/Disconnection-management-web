@@ -47,15 +47,16 @@ async function ensureLogTab(spreadsheetId: string): Promise<void> {
 }
 
 function nowTimestamp(): string {
-  const d = new Date()
+  // Vercel runs in UTC — shift to IST (UTC+5:30) explicitly
+  const d = new Date(Date.now() + 5.5 * 60 * 60 * 1000)
   return [
-    String(d.getDate()).padStart(2, "0"),
-    String(d.getMonth() + 1).padStart(2, "0"),
-    d.getFullYear(),
+    String(d.getUTCDate()).padStart(2, "0"),
+    String(d.getUTCMonth() + 1).padStart(2, "0"),
+    d.getUTCFullYear(),
   ].join("-") + " " + [
-    String(d.getHours()).padStart(2, "0"),
-    String(d.getMinutes()).padStart(2, "0"),
-    String(d.getSeconds()).padStart(2, "0"),
+    String(d.getUTCHours()).padStart(2, "0"),
+    String(d.getUTCMinutes()).padStart(2, "0"),
+    String(d.getUTCSeconds()).padStart(2, "0"),
   ].join(":")
 }
 

@@ -28,7 +28,8 @@ interface DashboardMenuProps {
 export function DashboardMenu({ onSelect, userRole, userAgencies = [] }: DashboardMenuProps) {
   const [pendingCount, setPendingCount] = useState<number>(0)
   const [ddPendingCount, setDdPendingCount] = useState<number>(0)
-  const [showDevModal, setShowDevModal] = useState(false) // State for floating window
+  const [reconnectionPendingCount, setReconnectionPendingCount] = useState<number>(0)
+  const [showDevModal, setShowDevModal] = useState(false)
 
   const modules = [
     {
@@ -45,13 +46,13 @@ export function DashboardMenu({ onSelect, userRole, userAgencies = [] }: Dashboa
     {
       id: "reconnection",
       title: "Reconnection",
-      description: "Re-issue connected consumers",
+      description: "Track and manage consumer reconnections",
       icon: RotateCcw,
       color: "text-blue-600",
       bgColor: "bg-blue-50",
       borderColor: "hover:border-blue-200",
-      allowed: ["admin", "executive"],
-      status: "soon"
+      allowed: ["admin", "executive", "agency"],
+      status: "live"
     },
     {
       id: "deemed",
@@ -148,6 +149,20 @@ export function DashboardMenu({ onSelect, userRole, userAgencies = [] }: Dashboa
           }).length
           setDdPendingCount(ddCount)
         }
+        // Reconnection pending count — read from IndexedDB cache (populated by ReconnectionList)
+        try {
+          const rcCached = await getFromCache<any[]>("reconnection_data_cache")
+          if (rcCached) {
+            const upper = (userAgencies || []).map((a: string) => a.toUpperCase())
+            const rcPending = rcCached.filter((r: any) => {
+              if (r.status !== "pending") return false
+              if (userRole === "admin" || userRole === "viewer" || userRole === "executive") return true
+              return upper.includes((r.agency || "").toUpperCase())
+            }).length
+            setReconnectionPendingCount(rcPending)
+          }
+        } catch { /* non-critical */ }
+
       } catch (e) { console.error("Failed to load pending count", e) }
     }
     loadPendingCount()
@@ -189,6 +204,11 @@ export function DashboardMenu({ onSelect, userRole, userAgencies = [] }: Dashboa
                   {module.id === "deemed" && ddPendingCount > 0 && (
                     <div className="absolute top-2 right-2 md:top-4 md:right-4 z-20 flex items-center justify-center bg-red-600 text-white text-[10px] md:text-xs font-bold px-1.5 py-0.5 md:px-3 md:py-1 rounded-full shadow-lg border-2 border-white">
                       {ddPendingCount}
+                    </div>
+                  )}
+                  {module.id === "reconnection" && reconnectionPendingCount > 0 && (
+                    <div className="absolute top-2 right-2 md:top-4 md:right-4 z-20 flex items-center justify-center bg-blue-600 text-white text-[10px] md:text-xs font-bold px-1.5 py-0.5 md:px-3 md:py-1 rounded-full shadow-lg border-2 border-white">
+                      {reconnectionPendingCount}
                     </div>
                   )}
 

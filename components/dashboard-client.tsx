@@ -10,6 +10,7 @@ import { ConsumerList } from "@/components/consumer-list"
 import { AdminPanel } from "@/components/admin-panel"
 import { DDList } from "@/components/dd-list"
 import { AnalysisDashboard } from "@/components/analysis-dashboard"
+import { ReconnectionList } from "@/components/reconnection-list"
 import { ConsumerData } from "@/lib/google-sheets"
 import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
@@ -968,23 +969,26 @@ export default function DashboardClient({ role, agencies }: DashboardClientProps
         )}
 
         {activeView === "disconnection" && (
-          <ConsumerList 
+          <ConsumerList
             ref={consumerListRef}
-            userRole={role} 
-            userAgencies={agencies} 
-            onAdminClick={() => setShowAdminPanel(true)} 
-            showAdminPanel={showAdminPanel} 
-            onCloseAdminPanel={handleAdminClose} 
-            onDownload={downloadPDF} 
-            onDownloadDefaulters={openDownloadDialog} 
+            userRole={role}
+            userAgencies={agencies}
+            onAdminClick={() => setShowAdminPanel(true)}
+            showAdminPanel={showAdminPanel}
+            onCloseAdminPanel={handleAdminClose}
+            onDownload={downloadPDF}
+            onDownloadDefaulters={openDownloadDialog}
+            onGoToReconnection={() => setActiveView("reconnection")}
           />
         )}
 
         {activeView === "reconnection" && (
-          <div className="flex flex-col items-center justify-center h-64 border-2 border-dashed rounded-lg bg-gray-50 text-gray-500">
-            <h3 className="text-xl font-medium">Reconnection Module</h3>
-            <p className="mt-2">This feature is coming soon.</p>
-          </div>
+          <ReconnectionList
+            userRole={role}
+            userAgencies={agencies}
+            username={(agencies[0] || role)}
+            agencies={agencies}
+          />
         )}
 
         {activeView === "deemed" && (

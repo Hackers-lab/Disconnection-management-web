@@ -78,6 +78,7 @@ interface ConsumerListProps {
   onCloseAdminPanel: () => void
   onDownload: () => void
   onDownloadDefaulters: () => void
+  onGoToReconnection?: () => void
 }
 interface ConsumerListRef {  // <-- Add this interface
   getCurrentConsumers: () => ConsumerData[]
@@ -121,7 +122,7 @@ const SYNC_COOLDOWN_MS = 10000 // 10 seconds cooldown
 
 const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
   (props, ref) => {
-  const { userRole, userAgencies, onAdminClick, showAdminPanel, onCloseAdminPanel } = props
+  const { userRole, userAgencies, onAdminClick, showAdminPanel, onCloseAdminPanel, onGoToReconnection } = props
   const { toast } = useToast()
   const [consumers, setConsumers] = useState<ConsumerData[]>([])
   const [agencies, setAgencies] = useState<string[]>([])
@@ -160,6 +161,7 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
   const [baseClasses, setBaseClasses] = useState<string[]>([])
   const [isCachedData, setIsCachedData] = useState(false)
   const [sortByMRU, setSortByMRU] = useState(false)
+  const [blockedIds, setBlockedIds] = useState<Set<string>>(new Set())
   const [isBackgroundUpdating, setIsBackgroundUpdating] = useState(false)
   const [syncStatus, setSyncStatus] = useState<'idle' | 'checking' | 'found' | 'syncing' | 'updated'>('idle')
   const [viewMode, setViewMode] = useState<"card" | "list">("card")
@@ -183,6 +185,19 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
   useEffect(() => {
     consumersRef.current = consumers
   }, [consumers])
+
+  // Blocked reconnection IDs — own effect so it runs immediately on mount
+  // and refreshes every 5 minutes independently of the main data sync
+  useEffect(() => {
+    const fetchBlocked = () =>
+      fetch("/api/reconnection/blocked-ids")
+        .then(r => r.ok ? r.json() : [])
+        .then((ids: string[]) => setBlockedIds(new Set(ids)))
+        .catch(() => {})
+    fetchBlocked()
+    const timer = setInterval(fetchBlocked, 5 * 60 * 1000)
+    return () => clearInterval(timer)
+  }, [])
 
   // Memoize agencies key to prevent unnecessary effect triggers on array reference changes
   const agenciesKey = useMemo(() => JSON.stringify(userAgencies), [userAgencies])
@@ -830,8 +845,70 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
     return <AdminPanel onClose={onCloseAdminPanel} />
   }
 
+  // ── RECONNECTION BLOCK ────────────────────────────────────────────────────
+  // Hard block for agency: if any of their reconnections have been pending
+  // for more than 30 hours, the entire disconnection module is inaccessible.
+  if (userRole === "agency" && blockedIds.size > 0) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] px-4 text-center space-y-6">
+        <div className="w-20 h-20 rounded-full bg-red-100 flex items-center justify-center">
+          <AlertCircle className="h-10 w-10 text-red-600" />
+        </div>
+        <div className="space-y-2">
+          <h2 className="text-2xl font-bold text-red-700">Module Locked</h2>
+          <p className="text-lg font-semibold text-gray-800">
+            {blockedIds.size} Reconnection{blockedIds.size > 1 ? "s" : ""} Overdue
+          </p>
+          <p className="text-gray-600 max-w-md">
+            You have <strong>{blockedIds.size} pending reconnection{blockedIds.size > 1 ? " requests" : " request"}</strong> that
+            {blockedIds.size > 1 ? " have" : " has"} been waiting for more than <strong>30 hours</strong>.
+            The Disconnection module is locked until all overdue reconnections are completed.
+          </p>
+        </div>
+        <div className="bg-red-50 border-2 border-red-200 rounded-xl p-4 max-w-sm w-full">
+          <p className="text-sm font-bold text-red-800 uppercase tracking-wide mb-1">Action Required</p>
+          <p className="text-sm text-red-700">
+            Go to the <strong>Reconnection</strong> module from the home menu and mark all overdue requests as
+            Reconnected or Door Locked before continuing.
+          </p>
+        </div>
+        {onGoToReconnection && (
+          <button
+            onClick={onGoToReconnection}
+            className="px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-xl shadow transition"
+          >
+            Go to Reconnection Module →
+          </button>
+        )}
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
+      {/* Admin/Executive warning banner when overdue reconnections exist */}
+      {(userRole === "admin" || userRole === "executive") && blockedIds.size > 0 && (
+        <div className="flex items-start gap-3 bg-orange-50 border-l-4 border-orange-500 rounded-lg p-4">
+          <AlertCircle className="h-5 w-5 text-orange-600 mt-0.5 shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold text-orange-800">
+              {blockedIds.size} overdue reconnection{blockedIds.size > 1 ? "s" : ""} (&gt;30 hours)
+            </p>
+            <p className="text-sm text-orange-700 mt-0.5">
+              Affected consumers are marked below. Agency access to this module is currently blocked.
+            </p>
+          </div>
+          {onGoToReconnection && (
+            <button
+              onClick={onGoToReconnection}
+              className="text-xs font-medium text-orange-700 underline shrink-0"
+            >
+              View →
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Dashboard Statistics - Always visible */}
       <DashboardStats consumers={filteredConsumers} loading={false} />
 
@@ -866,7 +943,10 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
                 )}
               </Button>
             </SheetTrigger>
-            <SheetContent className="w-[300px] sm:w-[400px] overflow-y-auto">
+            <SheetContent
+              className="w-[300px] sm:w-[400px] overflow-y-auto"
+              onOpenAutoFocus={(e) => e.preventDefault()}
+            >
               <SheetHeader className="mb-6">
                 <SheetTitle>Filters & Sort</SheetTitle>
                 <SheetDescription>
@@ -1096,13 +1176,18 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
 
                 {/* Clear Filters */}
                 <Button 
-                  variant="destructive" 
-                  className="w-full mt-8"
-                  onClick={() => {
-                    clearFilters();
-                  }}
+                  variant="destructive"
+                  className="w-full mt-4"
+                  onClick={() => clearFilters()}
                 >
                   <X className="mr-2 h-4 w-4" /> Clear All Filters
+                </Button>
+
+                <Button
+                  className="w-full mt-2 bg-blue-600 hover:bg-blue-700 text-white"
+                  onClick={() => setIsFilterOpen(false)}
+                >
+                  OK
                 </Button>
               </div>
             </SheetContent>
@@ -1287,25 +1372,25 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
                 )}
                 {/* 👆 END UPDATED SECTION 👆 */}
 
-                <Button onClick={() => {
-                    if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
-                    setSelectedConsumer(consumer)
-                }} 
-                className={`w-full mt-4 ${
-                    ((!["connected", "visited", "not found"].includes(consumer.disconStatus.toLowerCase()) && userRole !== "admin" && userRole !== "executive") || userRole === "viewer")
-                      ? "bg-gray-100 text-gray-500 hover:bg-gray-100 cursor-not-allowed" 
-                      : ""
-                  }`}
-                  size="sm"
-                  disabled={(!["connected", "visited", "not found"].includes(consumer.disconStatus.toLowerCase()) && userRole !== "admin" && userRole !== "executive") || userRole === "viewer"}
-                >
-                  <Edit className={`h-4 w-4 mr-2 ${
-                      ((!["connected", "visited", "not found"].includes(consumer.disconStatus.toLowerCase()) && userRole !== "admin" && userRole !== "executive") || userRole === "viewer") 
-                        ? "text-gray-400" 
-                        : ""
-                    }`} />
-                  Update Status
-                </Button>
+                {(() => {
+                  const roleBlocked = (!["connected", "visited", "not found"].includes(consumer.disconStatus.toLowerCase()) && userRole !== "admin" && userRole !== "executive") || userRole === "viewer"
+                  const reconnBlocked = blockedIds.has(consumer.consumerId)
+                  return (
+                    <Button
+                      onClick={() => {
+                        if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
+                        setSelectedConsumer(consumer)
+                      }}
+                      className={`w-full mt-4 ${roleBlocked ? "bg-gray-100 text-gray-500 hover:bg-gray-100 cursor-not-allowed" : ""}`}
+                      size="sm"
+                      disabled={roleBlocked}
+                      title={reconnBlocked ? "Reconnection pending >30h" : undefined}
+                    >
+                      <Edit className={`h-4 w-4 mr-2 ${roleBlocked ? "text-gray-400" : ""}`} />
+                      {reconnBlocked ? "⚠ Update Status" : "Update Status"}
+                    </Button>
+                  )
+                })()}
               </CardContent>
             </Card>
           ))}
@@ -1360,17 +1445,24 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
                          <Badge className={`${getStatusColor(consumer.disconStatus)} whitespace-nowrap`}>{consumer.disconStatus}</Badge>
                       </td>
                       <td className="px-4 py-3 text-center whitespace-nowrap">
-                        <Button 
-                          onClick={() => {
-                            if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
-                            setSelectedConsumer(consumer)
-                          }} 
-                          size="sm"
-                          className="h-8 bg-blue-600 hover:bg-blue-700 text-white"
-                          disabled={(!["connected", "visited", "not found"].includes(consumer.disconStatus.toLowerCase()) && userRole !== "admin" && userRole !== "executive") || userRole === "viewer"}
-                        >
-                          Update
-                        </Button>
+                        {(() => {
+                          const roleBlocked = (!["connected", "visited", "not found"].includes(consumer.disconStatus.toLowerCase()) && userRole !== "admin" && userRole !== "executive") || userRole === "viewer"
+                          const reconnBlocked = blockedIds.has(consumer.consumerId)
+                          return (
+                            <Button
+                              onClick={() => {
+                                if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
+                                setSelectedConsumer(consumer)
+                              }}
+                              size="sm"
+                              className="h-8 bg-blue-600 hover:bg-blue-700 text-white"
+                              disabled={roleBlocked}
+                              title={reconnBlocked ? "Reconnection pending >30h" : undefined}
+                            >
+                              {reconnBlocked ? "⚠ Update" : "Update"}
+                            </Button>
+                          )
+                        })()}
                       </td>
                     </tr>
                   ))}
