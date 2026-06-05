@@ -13,8 +13,10 @@ import {
   LayoutDashboard,
   ArrowRight,
   RadioTower,
-  X,        // Added for Modal close
-  Phone     // Added for Contact icon
+  Gauge,
+  BarChart3,
+  X,
+  Phone
 } from "lucide-react"
 import { ViewType } from "@/components/app-sidebar"
 import { getFromCache, saveToCache } from "@/lib/indexed-db"
@@ -29,6 +31,7 @@ export function DashboardMenu({ onSelect, userRole, userAgencies = [] }: Dashboa
   const [pendingCount, setPendingCount] = useState<number>(0)
   const [ddPendingCount, setDdPendingCount] = useState<number>(0)
   const [reconnectionPendingCount, setReconnectionPendingCount] = useState<number>(0)
+  const [meterPendingCount, setMeterPendingCount] = useState<number>(0)
   const [showDevModal, setShowDevModal] = useState(false)
 
   const modules = [
@@ -77,6 +80,17 @@ export function DashboardMenu({ onSelect, userRole, userAgencies = [] }: Dashboa
       status: "soon"
     },
     {
+      id: "meter",
+      title: userRole === "agency" ? "Meter Installation" : "Meter Management",
+      description: userRole === "agency" ? "Report installations & view pending" : "Stock tracking, issue & installation",
+      icon: Gauge,
+      color: "text-purple-600",
+      bgColor: "bg-purple-50",
+      borderColor: "hover:border-purple-200",
+      allowed: ["admin", "executive", "agency"],
+      status: "live"
+    },
+    {
       id: "nsc",
       title: "NSC Inspection",
       description: "New Service Connection checks",
@@ -97,6 +111,17 @@ export function DashboardMenu({ onSelect, userRole, userAgencies = [] }: Dashboa
       borderColor: "hover:border-gray-300",
       allowed: ["admin"],
       status: "active"
+    },
+    {
+      id: "analysis",
+      title: "Analysis",
+      description: "Reports, trends and performance insights",
+      icon: BarChart3,
+      color: "text-indigo-600",
+      bgColor: "bg-indigo-50",
+      borderColor: "hover:border-indigo-200",
+      allowed: ["admin"],
+      status: "live"
     }
   ]
 
@@ -163,6 +188,28 @@ export function DashboardMenu({ onSelect, userRole, userAgencies = [] }: Dashboa
           }
         } catch { /* non-critical */ }
 
+        // Meter pending count
+        try {
+          const isAgency = userRole === "agency"
+          const cacheKey = isAgency ? "meter_issues_cache" : "meter_stock_cache"
+          const meterCached = await getFromCache<any>(cacheKey)
+          if (meterCached) {
+            const meterIssues: any[] = isAgency ? meterCached : (meterCached.issues || [])
+            const upper = (userAgencies || []).map((a: string) => a.toUpperCase())
+            const count = meterIssues.filter((i: any) => {
+              if (isAgency) {
+                // Agency sees issued meters (pending installation)
+                if (i.status !== "issued") return false
+                return upper.includes((i.agency || "").toUpperCase())
+              } else {
+                // Admin/exec sees installation_done (pending finalization)
+                return i.status === "installation_done"
+              }
+            }).length
+            setMeterPendingCount(count)
+          }
+        } catch { /* non-critical */ }
+
       } catch (e) { console.error("Failed to load pending count", e) }
     }
     loadPendingCount()
@@ -206,9 +253,14 @@ export function DashboardMenu({ onSelect, userRole, userAgencies = [] }: Dashboa
                       {ddPendingCount}
                     </div>
                   )}
-                  {module.id === "reconnection" && reconnectionPendingCount > 0 && (
-                    <div className="absolute top-2 right-2 md:top-4 md:right-4 z-20 flex items-center justify-center bg-blue-600 text-white text-[10px] md:text-xs font-bold px-1.5 py-0.5 md:px-3 md:py-1 rounded-full shadow-lg border-2 border-white">
+                  {module.id === "reconnection" && (
+                    <div className={`absolute top-2 right-2 md:top-4 md:right-4 z-20 flex items-center justify-center text-white text-[10px] md:text-xs font-bold px-1.5 py-0.5 md:px-3 md:py-1 rounded-full shadow-lg border-2 border-white ${reconnectionPendingCount > 0 ? "bg-blue-600" : "bg-gray-400"}`}>
                       {reconnectionPendingCount}
+                    </div>
+                  )}
+                  {module.id === "meter" && meterPendingCount > 0 && (
+                    <div className="absolute top-2 right-2 md:top-4 md:right-4 z-20 flex items-center justify-center bg-purple-600 text-white text-[10px] md:text-xs font-bold px-1.5 py-0.5 md:px-3 md:py-1 rounded-full shadow-lg border-2 border-white">
+                      {meterPendingCount}
                     </div>
                   )}
 

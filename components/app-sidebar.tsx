@@ -14,10 +14,11 @@ import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { useState, useEffect } from "react"
 import { getFromCache } from "@/lib/indexed-db"
+import type { ConsumerData } from "@/lib/google-sheets"
 import { Badge } from "@/components/ui/badge"
 
 // Define the available views
-export type ViewType = "disconnection" | "reconnection" | "deemed" | "nsc" | "admin" | "home" | "analysis"
+export type ViewType = "disconnection" | "reconnection" | "deemed" | "nsc" | "meter" | "admin" | "home" | "analysis"
 
 interface AppSidebarProps {
   activeView: ViewType

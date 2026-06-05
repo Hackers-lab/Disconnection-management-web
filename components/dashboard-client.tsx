@@ -11,6 +11,7 @@ import { AdminPanel } from "@/components/admin-panel"
 import { DDList } from "@/components/dd-list"
 import { AnalysisDashboard } from "@/components/analysis-dashboard"
 import { ReconnectionList } from "@/components/reconnection-list"
+import { MeterList } from "@/components/meter-list"
 import { ConsumerData } from "@/lib/google-sheets"
 import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
@@ -993,6 +994,15 @@ export default function DashboardClient({ role, agencies }: DashboardClientProps
 
         {activeView === "deemed" && (
            <DDList userRole={role} userAgencies={agencies} />
+        )}
+
+        {activeView === "meter" && (
+          <MeterList
+            userRole={role}
+            userAgencies={agencies}
+            username={agencies[0] || role}
+            agencies={agencies}
+          />
         )}
 
         {activeView === "nsc" && (

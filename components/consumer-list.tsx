@@ -1060,7 +1060,7 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
 
                 {/* Dropdowns */}
                 <div className="space-y-3">
-                  {(userRole === "admin" || userRole === "viewer") && (
+                  {(userRole === "admin" || userRole === "viewer" || (userRole === "executive" && userAgencies.length > 1)) && (
                   <div className="grid grid-cols-3 items-center gap-2">
                     <label className="text-sm font-medium col-span-1">Agency</label>
                     <div className="col-span-2">
