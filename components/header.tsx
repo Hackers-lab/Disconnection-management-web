@@ -21,7 +21,12 @@ import {
   FileText,
   KeyRound,
   Eye,
-  EyeOff
+  EyeOff,
+  Bell,
+  Zap,
+  RotateCcw,
+  Gauge,
+  ClipboardCheck,
 } from "lucide-react"
 import { useState, useEffect } from "react"
 import {
@@ -129,6 +134,84 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
   const [changePwdError, setChangePwdError] = useState<string | null>(null)
   const [changePwdSuccess, setChangePwdSuccess] = useState(false)
   const [changePwdLoading, setChangePwdLoading] = useState(false)
+
+  // ── Notifications ──────────────────────────────────────────────────────────
+  const [showNotifs, setShowNotifs] = useState(false)
+  interface NotifGroup { label: string; count: number; color: string; bg: string; view: ViewType; icon: any }
+  const [notifGroups, setNotifGroups] = useState<NotifGroup[]>([])
+  const notifTotal = notifGroups.reduce((s, g) => s + g.count, 0)
+
+  useEffect(() => {
+    async function loadNotifs() {
+      const upper = (userAgencies || []).map(a => a.toUpperCase())
+      const isAdminExec = userRole === "admin" || userRole === "executive"
+      const isAgency = userRole === "agency"
+      const groups: NotifGroup[] = []
+
+      // DC urgent
+      try {
+        const dc = await getFromCache<any[]>("consumers_data_cache")
+        if (dc) {
+          const count = dc.filter(c => {
+            if ((c.priority || "").toLowerCase() !== "urgent") return false
+            if (isAdminExec) return true
+            return upper.includes((c.agency || "").toUpperCase())
+          }).length
+          if (count > 0) groups.push({ label: "Urgent DC consumers", count, color: "text-red-600", bg: "bg-red-50", view: "disconnection", icon: Zap })
+        }
+      } catch { /* ignore */ }
+
+      // Reconnection pending
+      try {
+        const rc = await getFromCache<any[]>("reconnection_data_cache")
+        if (rc) {
+          const count = rc.filter(r => {
+            if (r.status !== "pending") return false
+            if (isAdminExec) return true
+            return upper.includes((r.agency || "").toUpperCase())
+          }).length
+          if (count > 0) groups.push({ label: "Reconnections pending", count, color: "text-blue-600", bg: "bg-blue-50", view: "reconnection", icon: RotateCcw })
+        }
+      } catch { /* ignore */ }
+
+      // Meter issued pending installation (agency) or installation_done pending finalization (admin)
+      try {
+        const mk = isAdminExec ? "meter_stock_cache" : "meter_issues_cache"
+        const md = await getFromCache<any>(mk)
+        if (md) {
+          const list: any[] = isAdminExec ? (md.issues || []) : (Array.isArray(md) ? md : [])
+          const targetStatus = isAdminExec ? "installation_done" : "issued"
+          const label = isAdminExec ? "Meters awaiting finalization" : "Meters issued — install pending"
+          const count = list.filter(m => {
+            if (m.status !== targetStatus) return false
+            if (isAdminExec) return true
+            return upper.includes((m.agency || "").toUpperCase())
+          }).length
+          if (count > 0) groups.push({ label, count, color: "text-purple-600", bg: "bg-purple-50", view: "meter", icon: Gauge })
+        }
+      } catch { /* ignore */ }
+
+      // NSC pending inspection (agency) or awaiting processing (admin)
+      try {
+        const nsc = await getFromCache<any[]>("nsc_data_cache")
+        if (nsc) {
+          const targetStatus = isAdminExec ? "inspected" : "pending"
+          const label = isAdminExec ? "NSC inspections awaiting processing" : "NSC inspections pending"
+          const count = nsc.filter(a => {
+            if (a.status !== targetStatus) return false
+            if (isAdminExec) return true
+            return upper.includes((a.agency || "").toUpperCase())
+          }).length
+          if (count > 0) groups.push({ label, count, color: "text-green-600", bg: "bg-green-50", view: "nsc", icon: ClipboardCheck })
+        }
+      } catch { /* ignore */ }
+
+      setNotifGroups(groups)
+    }
+    loadNotifs()
+    const id = setInterval(loadNotifs, 60_000)
+    return () => clearInterval(id)
+  }, [userRole, userAgencies])
 
   const openChangePwdDialog = () => {
     setChangePwdCurrent("")
@@ -919,6 +1002,68 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
             <div className="flex items-center space-x-2 text-sm text-gray-600 bg-gray-50 px-2 py-1.5 rounded-full border">
               <User className="h-4 w-4" />
               <span className="capitalize inline truncate max-w-[120px]">{displayAgencyName || userRole}</span>
+            </div>
+
+            {/* ── Notification bell ── */}
+            <div className="relative">
+              <button
+                onClick={() => setShowNotifs(v => !v)}
+                className="relative p-2 rounded-full hover:bg-gray-100 transition"
+                title="Notifications"
+              >
+                <Bell className="h-5 w-5 text-gray-600" />
+                {notifTotal > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] bg-red-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1 leading-none">
+                    {notifTotal > 99 ? "99+" : notifTotal}
+                  </span>
+                )}
+              </button>
+
+              {/* Dropdown panel */}
+              {showNotifs && (
+                <>
+                  {/* Click-away overlay */}
+                  <div className="fixed inset-0 z-40" onClick={() => setShowNotifs(false)} />
+                  <div className="absolute right-0 mt-2 w-72 bg-white border rounded-xl shadow-xl z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+                    <div className="px-4 py-3 border-b flex items-center justify-between">
+                      <p className="font-semibold text-sm text-gray-800">Notifications</p>
+                      {notifTotal > 0 && (
+                        <span className="text-xs bg-red-100 text-red-700 font-bold px-2 py-0.5 rounded-full">{notifTotal} pending</span>
+                      )}
+                    </div>
+                    {notifGroups.length === 0 ? (
+                      <div className="px-4 py-8 text-center text-gray-400 text-sm">
+                        <Bell className="h-8 w-8 mx-auto mb-2 opacity-30" />
+                        <p>All clear — no pending items</p>
+                      </div>
+                    ) : (
+                      <div className="divide-y">
+                        {notifGroups.map(g => {
+                          const Icon = g.icon
+                          return (
+                            <button
+                              key={g.label}
+                              className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition text-left`}
+                              onClick={() => { setShowNotifs(false); setActiveView(g.view) }}
+                            >
+                              <div className={`shrink-0 w-9 h-9 rounded-full ${g.bg} flex items-center justify-center`}>
+                                <Icon className={`h-4 w-4 ${g.color}`} />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-gray-800 leading-tight">{g.label}</p>
+                              </div>
+                              <span className={`shrink-0 text-sm font-bold ${g.color}`}>{g.count}</span>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    )}
+                    <div className="px-4 py-2 border-t bg-gray-50 text-center">
+                      <p className="text-[10px] text-gray-400">Refreshes every minute · tap to navigate</p>
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
 
             {/* --- DESKTOP VIEW (Hidden on Mobile) --- */}
