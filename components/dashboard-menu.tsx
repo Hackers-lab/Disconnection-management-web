@@ -32,6 +32,7 @@ export function DashboardMenu({ onSelect, userRole, userAgencies = [] }: Dashboa
   const [ddPendingCount, setDdPendingCount] = useState<number>(0)
   const [reconnectionPendingCount, setReconnectionPendingCount] = useState<number>(0)
   const [meterPendingCount, setMeterPendingCount] = useState<number>(0)
+  const [nscPendingCount, setNscPendingCount]     = useState<number>(0)
   const [showDevModal, setShowDevModal] = useState(false)
 
   const modules = [
@@ -92,14 +93,14 @@ export function DashboardMenu({ onSelect, userRole, userAgencies = [] }: Dashboa
     },
     {
       id: "nsc",
-      title: "NSC Inspection",
-      description: "New Service Connection checks",
+      title: userRole === "agency" ? "NSC Inspection" : "NSC Management",
+      description: userRole === "agency" ? "Site inspections for new connections" : "New service connection applications",
       icon: ClipboardCheck,
       color: "text-green-600",
       bgColor: "bg-green-50",
       borderColor: "hover:border-green-200",
-      allowed: ["admin", "executive"],
-      status: "soon"
+      allowed: ["admin", "executive", "agency"],
+      status: "live"
     },
     {
       id: "admin",
@@ -210,6 +211,21 @@ export function DashboardMenu({ onSelect, userRole, userAgencies = [] }: Dashboa
           }
         } catch { /* non-critical */ }
 
+        // NSC pending count
+        try {
+          const nscCached = await getFromCache<any[]>("nsc_data_cache")
+          if (nscCached) {
+            const upper = (userAgencies || []).map((a: string) => a.toUpperCase())
+            const nscCount = nscCached.filter((a: any) => {
+              if (userRole === "agency") {
+                return a.status === "pending" && upper.includes((a.agency || "").toUpperCase())
+              }
+              return a.status === "inspected"
+            }).length
+            setNscPendingCount(nscCount)
+          }
+        } catch { /* non-critical */ }
+
       } catch (e) { console.error("Failed to load pending count", e) }
     }
     loadPendingCount()
@@ -256,6 +272,11 @@ export function DashboardMenu({ onSelect, userRole, userAgencies = [] }: Dashboa
                   {module.id === "reconnection" && (
                     <div className={`absolute top-2 right-2 md:top-4 md:right-4 z-20 flex items-center justify-center text-white text-[10px] md:text-xs font-bold px-1.5 py-0.5 md:px-3 md:py-1 rounded-full shadow-lg border-2 border-white ${reconnectionPendingCount > 0 ? "bg-blue-600" : "bg-gray-400"}`}>
                       {reconnectionPendingCount}
+                    </div>
+                  )}
+                  {module.id === "nsc" && nscPendingCount > 0 && (
+                    <div className="absolute top-2 right-2 md:top-4 md:right-4 z-20 flex items-center justify-center bg-green-600 text-white text-[10px] md:text-xs font-bold px-1.5 py-0.5 md:px-3 md:py-1 rounded-full shadow-lg border-2 border-white">
+                      {nscPendingCount}
                     </div>
                   )}
                   {module.id === "meter" && meterPendingCount > 0 && (

@@ -95,9 +95,9 @@ export function AppSidebar({ activeView, setActiveView, userRole, isMobile = fal
     },
     {
       id: "nsc",
-      label: "NSC Visit",
+      label: "NSC Inspection",
       icon: ClipboardCheck,
-      allowedRoles: ["admin", "executive"] // Example roles
+      allowedRoles: ["admin", "executive", "agency"]
     },
     {
       id: "analysis",

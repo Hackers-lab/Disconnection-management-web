@@ -12,6 +12,7 @@ import { DDList } from "@/components/dd-list"
 import { AnalysisDashboard } from "@/components/analysis-dashboard"
 import { ReconnectionList } from "@/components/reconnection-list"
 import { MeterList } from "@/components/meter-list"
+import { NscList } from "@/components/nsc-list"
 import { ConsumerData } from "@/lib/google-sheets"
 import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
@@ -1006,10 +1007,12 @@ export default function DashboardClient({ role, agencies }: DashboardClientProps
         )}
 
         {activeView === "nsc" && (
-           <div className="flex flex-col items-center justify-center h-64 border-2 border-dashed rounded-lg bg-gray-50 text-gray-500">
-             <h3 className="text-xl font-medium">NSC Inspection</h3>
-             <p className="mt-2">This feature is coming soon.</p>
-           </div>
+          <NscList
+            userRole={role}
+            userAgencies={agencies}
+            username={agencies[0] || role}
+            agencies={agencies}
+          />
         )}
 
         {activeView === "analysis" && role === "admin" && (
