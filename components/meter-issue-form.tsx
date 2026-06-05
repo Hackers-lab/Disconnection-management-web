@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ArrowLeft, Search, Loader2, X as XIcon } from "lucide-react"
 import { getFromCache } from "@/lib/indexed-db"
 import type { ConsumerData } from "@/lib/google-sheets"
+import type { NSCApplication } from "@/lib/nsc-types"
 import type { MeterStock, IssuePurpose } from "@/lib/meter-types"
 import { METER_TYPES } from "@/lib/meter-types"
 
@@ -44,9 +45,9 @@ export function MeterIssueForm({ availableStock, agencies, onSave, onCancel }: P
   const [looking, setLooking]           = useState(false)
   const [submitting, setSubmitting]     = useState(false)
   const [agencyList, setAgencyList]     = useState<string[]>(agencies)
-  const [nscQuery, setNscQuery]         = useState("")
-  const [nscSuggestions, setNscSuggestions] = useState<ConsumerData[]>([])
-  const [nscAllData, setNscAllData]     = useState<ConsumerData[]>([])
+  const [nscApps, setNscApps]           = useState<NSCApplication[]>([])
+  const [nscSelected, setNscSelected]   = useState<NSCApplication | null>(null)
+  const [nscSearch, setNscSearch]       = useState("")
 
   // Load full agency list (same pattern as reconnection form)
   useEffect(() => {
@@ -65,32 +66,44 @@ export function MeterIssueForm({ availableStock, agencies, onSave, onCancel }: P
     load()
   }, [])
 
-  // Load consumer data for NSC autocomplete
+  // Load NSC applications (quotation_issued with applicationNo only)
   useEffect(() => {
     if (purpose !== "nsc") return
-    getFromCache<ConsumerData[]>("consumers_data_cache").then(data => {
-      if (data) setNscAllData(data)
+    getFromCache<NSCApplication[]>("nsc_data_cache").then(data => {
+      if (data) setNscApps(data.filter(a => a.status === "quotation_issued" && a.applicationNo))
     })
   }, [purpose])
 
-  useEffect(() => {
-    if (!nscQuery.trim() || purpose !== "nsc") { setNscSuggestions([]); return }
-    const q = nscQuery.toLowerCase()
-    const results = nscAllData.filter(c =>
-      c.name?.toLowerCase().includes(q) ||
-      c.consumerId?.includes(q) ||
-      c.address?.toLowerCase().includes(q)
-    ).slice(0, 8)
-    setNscSuggestions(results)
-  }, [nscQuery, nscAllData, purpose])
+  const nscFiltered = nscSearch.trim()
+    ? nscApps.filter(a => {
+        const q = nscSearch.toLowerCase()
+        return (
+          a.receiveNo.toLowerCase().includes(q) ||
+          a.applicantName.toLowerCase().includes(q) ||
+          a.address.toLowerCase().includes(q) ||
+          a.applicationNo.toLowerCase().includes(q)
+        )
+      })
+    : nscApps
 
-  const selectNscConsumer = (c: ConsumerData) => {
-    setConsumerName(c.name || "")
-    setConsumerAddress(c.address || "")
-    setConsumerMobile(c.mobileNumber || "")
-    setConsumerDevice(c.device || "")
-    setNscQuery(c.name || "")
-    setNscSuggestions([])
+  const selectNscApp = (app: NSCApplication) => {
+    setNscSelected(app)
+    setNscReceiveNo(app.receiveNo)
+    setConsumerName(app.applicantName)
+    setConsumerAddress(app.address)
+    setConsumerMobile(app.mobile)
+    setConsumerDevice("")
+    setAgency(app.agency || agency)
+    setNscSearch("")
+  }
+
+  const clearNscSelection = () => {
+    setNscSelected(null)
+    setNscReceiveNo("")
+    setConsumerName("")
+    setConsumerAddress("")
+    setConsumerMobile("")
+    setConsumerDevice("")
   }
 
   // Lookup consumer from cache
@@ -129,7 +142,7 @@ export function MeterIssueForm({ availableStock, agencies, onSave, onCancel }: P
     if (!serialNo)        { alert("Select a meter serial number."); return }
     if (!agency)          { alert("Select an agency."); return }
     if (purpose !== "nsc" && !consumerId.trim()) { alert("Consumer ID is required."); return }
-    if (purpose === "nsc" && !nscReceiveNo.trim()) { alert("NSC Receive No is required."); return }
+    if (purpose === "nsc" && !nscSelected) { alert("Please select an NSC application."); return }
     if (purpose !== "nsc" && !consumerFoundInDC) {
       if (!consumerName.trim())    { alert("Consumer name is required."); return }
       if (!consumerAddress.trim()) { alert("Address is required (consumer not in DC list)."); return }
@@ -177,38 +190,69 @@ export function MeterIssueForm({ availableStock, agencies, onSave, onCancel }: P
         <CardContent className="px-4 pb-4 space-y-3">
           {purpose === "nsc" ? (
             <div className="space-y-3">
-              <div className="space-y-2">
-                <Label>NSC Receive No *</Label>
-                <Input value={nscReceiveNo} onChange={e => setNscReceiveNo(e.target.value)} placeholder="NSC/26-27/0001" />
-              </div>
-              <div className="space-y-2">
-                <Label>Search Consumer / Applicant</Label>
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                  <Input
-                    value={nscQuery}
-                    onChange={e => setNscQuery(e.target.value)}
-                    placeholder="Search by name, ID, address..."
-                    className="pl-9 pr-8"
-                  />
-                  {nscQuery && (
-                    <button className="absolute right-3 top-1/2 -translate-y-1/2" onClick={() => { setNscQuery(""); setNscSuggestions([]) }}>
-                      <XIcon className="h-4 w-4 text-gray-400" />
+              {nscSelected ? (
+                /* Selected NSC app details card */
+                <div className="bg-green-50 border border-green-200 rounded-xl p-3 space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="font-bold text-green-900">{nscSelected.applicantName}</p>
+                      {nscSelected.careOf && <p className="text-xs text-green-700">C/O {nscSelected.careOf}</p>}
+                      <p className="text-xs text-gray-600 mt-0.5">{nscSelected.address}</p>
+                      {nscSelected.mobile && <p className="text-xs text-gray-500 font-mono">{nscSelected.mobile}</p>}
+                    </div>
+                    <button onClick={clearNscSelection} className="shrink-0 text-gray-400 hover:text-red-500 mt-0.5">
+                      <XIcon className="h-4 w-4" />
                     </button>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5 text-xs">
+                    <span className="bg-white border border-green-300 text-green-800 px-2 py-0.5 rounded-full font-mono">{nscSelected.receiveNo}</span>
+                    <span className="bg-blue-50 border border-blue-200 text-blue-700 px-2 py-0.5 rounded-full font-mono">App: {nscSelected.applicationNo}</span>
+                    <span className="bg-purple-50 border border-purple-200 text-purple-700 px-2 py-0.5 rounded-full capitalize">{nscSelected.appliedClass} · {nscSelected.phase}</span>
+                  </div>
+                </div>
+              ) : (
+                /* Search / pick from list */
+                <div className="space-y-2">
+                  <Label>Select NSC Application *</Label>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                    <Input
+                      value={nscSearch}
+                      onChange={e => setNscSearch(e.target.value)}
+                      placeholder="Search by receive no, name, address, app no..."
+                      className="pl-9 pr-8"
+                    />
+                    {nscSearch && (
+                      <button className="absolute right-3 top-1/2 -translate-y-1/2" onClick={() => setNscSearch("")}>
+                        <XIcon className="h-4 w-4 text-gray-400" />
+                      </button>
+                    )}
+                  </div>
+
+                  {nscApps.length === 0 ? (
+                    <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2">
+                      No NSC applications with issued quotation found. Issue a quotation in the NSC module first.
+                    </p>
+                  ) : (
+                    <div className="border rounded-lg divide-y max-h-52 overflow-y-auto bg-white shadow-sm">
+                      {nscFiltered.length === 0 ? (
+                        <p className="text-xs text-gray-400 text-center py-4">No results for "{nscSearch}"</p>
+                      ) : nscFiltered.map(app => (
+                        <button key={app.receiveNo} className="w-full text-left px-3 py-2.5 hover:bg-green-50 transition"
+                          onClick={() => selectNscApp(app)}>
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-mono text-xs text-gray-500">{app.receiveNo}</span>
+                            <span className="text-xs text-blue-600 font-mono shrink-0">App: {app.applicationNo}</span>
+                          </div>
+                          <p className="text-sm font-semibold text-gray-900">{app.applicantName}</p>
+                          {app.careOf && <p className="text-xs text-gray-500">C/O {app.careOf}</p>}
+                          <p className="text-xs text-gray-500">{app.address}</p>
+                        </button>
+                      ))}
+                    </div>
                   )}
                 </div>
-                {nscSuggestions.length > 0 && (
-                  <div className="border rounded-lg divide-y max-h-48 overflow-y-auto bg-white shadow-md">
-                    {nscSuggestions.map(c => (
-                      <button key={c.consumerId} className="w-full text-left px-3 py-2 hover:bg-blue-50 transition text-sm"
-                        onClick={() => selectNscConsumer(c)}>
-                        <p className="font-medium">{c.name}</p>
-                        <p className="text-xs text-gray-500">{c.consumerId} {c.address ? `· ${c.address}` : ""}</p>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
+              )}
             </div>
           ) : (
             <div className="space-y-2">
@@ -235,9 +279,9 @@ export function MeterIssueForm({ availableStock, agencies, onSave, onCancel }: P
               )}
             </div>
           )}
-          {/* Consumer detail fields — always shown; required when not in DC list */}
-          {(() => {
-            const notInDC = purpose !== "nsc" && !consumerFoundInDC
+          {/* Consumer detail fields — hidden for NSC (shown in selection card above) */}
+          {purpose !== "nsc" && (() => {
+            const notInDC = !consumerFoundInDC
             return (
               <div className="space-y-2">
                 <div className="space-y-1">

@@ -6,7 +6,9 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { ArrowLeft, Camera, Upload, Loader2, CheckCircle2, XCircle } from "lucide-react"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { ArrowLeft, Camera, Upload, Loader2, CheckCircle2, XCircle, RefreshCw } from "lucide-react"
+import { NSC_CLASSES } from "@/lib/nsc-types"
 import type { NSCApplication } from "@/lib/nsc-types"
 
 interface Props {
@@ -16,11 +18,12 @@ interface Props {
 }
 
 // ── Verify field (ok / corrected) ─────────────────────────────────────────────
-function VerifyField({ label, original, value, onChange }: {
+function VerifyField({ label, original, value, onChange, options }: {
   label:    string
   original: string
   value:    string
   onChange: (v: string) => void
+  options?: { value: string; label: string }[]
 }) {
   const isOk  = value === "ok"
   const isCorr = value !== "ok" && value !== ""
@@ -41,7 +44,16 @@ function VerifyField({ label, original, value, onChange }: {
         </button>
       </div>
       {isCorr && (
-        <Input value={value} onChange={e => onChange(e.target.value)} placeholder={`Corrected ${label.toLowerCase()}`} className="text-sm" />
+        options ? (
+          <Select value={value} onValueChange={onChange}>
+            <SelectTrigger className="text-sm"><SelectValue placeholder={`Select corrected ${label.toLowerCase()}`} /></SelectTrigger>
+            <SelectContent>
+              {options.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        ) : (
+          <Input value={value} onChange={e => onChange(e.target.value)} placeholder={`Corrected ${label.toLowerCase()}`} className="text-sm" />
+        )
       )}
     </div>
   )
@@ -126,19 +138,24 @@ function ImageSlot({ label, required, url, onUrl, tag }: {
         </div>
       ) : (
         <div className="grid grid-cols-2 gap-2">
-          <Button type="button" variant="outline" className="h-10" onClick={startCamera} disabled={uploading}>
+          <Button type="button" variant="outline" className="h-10" onClick={startCamera}>
             <Camera className="h-4 w-4 mr-1" /> Camera
           </Button>
-          <Button type="button" variant="outline" className="h-10" onClick={() => fileRef.current?.click()} disabled={uploading}>
+          <Button type="button" variant="outline" className="h-10" onClick={() => fileRef.current?.click()}>
             <Upload className="h-4 w-4 mr-1" /> Gallery
           </Button>
         </div>
       )}
       {preview && !cameraOn && (
         <div className="relative rounded-lg overflow-hidden border">
-          <img src={preview} alt={label} className={`w-full h-36 object-cover ${uploading ? "opacity-50" : ""}`} />
-          {uploading && <div className="absolute inset-0 flex items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-blue-600" /></div>}
-          {url && !uploading && <div className="absolute top-1 right-1 bg-green-600 text-white text-xs px-1.5 py-0.5 rounded">✓ Uploaded</div>}
+          <img src={preview} alt={label} className="w-full h-36 object-cover" />
+          {uploading && (
+            <div className="absolute top-1 right-1 bg-white/90 backdrop-blur-sm rounded-full p-1 shadow">
+              <RefreshCw className="h-4 w-4 animate-spin text-blue-600" />
+            </div>
+          )}
+          {url && !uploading && <div className="absolute top-1 right-1 bg-green-600 text-white text-xs px-1.5 py-0.5 rounded font-medium">✓ Synced</div>}
+          {!url && !uploading && preview && <div className="absolute top-1 right-1 bg-orange-500 text-white text-xs px-1.5 py-0.5 rounded font-medium">⚠ Not saved</div>}
         </div>
       )}
     </div>
@@ -241,7 +258,7 @@ export function NscInspectForm({ app, onSave, onCancel }: Props) {
           <VerifyField label="Name"    original={app.applicantName} value={verifyName}    onChange={setVerifyName} />
           <VerifyField label="C/O"     original={app.careOf}        value={verifyCO}      onChange={setVerifyCO} />
           <VerifyField label="Address" original={app.address}       value={verifyAddress} onChange={setVerifyAddress} />
-          <VerifyField label="Class"   original={app.appliedClass}  value={verifyClass}   onChange={setVerifyClass} />
+          <VerifyField label="Class"   original={app.appliedClass}  value={verifyClass}   onChange={setVerifyClass} options={NSC_CLASSES} />
         </CardContent>
       </Card>
 

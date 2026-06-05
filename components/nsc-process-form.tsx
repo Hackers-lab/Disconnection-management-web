@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge"
 import { ArrowLeft, Loader2, CheckCircle2, XCircle, RotateCcw, FileText, ClipboardList } from "lucide-react"
 import { NSC_STATUS_COLORS, NSC_STATUS_LABELS } from "@/lib/nsc-types"
 import type { NSCApplication } from "@/lib/nsc-types"
+import { getFromCache } from "@/lib/indexed-db"
 
 interface Props {
   app:        NSCApplication
@@ -29,6 +30,23 @@ export function NscProcessForm({ app, agencies, onSave, onCancel }: Props) {
   const [applicationNo, setApplicationNo] = useState(app.applicationNo || "")
   const [newAgency,     setNewAgency]     = useState(app.agency        || "")
   const [submitting,    setSubmitting]    = useState(false)
+  const [agencyList,    setAgencyList]    = useState<string[]>(agencies)
+
+  useEffect(() => {
+    async function loadAgencies() {
+      const cached = await getFromCache<string[]>("agencies_data_cache")
+      if (cached && cached.length > 0) { setAgencyList(cached); return }
+      try {
+        const res = await fetch("/api/admin/agencies")
+        if (res.ok) {
+          const data = await res.json()
+          const names = data.filter((a: any) => a.isActive).map((a: any) => a.name)
+          if (names.length > 0) setAgencyList(names)
+        }
+      } catch { /* keep prop */ }
+    }
+    loadAgencies()
+  }, [])
 
   const isDecisionChanged = adminDecision !== app.agencyDecision
 
@@ -214,7 +232,7 @@ export function NscProcessForm({ app, agencies, onSave, onCancel }: Props) {
               <Select value={newAgency} onValueChange={setNewAgency}>
                 <SelectTrigger><SelectValue placeholder="Select agency..." /></SelectTrigger>
                 <SelectContent>
-                  {agencies.map(a => <SelectItem key={a} value={a}>{a}</SelectItem>)}
+                  {agencyList.map(a => <SelectItem key={a} value={a}>{a}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>

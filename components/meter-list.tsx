@@ -65,17 +65,18 @@ export function MeterList({ userRole, userAgencies, username, agencies }: Props)
   const [stock, setStock]       = useState<MeterStock[]>([])
   const [issues, setIssues]     = useState<MeterIssue[]>([])
   const [syncState, setSyncState] = useState<SyncState>("loading")
-  const [tab, setTab]           = useState<Tab>(isAdmin ? "stock" : "active")
+  const [tab, setTab]           = useState<Tab>("active")
   const [view, setView]         = useState<View>("list")
   const [search, setSearch]     = useState("")
   const [selected, setSelected] = useState<MeterIssue | null>(null)
   const [page, setPage]         = useState(1)
-  const [selectedForSlip, setSelectedForSlip] = useState<Set<string>>(new Set())
-  const [stockOpen, setStockOpen]             = useState(false)
-  const [finalizeTarget, setFinalizeTarget]   = useState<MeterIssue | null>(null)
-  const [finalizeRef, setFinalizeRef]         = useState("")
-  const [finalizeInstNo, setFinalizeInstNo]   = useState("")
-  const [finalizing, setFinalizing]           = useState(false)
+  const [selectedForSlip, setSelectedForSlip]         = useState<Set<string>>(new Set())
+  const [stockOpen, setStockOpen]                     = useState(false)
+  const [showFinalizeModal, setShowFinalizeModal]     = useState(false)
+  const [selectedForFinalize, setSelectedForFinalize] = useState<Set<string>>(new Set())
+  const [finalizeRef, setFinalizeRef]                 = useState("")
+  const [finalizeInstNo, setFinalizeInstNo]           = useState("")
+  const [finalizing, setFinalizing]                   = useState(false)
   const PAGE = 20
 
   // ── Load data ──────────────────────────────────────────────────────────────
@@ -123,10 +124,7 @@ export function MeterList({ userRole, userAgencies, username, agencies }: Props)
     }
   }
 
-  useEffect(() => {
-    load()
-    if (!isAdmin) setTab("active") // agency always starts on active issues
-  }, [])
+  useEffect(() => { load() }, [])
 
   // ── Filtering ─────────────────────────────────────────────────────────────
   const filteredIssues = useMemo(() => {
@@ -153,11 +151,15 @@ export function MeterList({ userRole, userAgencies, username, agencies }: Props)
 
   const totalPages = Math.ceil(filteredIssues.length / PAGE)
   const paginated  = filteredIssues.slice((page - 1) * PAGE, page * PAGE)
-  useEffect(() => setPage(1), [tab, search])
+  useEffect(() => { setPage(1); setSelectedForFinalize(new Set()) }, [tab, search])
 
   // ── Slip selection ────────────────────────────────────────────────────────
   const toggleSlip = (id: string) =>
     setSelectedForSlip(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
+
+  // ── Finalize selection ────────────────────────────────────────────────────
+  const toggleFinalize = (id: string) =>
+    setSelectedForFinalize(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
 
   const printSelected = () => {
     const toPrint = filteredIssues.filter(i => selectedForSlip.has(i.issueId))
@@ -182,25 +184,38 @@ export function MeterList({ userRole, userAgencies, username, agencies }: Props)
     } catch (e: any) { toast({ title: e.message, variant: "destructive" }) }
   }
 
-  // ── Finalize handler ─────────────────────────────────────────────────────
+  // ── Bulk finalize handler — single API call ───────────────────────────────
   const handleFinalize = async () => {
-    if (!finalizeTarget || !finalizeRef.trim()) { alert("Completion reference is required."); return }
+    if (selectedForFinalize.size === 0 || !finalizeRef.trim()) return
     setFinalizing(true)
     try {
       const res = await fetch("/api/meters/finalize", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          issueId:        finalizeTarget.issueId,
+          issueIds:       Array.from(selectedForFinalize),
           completionRef:  finalizeRef.trim(),
           installationNo: finalizeInstNo.trim(),
         }),
       })
-      if (!res.ok) throw new Error((await res.json()).error)
-      toast({ title: "Installation finalized", description: `Note: ${finalizeRef.trim()}` })
-      setFinalizeTarget(null); setFinalizeRef(""); setFinalizeInstNo(""); load(true)
-    } catch (e: any) { toast({ title: e.message, variant: "destructive" }) }
-    finally { setFinalizing(false) }
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || "Failed")
+      const { succeeded, failed } = data as { succeeded: number; failed: string[] }
+      toast({
+        title: `${succeeded} installation(s) finalized`,
+        description: failed.length ? `${failed.length} failed` : `Note: ${finalizeRef.trim()}`,
+        variant: failed.length ? "destructive" : "default",
+      })
+    } catch (e: any) {
+      toast({ title: e.message || "Finalize failed", variant: "destructive" })
+    } finally {
+      setShowFinalizeModal(false)
+      setSelectedForFinalize(new Set())
+      setFinalizeRef(""); setFinalizeInstNo("")
+      setFinalizeProgress(null)
+      setFinalizing(false)
+      load(true)
+    }
   }
 
   // ── Export handler ────────────────────────────────────────────────────────
@@ -252,7 +267,7 @@ export function MeterList({ userRole, userAgencies, username, agencies }: Props)
 
   // ── Main list ─────────────────────────────────────────────────────────────
   return (
-    <div className="space-y-4">
+    <div className={`space-y-4 ${isAdmin ? (selectedForFinalize.size > 0 ? "pb-44" : "pb-28") : "pb-4"}`}>
 
       {/* Stock summary — admin/executive only */}
       {isAdmin && summary.length > 0 && (
@@ -335,6 +350,26 @@ export function MeterList({ userRole, userAgencies, username, agencies }: Props)
           <span>{filteredIssues.length} records</span>
           {syncState === "updated" && <span className="flex items-center gap-1 text-green-600"><Check className="h-3 w-3" /> Updated</span>}
         </div>
+
+        {/* Select All / None — shown when ≥1 installation_done card is selected */}
+        {isAdmin && selectedForFinalize.size > 0 && (
+          <div className="flex items-center gap-2 pt-1">
+            <span className="text-xs text-teal-700 font-medium">{selectedForFinalize.size} selected</span>
+            <button
+              className="text-xs px-2 py-0.5 rounded bg-teal-50 text-teal-700 border border-teal-200 hover:bg-teal-100"
+              onClick={() => {
+                const allDone = filteredIssues.filter(i => i.status === "installation_done")
+                setSelectedForFinalize(new Set(allDone.map(i => i.issueId)))
+              }}>
+              Select All ({filteredIssues.filter(i => i.status === "installation_done").length})
+            </button>
+            <button
+              className="text-xs px-2 py-0.5 rounded bg-gray-50 text-gray-600 border border-gray-200 hover:bg-gray-100"
+              onClick={() => setSelectedForFinalize(new Set())}>
+              Select None
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Issue cards */}
@@ -409,13 +444,26 @@ export function MeterList({ userRole, userAgencies, username, agencies }: Props)
                 {/* Admin: finalize installation_done */}
                 {issue.status === "installation_done" && isAdmin && (
                   <div className="mt-3 pt-3 border-t space-y-2">
-                    <div className="flex gap-3 text-xs text-gray-500">
-                      {issue.afterImage && <a href={issue.afterImage} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">After ↗</a>}
-                      {issue.beforeImage && <a href={issue.beforeImage} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">Before ↗</a>}
-                      {issue.newReading && <span>New reading: <strong>{issue.newReading}</strong></span>}
+                    <div className="flex items-center gap-3">
+                      <label className="flex items-center gap-2 cursor-pointer select-none flex-1">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 accent-teal-600"
+                          checked={selectedForFinalize.has(issue.issueId)}
+                          onChange={() => toggleFinalize(issue.issueId)}
+                        />
+                        <span className="text-xs text-gray-500">Select for bulk finalize</span>
+                      </label>
+                      {issue.afterImage && <a href={issue.afterImage} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 underline">After ↗</a>}
+                      {issue.beforeImage && <a href={issue.beforeImage} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 underline">Before ↗</a>}
                     </div>
+                    {issue.newReading && <p className="text-xs text-gray-500">New reading: <strong>{issue.newReading}</strong></p>}
                     <Button size="sm" className="w-full h-8 bg-teal-600 hover:bg-teal-700 text-white"
-                      onClick={() => { setFinalizeTarget(issue); setFinalizeRef("") }}>
+                      onClick={() => {
+                        setSelectedForFinalize(prev => { const n = new Set(prev); n.add(issue.issueId); return n })
+                        setFinalizeRef(""); setFinalizeInstNo("")
+                        setShowFinalizeModal(true)
+                      }}>
                       <ClipboardCheck className="h-3 w-3 mr-1" /> Finalize Installation
                     </Button>
                   </div>
@@ -459,10 +507,17 @@ export function MeterList({ userRole, userAgencies, username, agencies }: Props)
         <ReportsPanel issues={issues} summary={summary} onExport={exportIssues} />
       )}
 
-      {/* Sticky bottom — Issue Meter */}
+      {/* Sticky bottom — bulk finalize + Issue Meter */}
       {isAdmin && (
         <div className="fixed bottom-0 left-0 right-0 z-40 p-4 pointer-events-none">
-          <div className="max-w-xl mx-auto pointer-events-auto">
+          <div className="max-w-xl mx-auto pointer-events-auto space-y-2">
+            {selectedForFinalize.size > 0 && (
+              <Button
+                className="w-full bg-teal-600 hover:bg-teal-700 text-white shadow-lg rounded-2xl text-base font-semibold flex items-center justify-center gap-2 py-3"
+                onClick={() => setShowFinalizeModal(true)}>
+                <ClipboardCheck className="h-5 w-5" /> Finalize {selectedForFinalize.size} Selected
+              </Button>
+            )}
             <Button
               className="w-full bg-blue-600 hover:bg-blue-700 text-white shadow-lg rounded-2xl text-base font-semibold flex items-center justify-center gap-2 py-3"
               onClick={() => setView("issue")}>
@@ -472,52 +527,66 @@ export function MeterList({ userRole, userAgencies, username, agencies }: Props)
         </div>
       )}
 
-      {/* Finalize modal */}
-      {finalizeTarget && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
-          <div className="w-full max-w-sm bg-white rounded-2xl shadow-2xl p-6 space-y-4">
-            <div>
-              <h2 className="text-lg font-bold">Finalize Installation</h2>
-              <p className="text-sm text-gray-500 mt-0.5">{finalizeTarget.issueId} — {finalizeTarget.consumerName || finalizeTarget.consumerId || finalizeTarget.nscReceiveNo}</p>
-            </div>
-            <div className="bg-gray-50 rounded-lg p-3 text-xs text-gray-600 space-y-1">
-              <div className="flex justify-between"><span>Serial No</span><span className="font-mono font-semibold">{finalizeTarget.serialNo}</span></div>
-              <div className="flex justify-between"><span>Agency</span><span className="font-medium">{finalizeTarget.agency}</span></div>
-              {finalizeTarget.afterImage && (
-                <a href={finalizeTarget.afterImage} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline text-xs block">View after-installation image ↗</a>
-              )}
-            </div>
-            <div className="space-y-2">
-              <Label>Note Number *</Label>
-              <Input
-                value={finalizeRef}
-                onChange={e => setFinalizeRef(e.target.value)}
-                placeholder="e.g. JE Note No. / WO-1234"
-                autoFocus
-              />
-            </div>
-            {finalizeTarget?.purpose === "nsc" && (
+      {/* Bulk finalize modal */}
+      {showFinalizeModal && (() => {
+        const targets = issues.filter(i => selectedForFinalize.has(i.issueId))
+        const anyNSC  = targets.some(i => i.purpose === "nsc")
+        return (
+          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+            <div className="w-full max-w-sm bg-white rounded-2xl shadow-2xl p-6 space-y-4">
+              <div>
+                <h2 className="text-lg font-bold">Finalize Installation</h2>
+                <p className="text-sm text-gray-500 mt-0.5">{targets.length} meter{targets.length > 1 ? "s" : ""} selected</p>
+              </div>
+
+              {/* Selected items list */}
+              <div className="max-h-40 overflow-y-auto space-y-1 bg-gray-50 rounded-lg p-3">
+                {targets.map(t => (
+                  <div key={t.issueId} className="flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <button type="button" onClick={() => toggleFinalize(t.issueId)} className="text-red-400 hover:text-red-600 shrink-0">✕</button>
+                      <span className="font-mono text-gray-500 shrink-0">{t.issueId}</span>
+                      <span className="text-gray-700 truncate">{t.consumerName || t.consumerId || t.nscReceiveNo}</span>
+                    </div>
+                    <span className="font-mono text-blue-700 shrink-0 ml-2">{t.serialNo}</span>
+                  </div>
+                ))}
+                {targets.length === 0 && <p className="text-xs text-gray-400 text-center py-2">No items selected</p>}
+              </div>
+
               <div className="space-y-2">
-                <Label>Installation Number <span className="text-gray-400 font-normal">(NSC)</span></Label>
+                <Label>Note Number * <span className="text-xs text-gray-400 font-normal">(applies to all selected)</span></Label>
                 <Input
-                  value={finalizeInstNo}
-                  onChange={e => setFinalizeInstNo(e.target.value)}
-                  placeholder="e.g. INST/26-27/0001"
+                  value={finalizeRef}
+                  onChange={e => setFinalizeRef(e.target.value)}
+                  placeholder="e.g. JE Note No. / WO-1234"
+                  autoFocus
                 />
               </div>
-            )}
-            <div className="flex gap-3">
-              <Button variant="outline" className="flex-1" onClick={() => { setFinalizeTarget(null); setFinalizeRef(""); setFinalizeInstNo("") }} disabled={finalizing}>
-                Cancel
-              </Button>
-              <Button className="flex-[2] bg-teal-600 hover:bg-teal-700 text-white" onClick={handleFinalize} disabled={finalizing || !finalizeRef.trim()}>
-                {finalizing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <ClipboardCheck className="h-4 w-4 mr-2" />}
-                {finalizing ? "Finalizing..." : "Confirm & Finalize"}
-              </Button>
+              {anyNSC && (
+                <div className="space-y-2">
+                  <Label>Installation Number <span className="text-gray-400 font-normal">(NSC)</span></Label>
+                  <Input
+                    value={finalizeInstNo}
+                    onChange={e => setFinalizeInstNo(e.target.value)}
+                    placeholder="e.g. INST/26-27/0001"
+                  />
+                </div>
+              )}
+
+              <div className="flex gap-3">
+                <Button variant="outline" className="flex-1" onClick={() => { setShowFinalizeModal(false); setFinalizeRef(""); setFinalizeInstNo("") }} disabled={finalizing}>
+                  Cancel
+                </Button>
+                <Button className="flex-[2] bg-teal-600 hover:bg-teal-700 text-white" onClick={handleFinalize} disabled={finalizing || !finalizeRef.trim() || targets.length === 0}>
+                  {finalizing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <ClipboardCheck className="h-4 w-4 mr-2" />}
+                  {finalizing ? `Finalizing ${finalizeProgress?.done ?? 0}/${finalizeProgress?.total ?? targets.length}...` : `Confirm & Finalize ${targets.length}`}
+                </Button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )
+      })()}
     </div>
   )
 }

@@ -292,6 +292,60 @@ export async function finalizeMeterInstallation(req: {
   invalidateMeterCache()
 }
 
+// ─── Bulk finalize: one fetch, two batchUpdates total ────────────────────────
+export async function bulkFinalizeMeterInstallations(req: {
+  issueIds:        string[]
+  completionRef:   string
+  installationNo?: string
+  finalizedBy:     string
+}): Promise<{ succeeded: number; failed: string[] }> {
+  const id = getSpreadsheetId()
+  await ensureTabs(id)
+  const [issues, stock] = await Promise.all([fetchIssues(), fetchStock()])
+  const now = nowDate()
+
+  const issueUpdates: { range: string; values: any[][] }[] = []
+  const stockUpdates: { range: string; values: any[][] }[] = []
+  const failed: string[] = []
+
+  for (const issueId of req.issueIds) {
+    const issueIdx = issues.findIndex(i => i.issueId === issueId)
+    if (issueIdx === -1) { failed.push(issueId); continue }
+    const row = issueIdx + 2
+    issueUpdates.push(
+      { range: `${ISSUES_TAB}!J${row}`, values: [["installed"]] },
+      { range: `${ISSUES_TAB}!O${row}`, values: [[req.completionRef]] },
+      { range: `${ISSUES_TAB}!P${row}`, values: [[now]] },
+      { range: `${ISSUES_TAB}!Q${row}`, values: [[req.finalizedBy]] },
+    )
+    if (req.installationNo) {
+      issueUpdates.push({ range: `${ISSUES_TAB}!S${row}`, values: [[req.installationNo]] })
+    }
+    const si = stock.findIndex(m => m.serialNo === issues[issueIdx].serialNo)
+    if (si !== -1) {
+      stockUpdates.push(
+        { range: `${STOCK_TAB}!F${si + 2}`, values: [["installed"]] },
+        { range: `${STOCK_TAB}!I${si + 2}`, values: [[now]] },
+      )
+    }
+  }
+
+  if (issueUpdates.length > 0) {
+    await sheets.spreadsheets.values.batchUpdate({
+      spreadsheetId: id,
+      requestBody: { valueInputOption: "RAW", data: issueUpdates },
+    })
+  }
+  if (stockUpdates.length > 0) {
+    await sheets.spreadsheets.values.batchUpdate({
+      spreadsheetId: id,
+      requestBody: { valueInputOption: "RAW", data: stockUpdates },
+    })
+  }
+  invalidateMeterCache()
+  return { succeeded: req.issueIds.length - failed.length, failed }
+}
+
 // ─── Return to stock ──────────────────────────────────────────────────────────
 export async function returnMeterToStock(req: {
   issueId: string

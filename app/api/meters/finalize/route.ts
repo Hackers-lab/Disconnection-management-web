@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { verifySession } from "@/lib/session"
-import { finalizeMeterInstallation } from "@/lib/meter-service"
+import { finalizeMeterInstallation, bulkFinalizeMeterInstallations } from "@/lib/meter-service"
 
 export async function POST(request: NextRequest) {
   const session = await verifySession()
@@ -9,14 +9,28 @@ export async function POST(request: NextRequest) {
   }
   try {
     const body = await request.json()
-    if (!body.issueId)       return NextResponse.json({ error: "issueId required" }, { status: 400 })
     if (!body.completionRef) return NextResponse.json({ error: "Completion reference required" }, { status: 400 })
 
+    const finalizedBy = `${session.role}:${session.username}`
+
+    // Bulk path: { issueIds: string[], completionRef, installationNo? }
+    if (Array.isArray(body.issueIds) && body.issueIds.length > 0) {
+      const result = await bulkFinalizeMeterInstallations({
+        issueIds:       body.issueIds,
+        completionRef:  body.completionRef,
+        installationNo: body.installationNo || "",
+        finalizedBy,
+      })
+      return NextResponse.json(result)
+    }
+
+    // Single path: { issueId, completionRef, installationNo? }
+    if (!body.issueId) return NextResponse.json({ error: "issueId or issueIds required" }, { status: 400 })
     await finalizeMeterInstallation({
       issueId:        body.issueId,
       completionRef:  body.completionRef,
       installationNo: body.installationNo || "",
-      finalizedBy:    `${session.role}:${session.username}`,
+      finalizedBy,
     })
     return NextResponse.json({ success: true })
   } catch (e: any) {
