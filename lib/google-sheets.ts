@@ -188,7 +188,7 @@ export async function getAgencyLastUpdates(): Promise<
 // same container within a short window, they share the parsed data instead of
 // each re-fetching and re-parsing it. ~30s keeps responses fresh enough for
 // delta sync while collapsing 3-5 redundant parses into one.
-const CSV_MEMO_TTL_MS = 30_000
+const CSV_MEMO_TTL_MS = 60_000
 let csvMemo: { at: number; data: ConsumerData[] } | null = null
 
 // Allow other modules (e.g. /api/consumers/update) to invalidate the memo

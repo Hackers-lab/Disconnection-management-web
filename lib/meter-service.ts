@@ -4,6 +4,7 @@ import { google } from "googleapis"
 import { auth } from "./google-drive"
 import { getSpreadsheetId } from "./google-sheets-api"
 import { METER_TYPES } from "./meter-types"
+import { updateNSCMeterIssued, updateNSCConnectionEffected } from "./nsc-service"
 import type {
   MeterStock, MeterIssue, StockSummary,
   MeterTypeLabel, MeterCondition, IssuePurpose, IssueStatus,
@@ -31,7 +32,7 @@ const ISSUES_HEADERS = [
 ]
 
 // ─── Memo cache ───────────────────────────────────────────────────────────────
-const TTL = 30_000
+const TTL = 60_000
 let stockMemo:  { at: number; data: MeterStock[]  } | null = null
 let issuesMemo: { at: number; data: MeterIssue[] } | null = null
 let tabsReady = false
@@ -207,6 +208,9 @@ export async function issueMeter(req: {
     },
   })
   invalidateMeterCache()
+  if (req.purpose === "nsc" && req.nscReceiveNo) {
+    await updateNSCMeterIssued(req.nscReceiveNo, req.serialNo, req.agency)
+  }
   return issueId
 }
 
@@ -290,6 +294,9 @@ export async function finalizeMeterInstallation(req: {
     })
   }
   invalidateMeterCache()
+  if (issue.purpose === "nsc" && issue.nscReceiveNo) {
+    await updateNSCConnectionEffected(issue.nscReceiveNo)
+  }
 }
 
 // ─── Bulk finalize: one fetch, two batchUpdates total ────────────────────────
@@ -307,10 +314,12 @@ export async function bulkFinalizeMeterInstallations(req: {
   const issueUpdates: { range: string; values: any[][] }[] = []
   const stockUpdates: { range: string; values: any[][] }[] = []
   const failed: string[] = []
+  const nscReceiveNos: string[] = []
 
   for (const issueId of req.issueIds) {
     const issueIdx = issues.findIndex(i => i.issueId === issueId)
     if (issueIdx === -1) { failed.push(issueId); continue }
+    const issue = issues[issueIdx]
     const row = issueIdx + 2
     issueUpdates.push(
       { range: `${ISSUES_TAB}!J${row}`, values: [["installed"]] },
@@ -321,12 +330,15 @@ export async function bulkFinalizeMeterInstallations(req: {
     if (req.installationNo) {
       issueUpdates.push({ range: `${ISSUES_TAB}!S${row}`, values: [[req.installationNo]] })
     }
-    const si = stock.findIndex(m => m.serialNo === issues[issueIdx].serialNo)
+    const si = stock.findIndex(m => m.serialNo === issue.serialNo)
     if (si !== -1) {
       stockUpdates.push(
         { range: `${STOCK_TAB}!F${si + 2}`, values: [["installed"]] },
         { range: `${STOCK_TAB}!I${si + 2}`, values: [[now]] },
       )
+    }
+    if (issue.purpose === "nsc" && issue.nscReceiveNo) {
+      nscReceiveNos.push(issue.nscReceiveNo)
     }
   }
 
@@ -343,6 +355,9 @@ export async function bulkFinalizeMeterInstallations(req: {
     })
   }
   invalidateMeterCache()
+  for (const rcvNo of nscReceiveNos) {
+    await updateNSCConnectionEffected(rcvNo)
+  }
   return { succeeded: req.issueIds.length - failed.length, failed }
 }
 

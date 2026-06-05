@@ -31,8 +31,8 @@ export interface ReconnectionRequest {
   remarks: string
 }
 
-// 30s memo
-const MEMO_TTL = 30_000
+// 60s memo
+const MEMO_TTL = 60_000
 let memo: { at: number; data: ReconnectionRequest[] } | null = null
 let tabReady = false
 

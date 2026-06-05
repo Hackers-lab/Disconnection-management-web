@@ -7,8 +7,8 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { ArrowLeft, Search, Loader2, X as XIcon } from "lucide-react"
-import { getFromCache } from "@/lib/indexed-db"
+import { ArrowLeft, Search, X as XIcon } from "lucide-react"
+import { getFromCache, saveToCache } from "@/lib/indexed-db"
 import type { ConsumerData } from "@/lib/google-sheets"
 import type { NSCApplication } from "@/lib/nsc-types"
 import type { MeterStock, IssuePurpose } from "@/lib/meter-types"
@@ -24,7 +24,7 @@ const PURPOSE_OPTIONS: { value: IssuePurpose; label: string }[] = [
 interface Props {
   availableStock: MeterStock[]
   agencies: string[]
-  onSave: (issueId: string) => void
+  onSave: (apiCall: () => Promise<string>) => void
   onCancel: () => void
 }
 
@@ -43,7 +43,6 @@ export function MeterIssueForm({ availableStock, agencies, onSave, onCancel }: P
   const [consumerFoundInDC, setConsumerFoundInDC] = useState(false)
   const [remarks, setRemarks]           = useState("")
   const [looking, setLooking]           = useState(false)
-  const [submitting, setSubmitting]     = useState(false)
   const [agencyList, setAgencyList]     = useState<string[]>(agencies)
   const [nscApps, setNscApps]           = useState<NSCApplication[]>([])
   const [nscSelected, setNscSelected]   = useState<NSCApplication | null>(null)
@@ -69,9 +68,19 @@ export function MeterIssueForm({ availableStock, agencies, onSave, onCancel }: P
   // Load NSC applications (quotation_issued with applicationNo only)
   useEffect(() => {
     if (purpose !== "nsc") return
-    getFromCache<NSCApplication[]>("nsc_data_cache").then(data => {
-      if (data) setNscApps(data.filter(a => a.status === "quotation_issued" && a.applicationNo))
-    })
+    async function loadNsc() {
+      const cached = await getFromCache<NSCApplication[]>("nsc_data_cache")
+      if (cached) setNscApps(cached.filter(a => a.status === "quotation_issued" && a.applicationNo))
+      try {
+        const res = await fetch("/api/nsc")
+        if (res.ok) {
+          const fresh: NSCApplication[] = await res.json()
+          await saveToCache("nsc_data_cache", fresh)
+          setNscApps(fresh.filter(a => a.status === "quotation_issued" && a.applicationNo))
+        }
+      } catch { /* keep cached data */ }
+    }
+    loadNsc()
   }, [purpose])
 
   const nscFiltered = nscSearch.trim()
@@ -138,7 +147,7 @@ export function MeterIssueForm({ availableStock, agencies, onSave, onCancel }: P
     return true
   })
 
-  const handleSubmit = async () => {
+  const handleSubmit = () => {
     if (!serialNo)        { alert("Select a meter serial number."); return }
     if (!agency)          { alert("Select an agency."); return }
     if (purpose !== "nsc" && !consumerId.trim()) { alert("Consumer ID is required."); return }
@@ -149,8 +158,8 @@ export function MeterIssueForm({ availableStock, agencies, onSave, onCancel }: P
       if (!consumerMobile.trim())  { alert("Mobile number is required (consumer not in DC list)."); return }
     }
 
-    setSubmitting(true)
-    try {
+    // Hand the API call to the parent — form closes instantly
+    onSave(async () => {
       const res = await fetch("/api/meters/issue", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -158,10 +167,8 @@ export function MeterIssueForm({ availableStock, agencies, onSave, onCancel }: P
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || "Failed")
-      onSave(data.issueId)
-    } catch (e: any) {
-      alert(e.message || "Failed")
-    } finally { setSubmitting(false) }
+      return data.issueId as string
+    })
   }
 
   return (
@@ -373,9 +380,8 @@ export function MeterIssueForm({ availableStock, agencies, onSave, onCancel }: P
 
       <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t z-50 flex gap-3 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)]">
         <Button variant="outline" className="flex-1 h-12" onClick={onCancel}>Cancel</Button>
-        <Button className="flex-[2] h-12 bg-blue-600 hover:bg-blue-700 text-white" onClick={handleSubmit} disabled={submitting}>
-          {submitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-          {submitting ? "Issuing..." : "Issue Meter"}
+        <Button className="flex-[2] h-12 bg-blue-600 hover:bg-blue-700 text-white" onClick={handleSubmit}>
+          Issue Meter
         </Button>
       </div>
     </div>

@@ -36,6 +36,13 @@ const PURPOSE_LABELS: Record<string, string> = {
   nsc:                "NSC",
 }
 
+const PURPOSE_COLORS: Record<string, string> = {
+  nsc:                "text-green-700",
+  faulty_replacement: "text-orange-600",
+  burnt_replacement:  "text-red-600",
+  slow_fast:          "text-amber-600",
+}
+
 const STATUS_COLORS: Record<string, string> = {
   issued:            "bg-yellow-100 text-yellow-800",
   installation_done: "bg-teal-100 text-teal-800",
@@ -67,7 +74,8 @@ export function MeterList({ userRole, userAgencies, username, agencies }: Props)
   const [syncState, setSyncState] = useState<SyncState>("loading")
   const [tab, setTab]           = useState<Tab>("active")
   const [view, setView]         = useState<View>("list")
-  const [search, setSearch]     = useState("")
+  const [search, setSearch]         = useState("")
+  const [purposeFilter, setPurposeFilter] = useState<string>("all")
   const [selected, setSelected] = useState<MeterIssue | null>(null)
   const [page, setPage]         = useState(1)
   const [selectedForSlip, setSelectedForSlip]         = useState<Set<string>>(new Set())
@@ -135,6 +143,7 @@ export function MeterList({ userRole, userAgencies, username, agencies }: Props)
       const upper = userAgencies.map(a => a.toUpperCase())
       data = data.filter(i => upper.includes(i.agency.toUpperCase()))
     }
+    if (purposeFilter !== "all") data = data.filter(i => i.purpose === purposeFilter)
     if (search) {
       const q = search.toLowerCase()
       data = data.filter(i =>
@@ -147,11 +156,11 @@ export function MeterList({ userRole, userAgencies, username, agencies }: Props)
       )
     }
     return data
-  }, [issues, tab, search, isAdmin, userAgencies])
+  }, [issues, tab, search, purposeFilter, isAdmin, userAgencies])
 
   const totalPages = Math.ceil(filteredIssues.length / PAGE)
   const paginated  = filteredIssues.slice((page - 1) * PAGE, page * PAGE)
-  useEffect(() => { setPage(1); setSelectedForFinalize(new Set()) }, [tab, search])
+  useEffect(() => { setPage(1); setSelectedForFinalize(new Set()) }, [tab, search, purposeFilter])
 
   // ── Slip selection ────────────────────────────────────────────────────────
   const toggleSlip = (id: string) =>
@@ -186,14 +195,18 @@ export function MeterList({ userRole, userAgencies, username, agencies }: Props)
 
   // ── Bulk finalize handler — single API call ───────────────────────────────
   const handleFinalize = async () => {
-    if (selectedForFinalize.size === 0 || !finalizeRef.trim()) return
+    if (selectedForFinalize.size === 0) return
+    const targetIds  = Array.from(selectedForFinalize)
+    const targets    = issues.filter(i => targetIds.includes(i.issueId))
+    const isNSCOnly  = targets.length > 0 && targets.every(i => i.purpose === "nsc")
+    if (!isNSCOnly && !finalizeRef.trim()) return
     setFinalizing(true)
     try {
       const res = await fetch("/api/meters/finalize", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          issueIds:       Array.from(selectedForFinalize),
+          issueIds:       targetIds,
           completionRef:  finalizeRef.trim(),
           installationNo: finalizeInstNo.trim(),
         }),
@@ -203,7 +216,7 @@ export function MeterList({ userRole, userAgencies, username, agencies }: Props)
       const { succeeded, failed } = data as { succeeded: number; failed: string[] }
       toast({
         title: `${succeeded} installation(s) finalized`,
-        description: failed.length ? `${failed.length} failed` : `Note: ${finalizeRef.trim()}`,
+        description: failed.length ? `${failed.length} failed` : finalizeRef.trim() ? `Note: ${finalizeRef.trim()}` : "Finalized",
         variant: failed.length ? "destructive" : "default",
       })
     } catch (e: any) {
@@ -212,7 +225,6 @@ export function MeterList({ userRole, userAgencies, username, agencies }: Props)
       setShowFinalizeModal(false)
       setSelectedForFinalize(new Set())
       setFinalizeRef(""); setFinalizeInstNo("")
-      setFinalizeProgress(null)
       setFinalizing(false)
       load(true)
     }
@@ -250,7 +262,13 @@ export function MeterList({ userRole, userAgencies, username, agencies }: Props)
     <MeterIssueForm
       availableStock={stock}
       agencies={agencies}
-      onSave={id => { toast({ title: "Meter issued", description: `Issue ID: ${id}` }); setView("list"); load(true) }}
+      onSave={apiCall => {
+        setView("list")
+        toast({ title: "Issuing meter...", description: "Processing in background" })
+        apiCall()
+          .then(id => { toast({ title: "Meter issued", description: `Issue ID: ${id}` }); load(true) })
+          .catch(err => { toast({ title: "Issue failed — please retry", description: err.message, variant: "destructive" }); load(true) })
+      }}
       onCancel={() => setView("list")}
     />
   )
@@ -346,6 +364,26 @@ export function MeterList({ userRole, userAgencies, username, agencies }: Props)
           ))}
         </div>
 
+        {/* Purpose filter chips */}
+        {tab !== "stock" && tab !== "reports" && (
+          <div className="flex gap-1.5 overflow-x-auto pb-0.5">
+            {[
+              { value: "all",                label: "All Types",   active: "bg-blue-600 text-white border-blue-600",     inactive: "bg-white text-gray-600 border-gray-200 hover:border-blue-300 hover:text-blue-700" },
+              { value: "nsc",                label: "NSC",         active: "bg-green-600 text-white border-green-600",   inactive: "bg-white text-green-700 border-green-200 hover:border-green-400 hover:bg-green-50" },
+              { value: "faulty_replacement", label: "Faulty",      active: "bg-orange-500 text-white border-orange-500", inactive: "bg-white text-orange-600 border-orange-200 hover:border-orange-400 hover:bg-orange-50" },
+              { value: "burnt_replacement",  label: "Burnt",       active: "bg-red-600 text-white border-red-600",       inactive: "bg-white text-red-600 border-red-200 hover:border-red-400 hover:bg-red-50" },
+              { value: "slow_fast",          label: "Slow/Fast",   active: "bg-amber-500 text-white border-amber-500",   inactive: "bg-white text-amber-600 border-amber-200 hover:border-amber-400 hover:bg-amber-50" },
+            ].map(p => (
+              <button key={p.value} onClick={() => setPurposeFilter(p.value)}
+                className={`px-2.5 py-1 rounded-full text-xs font-medium whitespace-nowrap border transition ${
+                  purposeFilter === p.value ? p.active : p.inactive
+                }`}>
+                {p.label}
+              </button>
+            ))}
+          </div>
+        )}
+
         <div className="flex items-center gap-3 text-xs text-gray-500">
           <span>{filteredIssues.length} records</span>
           {syncState === "updated" && <span className="flex items-center gap-1 text-green-600"><Check className="h-3 w-3" /> Updated</span>}
@@ -358,10 +396,10 @@ export function MeterList({ userRole, userAgencies, username, agencies }: Props)
             <button
               className="text-xs px-2 py-0.5 rounded bg-teal-50 text-teal-700 border border-teal-200 hover:bg-teal-100"
               onClick={() => {
-                const allDone = filteredIssues.filter(i => i.status === "installation_done")
+                const allDone = filteredIssues.filter(i => i.status === "installation_done" && i.purpose !== "nsc")
                 setSelectedForFinalize(new Set(allDone.map(i => i.issueId)))
               }}>
-              Select All ({filteredIssues.filter(i => i.status === "installation_done").length})
+              Select All ({filteredIssues.filter(i => i.status === "installation_done" && i.purpose !== "nsc").length})
             </button>
             <button
               className="text-xs px-2 py-0.5 rounded bg-gray-50 text-gray-600 border border-gray-200 hover:bg-gray-100"
@@ -392,7 +430,7 @@ export function MeterList({ userRole, userAgencies, username, agencies }: Props)
                       )}
                       <span className="font-mono text-xs text-gray-400">{issue.issueId}</span>
                       <span className="text-xs text-gray-400">•</span>
-                      <span className="text-xs text-blue-700 font-medium">{PURPOSE_LABELS[issue.purpose]}</span>
+                      <span className={`text-xs font-medium ${PURPOSE_COLORS[issue.purpose] ?? "text-blue-700"}`}>{PURPOSE_LABELS[issue.purpose]}</span>
                     </div>
                     <div className="flex items-center gap-2 mt-1 flex-wrap">
                       <span className="font-mono font-bold text-blue-800">{issue.serialNo}</span>
@@ -445,22 +483,25 @@ export function MeterList({ userRole, userAgencies, username, agencies }: Props)
                 {issue.status === "installation_done" && isAdmin && (
                   <div className="mt-3 pt-3 border-t space-y-2">
                     <div className="flex items-center gap-3">
-                      <label className="flex items-center gap-2 cursor-pointer select-none flex-1">
-                        <input
-                          type="checkbox"
-                          className="h-4 w-4 accent-teal-600"
-                          checked={selectedForFinalize.has(issue.issueId)}
-                          onChange={() => toggleFinalize(issue.issueId)}
-                        />
-                        <span className="text-xs text-gray-500">Select for bulk finalize</span>
-                      </label>
+                      {issue.purpose !== "nsc" && (
+                        <label className="flex items-center gap-2 cursor-pointer select-none flex-1">
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4 accent-teal-600"
+                            checked={selectedForFinalize.has(issue.issueId)}
+                            onChange={() => toggleFinalize(issue.issueId)}
+                          />
+                          <span className="text-xs text-gray-500">Select for bulk finalize</span>
+                        </label>
+                      )}
+                      {issue.purpose === "nsc" && <span className="flex-1 text-xs text-gray-400">NSC — finalize individually</span>}
                       {issue.afterImage && <a href={issue.afterImage} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 underline">After ↗</a>}
                       {issue.beforeImage && <a href={issue.beforeImage} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 underline">Before ↗</a>}
                     </div>
                     {issue.newReading && <p className="text-xs text-gray-500">New reading: <strong>{issue.newReading}</strong></p>}
                     <Button size="sm" className="w-full h-8 bg-teal-600 hover:bg-teal-700 text-white"
                       onClick={() => {
-                        setSelectedForFinalize(prev => { const n = new Set(prev); n.add(issue.issueId); return n })
+                        setSelectedForFinalize(new Set([issue.issueId]))
                         setFinalizeRef(""); setFinalizeInstNo("")
                         setShowFinalizeModal(true)
                       }}>
@@ -529,8 +570,9 @@ export function MeterList({ userRole, userAgencies, username, agencies }: Props)
 
       {/* Bulk finalize modal */}
       {showFinalizeModal && (() => {
-        const targets = issues.filter(i => selectedForFinalize.has(i.issueId))
-        const anyNSC  = targets.some(i => i.purpose === "nsc")
+        const targets    = issues.filter(i => selectedForFinalize.has(i.issueId))
+        const anyNSC     = targets.some(i => i.purpose === "nsc")
+        const isNSCOnly  = targets.length > 0 && targets.every(i => i.purpose === "nsc")
         return (
           <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
             <div className="w-full max-w-sm bg-white rounded-2xl shadow-2xl p-6 space-y-4">
@@ -554,15 +596,17 @@ export function MeterList({ userRole, userAgencies, username, agencies }: Props)
                 {targets.length === 0 && <p className="text-xs text-gray-400 text-center py-2">No items selected</p>}
               </div>
 
-              <div className="space-y-2">
-                <Label>Note Number * <span className="text-xs text-gray-400 font-normal">(applies to all selected)</span></Label>
-                <Input
-                  value={finalizeRef}
-                  onChange={e => setFinalizeRef(e.target.value)}
-                  placeholder="e.g. JE Note No. / WO-1234"
-                  autoFocus
-                />
-              </div>
+              {!isNSCOnly && (
+                <div className="space-y-2">
+                  <Label>Note Number * <span className="text-xs text-gray-400 font-normal">(applies to all selected)</span></Label>
+                  <Input
+                    value={finalizeRef}
+                    onChange={e => setFinalizeRef(e.target.value)}
+                    placeholder="e.g. JE Note No. / WO-1234"
+                    autoFocus
+                  />
+                </div>
+              )}
               {anyNSC && (
                 <div className="space-y-2">
                   <Label>Installation Number <span className="text-gray-400 font-normal">(NSC)</span></Label>
@@ -578,9 +622,9 @@ export function MeterList({ userRole, userAgencies, username, agencies }: Props)
                 <Button variant="outline" className="flex-1" onClick={() => { setShowFinalizeModal(false); setFinalizeRef(""); setFinalizeInstNo("") }} disabled={finalizing}>
                   Cancel
                 </Button>
-                <Button className="flex-[2] bg-teal-600 hover:bg-teal-700 text-white" onClick={handleFinalize} disabled={finalizing || !finalizeRef.trim() || targets.length === 0}>
+                <Button className="flex-[2] bg-teal-600 hover:bg-teal-700 text-white" onClick={handleFinalize} disabled={finalizing || (!isNSCOnly && !finalizeRef.trim()) || targets.length === 0}>
                   {finalizing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <ClipboardCheck className="h-4 w-4 mr-2" />}
-                  {finalizing ? `Finalizing ${finalizeProgress?.done ?? 0}/${finalizeProgress?.total ?? targets.length}...` : `Confirm & Finalize ${targets.length}`}
+                  {finalizing ? "Finalizing..." : isNSCOnly ? "Confirm & Finalize" : `Confirm & Finalize ${targets.length}`}
                 </Button>
               </div>
             </div>

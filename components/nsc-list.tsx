@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Card, CardContent } from "@/components/ui/card"
 import {
   Search, X, Plus, RefreshCw, Check, ChevronLeft, ChevronRight,
-  FileDown, Phone, MapPin, ClipboardList,
+  FileDown, Phone, MapPin, ClipboardList, Clock,
 } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
 import { getFromCache, saveToCache } from "@/lib/indexed-db"
@@ -50,6 +50,7 @@ export function NscList({ userRole, userAgencies, username, agencies }: Props) {
   const [view, setView]         = useState<View>("list")
   const [search, setSearch]     = useState("")
   const [selected, setSelected] = useState<NSCApplication | null>(null)
+  const [historyApp, setHistoryApp] = useState<NSCApplication | null>(null)
   const [page, setPage]         = useState(1)
 
   // ── Load ──────────────────────────────────────────────────────────────────
@@ -262,6 +263,13 @@ export function NscList({ userRole, userAgencies, username, agencies }: Props) {
                         {app.memoNo        && <span className="ml-2 font-mono text-orange-700">Memo: {app.memoNo}</span>}
                       </div>
                     )}
+                    {app.meterSerialNo && (
+                      <div className="mt-1 flex items-center gap-2 text-xs">
+                        <span className="font-mono font-bold text-purple-700">{app.meterSerialNo}</span>
+                        <span className="text-gray-400">→</span>
+                        <span className="text-gray-600">{app.agency}</span>
+                      </div>
+                    )}
                     <p className="text-xs text-gray-400 mt-0.5">{app.receivedDate}</p>
                   </div>
                   <Badge className={`shrink-0 ${NSC_STATUS_COLORS[app.status] || "bg-gray-100 text-gray-700"}`}>
@@ -291,7 +299,7 @@ export function NscList({ userRole, userAgencies, username, agencies }: Props) {
                       Process
                     </Button>
                   )}
-                  {/* Admin: view / reprocess completed */}
+                  {/* Admin: view / reprocess quotation or dispute */}
                   {isAdmin && (app.status === "quotation_issued" || app.status === "dispute_issued") && (
                     <Button size="sm" variant="outline" className="flex-1 h-8"
                       onClick={() => { setSelected(app); setView("process") }}>
@@ -304,6 +312,21 @@ export function NscList({ userRole, userAgencies, username, agencies }: Props) {
                       onClick={() => { setSelected(app); setView("process") }}>
                       Reassign
                     </Button>
+                  )}
+                  {/* Admin: meter issued / connection effected — view only */}
+                  {isAdmin && (app.status === "meter_issued" || app.status === "connection_effected") && (
+                    <p className="text-xs text-teal-700 flex items-center gap-1 font-medium">
+                      <Check className="h-3 w-3" />
+                      {app.status === "connection_effected" ? "Connection effected" : "Meter issued — awaiting installation"}
+                    </p>
+                  )}
+                  {/* Admin: history button */}
+                  {isAdmin && (
+                    <button
+                      className="ml-auto flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600"
+                      onClick={() => setHistoryApp(app)}>
+                      <Clock className="h-3 w-3" /> History
+                    </button>
                   )}
                 </div>
               </CardContent>
@@ -321,6 +344,49 @@ export function NscList({ userRole, userAgencies, username, agencies }: Props) {
               onClick={() => setView("create")}>
               <Plus className="h-5 w-5" /> Add NSC
             </Button>
+          </div>
+        </div>
+      )}
+
+      {/* History popup */}
+      {historyApp && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
+          onClick={() => setHistoryApp(null)}>
+          <div className="w-full max-w-sm bg-white rounded-2xl shadow-2xl p-6 space-y-4"
+            onClick={e => e.stopPropagation()}>
+            <div className="flex items-start justify-between">
+              <div>
+                <h2 className="text-base font-bold">Flow History</h2>
+                <p className="text-xs text-gray-500 font-mono mt-0.5">{historyApp.receiveNo}</p>
+                <p className="text-sm text-gray-700 font-medium">{historyApp.applicantName}</p>
+              </div>
+              <button className="text-gray-400 hover:text-gray-600" onClick={() => setHistoryApp(null)}>
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="space-y-3">
+              {[
+                { label: "Application Received",  date: historyApp.receivedDate,           done: !!historyApp.receivedDate },
+                { label: "Inspection Completed",  date: historyApp.inspectedAt,            done: !!historyApp.inspectedAt },
+                { label: "Quotation Issued",       date: historyApp.finalizedAt,            done: !!historyApp.finalizedAt && historyApp.finalAction === "quotation" },
+                { label: "Dispute Issued",         date: historyApp.finalizedAt,            done: !!historyApp.finalizedAt && historyApp.finalAction === "dispute_letter" },
+                { label: "Meter Issued",           date: historyApp.meterIssuedAt ? `${historyApp.meterIssuedAt}${historyApp.meterSerialNo ? ` · ${historyApp.meterSerialNo}` : ""}` : "", done: !!historyApp.meterIssuedAt },
+                { label: "Connection Effected",    date: historyApp.connectionEffectedAt,   done: !!historyApp.connectionEffectedAt },
+              ].map((step, i, arr) => (
+                <div key={i} className="flex gap-3">
+                  <div className="flex flex-col items-center">
+                    <div className={`h-5 w-5 rounded-full flex items-center justify-center shrink-0 ${step.done ? "bg-green-500" : "bg-gray-100 border border-gray-200"}`}>
+                      {step.done && <Check className="h-3 w-3 text-white" />}
+                    </div>
+                    {i < arr.length - 1 && <div className={`w-0.5 flex-1 mt-1 ${step.done ? "bg-green-200" : "bg-gray-100"}`} style={{ minHeight: 16 }} />}
+                  </div>
+                  <div className="pb-3 flex-1">
+                    <p className={`text-sm font-medium ${step.done ? "text-gray-800" : "text-gray-300"}`}>{step.label}</p>
+                    {step.done && <p className="text-xs text-gray-400 font-mono">{step.date}</p>}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}

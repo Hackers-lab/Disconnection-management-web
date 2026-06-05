@@ -2,7 +2,7 @@
 
 export type NSCAppliedClass = "domestic" | "commercial" | "stw" | "industrial"
 export type NSCPhase        = "1P" | "3P"
-export type NSCStatus       = "pending" | "inspected" | "quotation_issued" | "dispute_issued"
+export type NSCStatus       = "pending" | "inspected" | "quotation_issued" | "dispute_issued" | "meter_issued" | "connection_effected"
 export type NSCDecision     = "accepted" | "rejected" | ""
 
 export const NSC_CLASSES: { value: NSCAppliedClass; label: string }[] = [
@@ -18,17 +18,21 @@ export const NSC_PHASES: { value: NSCPhase; label: string }[] = [
 ]
 
 export const NSC_STATUS_LABELS: Record<string, string> = {
-  pending:          "Pending Inspection",
-  inspected:        "Inspected",
-  quotation_issued: "Quotation Issued",
-  dispute_issued:   "Dispute Issued",
+  pending:             "Pending Inspection",
+  inspected:           "Inspected",
+  quotation_issued:    "Quotation Issued",
+  dispute_issued:      "Dispute Issued",
+  meter_issued:        "Meter Issued",
+  connection_effected: "Connection Effected",
 }
 
 export const NSC_STATUS_COLORS: Record<string, string> = {
-  pending:          "bg-yellow-100 text-yellow-800",
-  inspected:        "bg-blue-100 text-blue-800",
-  quotation_issued: "bg-green-100 text-green-800",
-  dispute_issued:   "bg-red-100 text-red-800",
+  pending:             "bg-yellow-100 text-yellow-800",
+  inspected:           "bg-blue-100 text-blue-800",
+  quotation_issued:    "bg-green-100 text-green-800",
+  dispute_issued:      "bg-red-100 text-red-800",
+  meter_issued:        "bg-purple-100 text-purple-800",
+  connection_effected: "bg-teal-100 text-teal-800",
 }
 
 export interface NSCApplication {
@@ -77,6 +81,9 @@ export interface NSCApplication {
   finalAction:       string   // "quotation" | "dispute_letter" | "reassign"
   memoNo:            string
   applicationNo:     string   // 10-digit for quotation
-  finalizedAt:       string
-  finalizedBy:       string
+  finalizedAt:          string
+  finalizedBy:          string
+  meterIssuedAt:        string
+  connectionEffectedAt: string
+  meterSerialNo:        string
 }

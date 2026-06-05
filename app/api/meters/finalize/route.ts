@@ -9,7 +9,6 @@ export async function POST(request: NextRequest) {
   }
   try {
     const body = await request.json()
-    if (!body.completionRef) return NextResponse.json({ error: "Completion reference required" }, { status: 400 })
 
     const finalizedBy = `${session.role}:${session.username}`
 

@@ -136,81 +136,56 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
   const [changePwdLoading, setChangePwdLoading] = useState(false)
 
   // ── Notifications ──────────────────────────────────────────────────────────
-  const [showNotifs, setShowNotifs] = useState(false)
+  const [showNotifs,   setShowNotifs]   = useState(false)
+  const [notifLoading, setNotifLoading] = useState(false)
   interface NotifGroup { label: string; count: number; color: string; bg: string; view: ViewType; icon: any }
   const [notifGroups, setNotifGroups] = useState<NotifGroup[]>([])
   const notifTotal = notifGroups.reduce((s, g) => s + g.count, 0)
 
+  const buildNotifGroups = (
+    d: { urgentDC: number; reconnectionPending: number; meterPending: number; nscPending: number },
+    isAdminExec: boolean,
+  ): NotifGroup[] => {
+    const gs: NotifGroup[] = []
+    if (d.urgentDC          > 0) gs.push({ label: "Urgent DC consumers",                                  count: d.urgentDC,          color: "text-red-600",    bg: "bg-red-50",    view: "disconnection", icon: Zap })
+    if (d.reconnectionPending > 0) gs.push({ label: "Reconnections pending",                              count: d.reconnectionPending, color: "text-blue-600",   bg: "bg-blue-50",   view: "reconnection",  icon: RotateCcw })
+    if (d.meterPending      > 0) gs.push({ label: isAdminExec ? "Meters awaiting finalization" : "Meters issued — install pending", count: d.meterPending, color: "text-purple-600", bg: "bg-purple-50", view: "meter", icon: Gauge })
+    if (d.nscPending        > 0) gs.push({ label: isAdminExec ? "NSC inspections awaiting processing" : "NSC inspections pending",   count: d.nscPending,   color: "text-green-600",  bg: "bg-green-50",  view: "nsc",   icon: ClipboardCheck })
+    return gs
+  }
+
   useEffect(() => {
-    async function loadNotifs() {
-      const upper = (userAgencies || []).map(a => a.toUpperCase())
-      const isAdminExec = userRole === "admin" || userRole === "executive"
-      const isAgency = userRole === "agency"
-      const groups: NotifGroup[] = []
+    const isAdminExec = userRole === "admin" || userRole === "executive"
 
-      // DC urgent
+    // 1. Instant display from IndexedDB cache
+    getFromCache<any>("notifications_cache").then(cached => {
+      if (cached && typeof cached.meterPending === "number") {
+        setNotifGroups(buildNotifGroups(cached, isAdminExec))
+      }
+    })
+
+    // 2. Fetch fresh from API (server memo cache makes this fast after first call)
+    const fetchFresh = async () => {
+      setNotifLoading(true)
       try {
-        const dc = await getFromCache<any[]>("consumers_data_cache")
-        if (dc) {
-          const count = dc.filter(c => {
-            if ((c.priority || "").toLowerCase() !== "urgent") return false
-            if (isAdminExec) return true
-            return upper.includes((c.agency || "").toUpperCase())
-          }).length
-          if (count > 0) groups.push({ label: "Urgent DC consumers", count, color: "text-red-600", bg: "bg-red-50", view: "disconnection", icon: Zap })
+        const res = await fetch("/api/notifications", { cache: "no-store" })
+        if (res.ok) {
+          const data = await res.json()
+          setNotifGroups(buildNotifGroups(data, isAdminExec))
+          await saveToCache("notifications_cache", data)
         }
-      } catch { /* ignore */ }
-
-      // Reconnection pending
-      try {
-        const rc = await getFromCache<any[]>("reconnection_data_cache")
-        if (rc) {
-          const count = rc.filter(r => {
-            if (r.status !== "pending") return false
-            if (isAdminExec) return true
-            return upper.includes((r.agency || "").toUpperCase())
-          }).length
-          if (count > 0) groups.push({ label: "Reconnections pending", count, color: "text-blue-600", bg: "bg-blue-50", view: "reconnection", icon: RotateCcw })
-        }
-      } catch { /* ignore */ }
-
-      // Meter issued pending installation (agency) or installation_done pending finalization (admin)
-      try {
-        const mk = isAdminExec ? "meter_stock_cache" : "meter_issues_cache"
-        const md = await getFromCache<any>(mk)
-        if (md) {
-          const list: any[] = isAdminExec ? (md.issues || []) : (Array.isArray(md) ? md : [])
-          const targetStatus = isAdminExec ? "installation_done" : "issued"
-          const label = isAdminExec ? "Meters awaiting finalization" : "Meters issued — install pending"
-          const count = list.filter(m => {
-            if (m.status !== targetStatus) return false
-            if (isAdminExec) return true
-            return upper.includes((m.agency || "").toUpperCase())
-          }).length
-          if (count > 0) groups.push({ label, count, color: "text-purple-600", bg: "bg-purple-50", view: "meter", icon: Gauge })
-        }
-      } catch { /* ignore */ }
-
-      // NSC pending inspection (agency) or awaiting processing (admin)
-      try {
-        const nsc = await getFromCache<any[]>("nsc_data_cache")
-        if (nsc) {
-          const targetStatus = isAdminExec ? "inspected" : "pending"
-          const label = isAdminExec ? "NSC inspections awaiting processing" : "NSC inspections pending"
-          const count = nsc.filter(a => {
-            if (a.status !== targetStatus) return false
-            if (isAdminExec) return true
-            return upper.includes((a.agency || "").toUpperCase())
-          }).length
-          if (count > 0) groups.push({ label, count, color: "text-green-600", bg: "bg-green-50", view: "nsc", icon: ClipboardCheck })
-        }
-      } catch { /* ignore */ }
-
-      setNotifGroups(groups)
+      } catch { /* keep current groups */ }
+      finally { setNotifLoading(false) }
     }
-    loadNotifs()
-    const id = setInterval(loadNotifs, 60_000)
-    return () => clearInterval(id)
+
+    fetchFresh()
+    const id = setInterval(fetchFresh, 60_000)
+
+    // Refresh when tab regains focus (user switches back)
+    const onFocus = () => fetchFresh()
+    window.addEventListener("focus", onFocus)
+
+    return () => { clearInterval(id); window.removeEventListener("focus", onFocus) }
   }, [userRole, userAgencies])
 
   const openChangePwdDialog = () => {
@@ -1011,9 +986,19 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
                 className="relative p-2 rounded-full hover:bg-gray-100 transition"
                 title="Notifications"
               >
-                <Bell className="h-5 w-5 text-gray-600" />
-                {notifTotal > 0 && (
+                <Bell className={`h-5 w-5 ${notifLoading ? "text-gray-400" : "text-gray-600"}`} />
+                {notifLoading && (
+                  <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3">
+                    <RefreshCw className="h-3 w-3 text-blue-500 animate-spin" />
+                  </span>
+                )}
+                {notifTotal > 0 && !notifLoading && (
                   <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] bg-red-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1 leading-none">
+                    {notifTotal > 99 ? "99+" : notifTotal}
+                  </span>
+                )}
+                {notifTotal > 0 && notifLoading && (
+                  <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] bg-red-400 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1 leading-none">
                     {notifTotal > 99 ? "99+" : notifTotal}
                   </span>
                 )}

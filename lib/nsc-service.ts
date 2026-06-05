@@ -10,7 +10,7 @@ const sheets = google.sheets({ version: "v4", auth })
 
 export const NSC_TAB = "NSC_Applications"
 
-// 41 columns A–AO
+// 43 columns A–AQ
 const NSC_HEADERS = [
   "Receive No", "Received Date", "Applicant Name", "C/O", "Address",
   "Mobile", "Applied Class", "Phase", "Agency", "Status",
@@ -28,6 +28,8 @@ const NSC_HEADERS = [
   // Admin processing
   "Admin Decision", "Admin Remarks", "Final Action",
   "Memo No", "Application No", "Finalized At", "Finalized By",
+  // Meter & connection milestones
+  "Meter Issued At", "Connection Effected At", "Meter Serial No",
 ]
 
 // ─── Cache ───────────────────────────────────────────────────────────────────
@@ -98,8 +100,11 @@ function parseRow(r: string[]): NSCApplication {
     finalAction:       r[36] || "",
     memoNo:            r[37] || "",
     applicationNo:     r[38] || "",
-    finalizedAt:       r[39] || "",
-    finalizedBy:       r[40] || "",
+    finalizedAt:          r[39] || "",
+    finalizedBy:          r[40] || "",
+    meterIssuedAt:        r[41] || "",
+    connectionEffectedAt: r[42] || "",
+    meterSerialNo:        r[43] || "",
   }
 }
 
@@ -108,7 +113,7 @@ export async function fetchApplications(): Promise<NSCApplication[]> {
   if (nscMemo && Date.now() - nscMemo.at < TTL) return nscMemo.data
   const id = getSpreadsheetId()
   await ensureTab(id)
-  const res = await sheets.spreadsheets.values.get({ spreadsheetId: id, range: `${NSC_TAB}!A:AO` })
+  const res = await sheets.spreadsheets.values.get({ spreadsheetId: id, range: `${NSC_TAB}!A:AR` })
   const data = (res.data.values || []).slice(1).filter(r => r[0]).map(r => parseRow(r.map(String)))
   nscMemo = { at: Date.now(), data }
   return data
@@ -282,6 +287,52 @@ export async function processApplication(req: {
   await sheets.spreadsheets.values.batchUpdate({
     spreadsheetId: id,
     requestBody: { valueInputOption: "RAW", data: updates },
+  })
+  invalidateNSCCache()
+}
+
+// ─── Called by meter-service when a meter is issued for NSC ──────────────────
+export async function updateNSCMeterIssued(receiveNo: string, serialNo: string, agency: string): Promise<void> {
+  if (!receiveNo) return
+  const id = getSpreadsheetId()
+  await ensureTab(id)
+  const all = await fetchApplications()
+  const idx = all.findIndex(a => a.receiveNo === receiveNo)
+  if (idx === -1) return
+  const row = idx + 2
+  await sheets.spreadsheets.values.batchUpdate({
+    spreadsheetId: id,
+    requestBody: {
+      valueInputOption: "RAW",
+      data: [
+        { range: `${NSC_TAB}!J${row}`,  values: [["meter_issued"]] },
+        { range: `${NSC_TAB}!AP${row}`, values: [[nowTs()]] },
+        { range: `${NSC_TAB}!AR${row}`, values: [[serialNo]] },
+        { range: `${NSC_TAB}!I${row}`,  values: [[agency]] },
+      ],
+    },
+  })
+  invalidateNSCCache()
+}
+
+// ─── Called by meter-service when NSC meter installation is finalized ────────
+export async function updateNSCConnectionEffected(receiveNo: string): Promise<void> {
+  if (!receiveNo) return
+  const id = getSpreadsheetId()
+  await ensureTab(id)
+  const all = await fetchApplications()
+  const idx = all.findIndex(a => a.receiveNo === receiveNo)
+  if (idx === -1) return
+  const row = idx + 2
+  await sheets.spreadsheets.values.batchUpdate({
+    spreadsheetId: id,
+    requestBody: {
+      valueInputOption: "RAW",
+      data: [
+        { range: `${NSC_TAB}!J${row}`,  values: [["connection_effected"]] },
+        { range: `${NSC_TAB}!AQ${row}`, values: [[nowTs()]] },
+      ],
+    },
   })
   invalidateNSCCache()
 }
