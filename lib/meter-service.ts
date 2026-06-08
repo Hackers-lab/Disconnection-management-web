@@ -1,6 +1,7 @@
 // Server-only — imports googleapis. Never import this in "use client" components.
 // Client components should import types from lib/meter-types.ts instead.
 import { google } from "googleapis"
+import { unstable_cache, revalidateTag } from "next/cache"
 import { auth } from "./google-drive"
 import { getSpreadsheetId } from "./google-sheets-api"
 import { METER_TYPES } from "./meter-types"
@@ -32,13 +33,14 @@ const ISSUES_HEADERS = [
   "Completion Ref", "Completed At", "Completed By", "Remarks", "Installation No",
 ]
 
-// ─── Memo cache ───────────────────────────────────────────────────────────────
-const TTL = 120_000
-let stockMemo:  { at: number; data: MeterStock[]  } | null = null
-let issuesMemo: { at: number; data: MeterIssue[] } | null = null
+// ─── Shared cross-instance cache (Next.js Data Cache) ─────────────────────────
+// Read paths use the cached wrappers; write paths use the raw fetch so row
+// positions / next IDs are always computed against live data.
+const METER_TAG = "meter"
+const METER_REVALIDATE_S = 60
 let tabsReady = false
 
-export function invalidateMeterCache() { stockMemo = null; issuesMemo = null }
+export function invalidateMeterCache() { revalidateTag(METER_TAG) }
 
 // ─── Tab bootstrap ────────────────────────────────────────────────────────────
 async function ensureTabs(id: string) {
@@ -102,25 +104,27 @@ function parseIssue(r: string[]): MeterIssue {
 }
 
 // ─── Reads ────────────────────────────────────────────────────────────────────
-export async function fetchStock(): Promise<MeterStock[]> {
-  if (stockMemo && Date.now() - stockMemo.at < TTL) return stockMemo.data
+async function _fetchStockRaw(): Promise<MeterStock[]> {
   const id = getSpreadsheetId()
   await ensureTabs(id)
   const res = await sheets.spreadsheets.values.get({ spreadsheetId: id, range: `${STOCK_TAB}!A:I` })
-  const data = (res.data.values || []).slice(1).filter(r => r[0]).map(r => parseStock(r.map(String)))
-  stockMemo = { at: Date.now(), data }
-  return data
+  return (res.data.values || []).slice(1).filter(r => r[0]).map(r => parseStock(r.map(String)))
 }
 
-export async function fetchIssues(): Promise<MeterIssue[]> {
-  if (issuesMemo && Date.now() - issuesMemo.at < TTL) return issuesMemo.data
+async function _fetchIssuesRaw(): Promise<MeterIssue[]> {
   const id = getSpreadsheetId()
   await ensureTabs(id)
   const res = await sheets.spreadsheets.values.get({ spreadsheetId: id, range: `${ISSUES_TAB}!A:S` })
-  const data = (res.data.values || []).slice(1).filter(r => r[0]).map(r => parseIssue(r.map(String)))
-  issuesMemo = { at: Date.now(), data }
-  return data
+  return (res.data.values || []).slice(1).filter(r => r[0]).map(r => parseIssue(r.map(String)))
 }
+
+export const fetchStock = unstable_cache(
+  _fetchStockRaw, ["meter-stock"], { revalidate: METER_REVALIDATE_S, tags: [METER_TAG] },
+)
+
+export const fetchIssues = unstable_cache(
+  _fetchIssuesRaw, ["meter-issues"], { revalidate: METER_REVALIDATE_S, tags: [METER_TAG] },
+)
 
 // ─── Stock summary ────────────────────────────────────────────────────────────
 export async function getStockSummary(): Promise<StockSummary[]> {
@@ -163,7 +167,7 @@ export async function addMeterStock(meters: Array<{
 
 // ─── Next Issue ID ────────────────────────────────────────────────────────────
 async function nextIssueId(id: string): Promise<string> {
-  const all = await fetchIssues()
+  const all = await _fetchIssuesRaw()
   const max = all.reduce((m, i) => {
     const n = parseInt(i.issueId.replace("MI-", ""), 10)
     return isNaN(n) ? m : Math.max(m, n)
@@ -183,7 +187,7 @@ export async function issueMeter(req: {
 }): Promise<string> {
   const id = getSpreadsheetId()
   await ensureTabs(id)
-  const stock = await fetchStock()
+  const stock = await _fetchStockRaw()
   const idx = stock.findIndex(m => m.serialNo === req.serialNo)
   if (idx === -1) throw new Error("Serial number not found in stock")
   if (stock[idx].condition !== "available") throw new Error("Meter is not available")
@@ -227,7 +231,7 @@ export async function completeMeterInstallation(req: {
 }): Promise<void> {
   const id = getSpreadsheetId()
   await ensureTabs(id)
-  const issues = await fetchIssues()
+  const issues = await _fetchIssuesRaw()
   const issueIdx = issues.findIndex(i => i.issueId === req.issueId)
   if (issueIdx === -1) throw new Error("Issue not found")
   const row = issueIdx + 2
@@ -260,7 +264,7 @@ export async function finalizeMeterInstallation(req: {
 }): Promise<void> {
   const id = getSpreadsheetId()
   await ensureTabs(id)
-  const issues = await fetchIssues()
+  const issues = await _fetchIssuesRaw()
   const issueIdx = issues.findIndex(i => i.issueId === req.issueId)
   if (issueIdx === -1) throw new Error("Issue not found")
   const issue = issues[issueIdx]
@@ -280,7 +284,7 @@ export async function finalizeMeterInstallation(req: {
     requestBody: { valueInputOption: "RAW", data: updates },
   })
   // Mark stock as installed
-  const stock = await fetchStock()
+  const stock = await _fetchStockRaw()
   const si = stock.findIndex(m => m.serialNo === issue.serialNo)
   if (si !== -1) {
     await sheets.spreadsheets.values.batchUpdate({
@@ -309,7 +313,7 @@ export async function bulkFinalizeMeterInstallations(req: {
 }): Promise<{ succeeded: number; failed: string[] }> {
   const id = getSpreadsheetId()
   await ensureTabs(id)
-  const [issues, stock] = await Promise.all([fetchIssues(), fetchStock()])
+  const [issues, stock] = await Promise.all([_fetchIssuesRaw(), _fetchStockRaw()])
   const now = nowDate()
 
   const issueUpdates: { range: string; values: any[][] }[] = []
@@ -370,7 +374,7 @@ export async function returnMeterToStock(req: {
 }): Promise<void> {
   const id = getSpreadsheetId()
   await ensureTabs(id)
-  const issues = await fetchIssues()
+  const issues = await _fetchIssuesRaw()
   const issueIdx = issues.findIndex(i => i.issueId === req.issueId)
   if (issueIdx === -1) throw new Error("Issue not found")
   const issue = issues[issueIdx]
@@ -387,7 +391,7 @@ export async function returnMeterToStock(req: {
       ],
     },
   })
-  const stock = await fetchStock()
+  const stock = await _fetchStockRaw()
   const si = stock.findIndex(m => m.serialNo === issue.serialNo)
   if (si !== -1) {
     await sheets.spreadsheets.values.batchUpdate({

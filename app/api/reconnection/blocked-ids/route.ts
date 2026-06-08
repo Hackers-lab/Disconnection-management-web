@@ -8,7 +8,10 @@ export async function GET() {
   try {
     const ids = await getBlockedConsumerIds()
     return NextResponse.json(ids, {
-      headers: { "Cache-Control": "public, s-maxage=60, stale-while-revalidate=120" },
+      // The blocked-ids set only changes when a reconnection crosses the 30h
+      // threshold — 5-min CDN freshness is plenty and lets the edge serve most
+      // hits without invoking the function. No per-user data, so fully cacheable.
+      headers: { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=600" },
     })
   } catch (e) {
     console.error("blocked-ids error:", e)

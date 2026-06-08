@@ -1,4 +1,5 @@
 import { google } from "googleapis"
+import { unstable_cache, revalidateTag } from "next/cache"
 import { auth } from "./google-drive"
 import { getSpreadsheetId } from "./google-sheets-api"
 import { nowTs, parseTs } from "./date-utils"
@@ -32,12 +33,14 @@ export interface ReconnectionRequest {
   remarks: string
 }
 
-// 60s memo
-const MEMO_TTL = 120_000
-let memo: { at: number; data: ReconnectionRequest[] } | null = null
+// Shared cross-instance cache (Next.js Data Cache). Read paths use the cached
+// wrapper; write paths use the raw fetch so row positions / next IDs are always
+// computed against live data.
+const RECONNECTION_TAG = "reconnection"
+const RECONNECTION_REVALIDATE_S = 60
 let tabReady = false
 
-export function invalidateReconnectionCache() { memo = null }
+export function invalidateReconnectionCache() { revalidateTag(RECONNECTION_TAG) }
 
 // ─── Tab bootstrap ────────────────────────────────────────────────────────────
 async function ensureTab(id: string) {
@@ -82,20 +85,24 @@ function parseRow(r: string[]): ReconnectionRequest {
 }
 
 // ─── Fetch all ────────────────────────────────────────────────────────────────
-export async function fetchReconnectionData(): Promise<ReconnectionRequest[]> {
-  if (memo && Date.now() - memo.at < MEMO_TTL) return memo.data
+async function _fetchReconnectionDataRaw(): Promise<ReconnectionRequest[]> {
   const id = getSpreadsheetId()
   await ensureTab(id)
   const res = await sheets.spreadsheets.values.get({ spreadsheetId: id, range: `${TAB}!A:P` })
   const rows = (res.data.values || []).slice(1)
-  const data = rows.filter(r => r[0]).map(r => parseRow(r.map(String)))
-  memo = { at: Date.now(), data }
-  return data
+  return rows.filter(r => r[0]).map(r => parseRow(r.map(String)))
 }
+
+// Cached read for list/count endpoints (blocked-ids, notifications, GET).
+export const fetchReconnectionData = unstable_cache(
+  _fetchReconnectionDataRaw,
+  ["reconnection-data"],
+  { revalidate: RECONNECTION_REVALIDATE_S, tags: [RECONNECTION_TAG] },
+)
 
 // ─── Next Request ID ──────────────────────────────────────────────────────────
 async function nextRequestId(id: string): Promise<string> {
-  const all = await fetchReconnectionData()
+  const all = await _fetchReconnectionDataRaw()
   const max = all.reduce((m, r) => {
     const n = parseInt(r.requestId.replace("REC-", ""), 10)
     return isNaN(n) ? m : Math.max(m, n)
@@ -138,7 +145,7 @@ export async function updateReconnectionStatus(update: {
 }): Promise<void> {
   const id = getSpreadsheetId()
   await ensureTab(id)
-  const all = await fetchReconnectionData()
+  const all = await _fetchReconnectionDataRaw()
   const idx = all.findIndex(r => r.requestId === update.requestId)
   if (idx === -1) throw new Error("Request not found")
   const sheetRow = idx + 2 // 1-based + header

@@ -1,3 +1,8 @@
+import { unstable_cache, revalidateTag } from "next/cache"
+
+// Tag used to invalidate the shared Data Cache after any consumer write.
+export const CONSUMERS_TAG = "consumers"
+
 export interface ConsumerData {
   _syncStatus?: 'syncing' | 'error'
   // Epoch ms set when the client edits this row locally. Used to protect
@@ -184,17 +189,18 @@ export async function getAgencyLastUpdates(): Promise<
 
 
 
-// Warm-function in-memory cache: when /base, /patch and /row-count hit the
-// same container within a short window, they share the parsed data instead of
-// each re-fetching and re-parsing it. ~30s keeps responses fresh enough for
-// delta sync while collapsing 3-5 redundant parses into one.
-const CSV_MEMO_TTL_MS = 120_000
-let csvMemo: { at: number; data: ConsumerData[] } | null = null
+// Shared cross-instance cache via Next.js Data Cache. Unlike a module-level
+// memo (which lives in a single serverless instance's memory and dies on every
+// cold start), unstable_cache stores the *parsed* result in storage shared by
+// all instances and revalidates it in the background. Repeated calls skip both
+// the Google Sheets fetch AND the row-by-row parse — near-zero CPU per call.
+const CONSUMER_REVALIDATE_S = 60
 
-// Allow other modules (e.g. /api/consumers/update) to invalidate the memo
+// Allow other modules (e.g. /api/consumers/update) to invalidate the cache
 // after a successful write so the next read reflects the change immediately.
+// Works across all instances because it busts the shared Data Cache tag.
 export function invalidateConsumerCache() {
-  csvMemo = null
+  revalidateTag(CONSUMERS_TAG)
 }
 
 // Lazy import to avoid loading googleapis on cold paths that don't need it.
@@ -253,12 +259,9 @@ export const EXPECTED_CONSUMER_HEADERS = [
   "Outstanding After", "Next Payment Date", "Payment Source",
 ] as const
 
-export async function fetchConsumerData(): Promise<ConsumerData[]> {
-  if (csvMemo && Date.now() - csvMemo.at < CSV_MEMO_TTL_MS) {
-    return csvMemo.data
-  }
-
-  try {
+// Raw worker — does the actual fetch + parse and THROWS on failure so the
+// shared cache never stores an error/mock result.
+async function _fetchConsumerDataRaw(): Promise<ConsumerData[]> {
     const spreadsheetId =
       process.env.DISCONNECTION_SHEET?.trim() || process.env.GOOGLE_SHEET_ID
     if (!spreadsheetId) {
@@ -369,60 +372,58 @@ export async function fetchConsumerData(): Promise<ConsumerData[]> {
       }
     }
 
-    csvMemo = { at: Date.now(), data: consumers }
     return consumers
+}
+
+// Mock fallback returned (but never cached) when the live fetch fails.
+const MOCK_CONSUMERS: ConsumerData[] = [
+  {
+    offCode: "TEST001", mru: "MRU001", consumerId: "CONS001",
+    name: "Test Consumer 1", address: "123 Test Street, Test City",
+    baseClass: "LT", class: "Domestic", natureOfConn: "Permanent",
+    govNonGov: "Non-Gov", device: "Meter001", osDuedateRange: "Jan-Mar 2024",
+    d2NetOS: "1500", disconStatus: "connected", disconDate: "",
+    gisPole: "POLE001", mobileNumber: "9876543210",
+    latitude: "22.5726", longitude: "88.3639", agency: "JOY GURU",
+    lastUpdated: new Date().toISOString().split("T")[0],
+  },
+  {
+    offCode: "TEST002", mru: "MRU002", consumerId: "CONS002",
+    name: "Test Consumer 2", address: "456 Demo Avenue, Demo Town",
+    baseClass: "LT", class: "Commercial", natureOfConn: "Temprory",
+    govNonGov: "Gov", device: "Meter002", osDuedateRange: "Feb-Apr 2024",
+    d2NetOS: "12380", disconStatus: "pending", disconDate: "",
+    gisPole: "POLE002", mobileNumber: "9876543211",
+    latitude: "22.5726", longitude: "88.3639", agency: "ST",
+    lastUpdated: new Date().toISOString().split("T")[0],
+  },
+]
+
+// Cross-instance cached read. Errors propagate (and are NOT cached) so the
+// public wrapper below can fall back to mock data without poisoning the cache.
+const _cachedConsumerData = unstable_cache(
+  _fetchConsumerDataRaw,
+  ["consumer-data"],
+  { revalidate: CONSUMER_REVALIDATE_S, tags: [CONSUMERS_TAG] },
+)
+
+export async function fetchConsumerData(): Promise<ConsumerData[]> {
+  try {
+    return await _cachedConsumerData()
   } catch (error) {
     console.error("Detailed error in fetchConsumerData:", error)
-
-    // Return mock data with proper OSD values
-    const mockData: ConsumerData[] = [
-      {
-        offCode: "TEST001",
-        mru: "MRU001",
-        consumerId: "CONS001",
-        name: "Test Consumer 1",
-        address: "123 Test Street, Test City",
-        baseClass: "LT",
-        class: "Domestic",
-        natureOfConn: "Permanent",
-        govNonGov: "Non-Gov",
-        device: "Meter001",
-        osDuedateRange: "Jan-Mar 2024",
-        d2NetOS: "1500", // Clean numeric value
-        disconStatus: "connected",
-        disconDate: "",
-        gisPole: "POLE001",
-        mobileNumber: "9876543210",
-        latitude: "22.5726",
-        longitude: "88.3639",
-        agency: "JOY GURU",
-        lastUpdated: new Date().toISOString().split("T")[0],
-      },
-      {
-        offCode: "TEST002",
-        mru: "MRU002",
-        consumerId: "CONS002",
-        name: "Test Consumer 2",
-        address: "456 Demo Avenue, Demo Town",
-        baseClass: "LT",
-        class: "Commercial",
-        natureOfConn: "Temprory",
-        govNonGov: "Gov",
-        device: "Meter002",
-        osDuedateRange: "Feb-Apr 2024",
-        d2NetOS: "12380", // Clean numeric value
-        disconStatus: "pending",
-        disconDate: "",
-        gisPole: "POLE002",
-        mobileNumber: "9876543211",
-        latitude: "22.5726",
-        longitude: "88.3639",
-        agency: "ST",
-        lastUpdated: new Date().toISOString().split("T")[0],
-      },
-    ]
-
-    //console.log("Returning mock data due to error")
-    return mockData
+    return MOCK_CONSUMERS
   }
+}
+
+// Lightweight count + version for /api/system/row-count. Reuses the cached
+// parsed data (no extra Sheets fetch) and hashes only the consumer-ID set —
+// matching the old "column C" semantics at a fraction of the CPU.
+export async function getConsumerCountAndVersion(): Promise<{ count: number; version: string }> {
+  const consumers = await fetchConsumerData()
+  const { createHash } = await import("crypto")
+  const version = createHash("md5")
+    .update(consumers.map(c => c.consumerId).join("\n"))
+    .digest("hex")
+  return { count: consumers.length, version }
 }

@@ -13,7 +13,7 @@ import { AnalysisDashboard } from "@/components/analysis-dashboard"
 import { ReconnectionList } from "@/components/reconnection-list"
 import { MeterList } from "@/components/meter-list"
 import { NscList } from "@/components/nsc-list"
-import { ConsumerData } from "@/lib/google-sheets"
+import type { ConsumerData } from "@/lib/google-sheets"
 import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
 import * as XLSX from "xlsx" //
@@ -56,9 +56,15 @@ export default function DashboardClient({ role, agencies }: DashboardClientProps
   // Reference to ConsumerList to access data
   const consumerListRef = useRef<{ getCurrentConsumers: () => ConsumerData[] }>(null)
 
-  // Daily session heartbeat — logs once per day for users who stay logged in
+  // Daily session heartbeat — logs once per day for users who stay logged in.
+  // Gate client-side on localStorage so we don't even invoke the function on
+  // repeat dashboard mounts within the same day (server also no-ops via cookie).
   useEffect(() => {
-    fetch("/api/auth/heartbeat").catch(() => {})
+    const today = new Date().toISOString().split("T")[0]
+    if (localStorage.getItem("_hb_date") === today) return
+    fetch("/api/auth/heartbeat")
+      .then(() => localStorage.setItem("_hb_date", today))
+      .catch(() => {})
   }, [])
 
   // Background prefetch: warm up IndexedDB as soon as user is on dashboard

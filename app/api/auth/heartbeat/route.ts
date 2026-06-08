@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
 import { verifySession } from "@/lib/session"
-import { appendLoginLog } from "@/lib/login-logger"
 
 const COOKIE = "_audit_ts"
 
@@ -22,8 +21,10 @@ export async function GET(request: NextRequest) {
   const deployment = request.headers.get("host") || "unknown"
   const deviceId = request.cookies.get("deviceId")?.value
 
-  // Fire-and-forget — never block the response
-  appendLoginLog({
+  // Fire-and-forget — never block the response. Lazy-import so the heavy
+  // googleapis module only loads on the once-a-day path that actually logs,
+  // not on every early-return heartbeat.
+  import("@/lib/login-logger").then(({ appendLoginLog }) => appendLoginLog({
     action: "login",
     status: "success",
     deployment,
@@ -34,7 +35,7 @@ export async function GET(request: NextRequest) {
     ip,
     userAgent,
     deviceId,
-  }).catch(() => {})
+  })).catch(() => {})
 
   const response = NextResponse.json({ ok: true, logged: true })
   // Refresh the cookie so it resets each day

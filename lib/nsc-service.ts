@@ -1,5 +1,6 @@
 // Server-only — imports googleapis. Never import in "use client" components.
 import { google } from "googleapis"
+import { unstable_cache, revalidateTag } from "next/cache"
 import { auth } from "./google-drive"
 import { getSpreadsheetId } from "./google-sheets-api"
 import type { NSCApplication } from "./nsc-types"
@@ -33,12 +34,14 @@ const NSC_HEADERS = [
   "Meter Issued At", "Connection Effected At", "Meter Serial No",
 ]
 
-// ─── Cache ───────────────────────────────────────────────────────────────────
-const TTL = 120_000
-let nscMemo: { at: number; data: NSCApplication[] } | null = null
+// ─── Shared cross-instance cache (Next.js Data Cache) ─────────────────────────
+// Read paths use the cached wrapper; write paths use the raw fetch so row
+// positions / next receive numbers are always computed against live data.
+const NSC_TAG = "nsc"
+const NSC_REVALIDATE_S = 60
 let tabReady = false
 
-export function invalidateNSCCache() { nscMemo = null }
+export function invalidateNSCCache() { revalidateTag(NSC_TAG) }
 
 // ─── Tab bootstrap ────────────────────────────────────────────────────────────
 async function ensureTab(id: string) {
@@ -110,19 +113,23 @@ function parseRow(r: string[]): NSCApplication {
 }
 
 // ─── Fetch ────────────────────────────────────────────────────────────────────
-export async function fetchApplications(): Promise<NSCApplication[]> {
-  if (nscMemo && Date.now() - nscMemo.at < TTL) return nscMemo.data
+async function _fetchApplicationsRaw(): Promise<NSCApplication[]> {
   const id = getSpreadsheetId()
   await ensureTab(id)
   const res = await sheets.spreadsheets.values.get({ spreadsheetId: id, range: `${NSC_TAB}!A:AR` })
-  const data = (res.data.values || []).slice(1).filter(r => r[0]).map(r => parseRow(r.map(String)))
-  nscMemo = { at: Date.now(), data }
-  return data
+  return (res.data.values || []).slice(1).filter(r => r[0]).map(r => parseRow(r.map(String)))
 }
+
+// Cached read for list/count endpoints (notifications, GET).
+export const fetchApplications = unstable_cache(
+  _fetchApplicationsRaw,
+  ["nsc-data"],
+  { revalidate: NSC_REVALIDATE_S, tags: [NSC_TAG] },
+)
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 async function nextReceiveNo(id: string): Promise<string> {
-  const all = await fetchApplications()
+  const all = await _fetchApplicationsRaw()
   const fy = currentFY()
   const prefix = `NSC/${fy}/`
   const nums = all
@@ -198,7 +205,7 @@ export async function submitInspection(req: {
 }): Promise<void> {
   const id = getSpreadsheetId()
   await ensureTab(id)
-  const all = await fetchApplications()
+  const all = await _fetchApplicationsRaw()
   const idx = all.findIndex(a => a.receiveNo === req.receiveNo)
   if (idx === -1) throw new Error("Application not found")
   const row = idx + 2
@@ -250,7 +257,7 @@ export async function processApplication(req: {
 }): Promise<void> {
   const id = getSpreadsheetId()
   await ensureTab(id)
-  const all = await fetchApplications()
+  const all = await _fetchApplicationsRaw()
   const idx = all.findIndex(a => a.receiveNo === req.receiveNo)
   if (idx === -1) throw new Error("Application not found")
   const row = idx + 2
@@ -284,7 +291,7 @@ export async function updateNSCMeterIssued(receiveNo: string, serialNo: string, 
   if (!receiveNo) return
   const id = getSpreadsheetId()
   await ensureTab(id)
-  const all = await fetchApplications()
+  const all = await _fetchApplicationsRaw()
   const idx = all.findIndex(a => a.receiveNo === receiveNo)
   if (idx === -1) return
   const row = idx + 2
@@ -308,7 +315,7 @@ export async function updateNSCConnectionEffected(receiveNo: string): Promise<vo
   if (!receiveNo) return
   const id = getSpreadsheetId()
   await ensureTab(id)
-  const all = await fetchApplications()
+  const all = await _fetchApplicationsRaw()
   const idx = all.findIndex(a => a.receiveNo === receiveNo)
   if (idx === -1) return
   const row = idx + 2

@@ -164,8 +164,11 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
       }
     })
 
-    // 2. Fetch fresh from API (server memo cache makes this fast after first call)
+    // 2. Fetch fresh from API (shared server-side Data Cache makes this cheap).
+    let lastFetch = 0
+    const MIN_GAP_MS = 120_000 // don't re-hit the server more often than this
     const fetchFresh = async () => {
+      lastFetch = Date.now()
       setNotifLoading(true)
       try {
         const res = await fetch("/api/notifications", { cache: "no-store" })
@@ -181,10 +184,11 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
     fetchFresh()
     const id = setInterval(() => {
       if (!document.hidden) fetchFresh()
-    }, 60_000)
+    }, 180_000)
 
-    // Refresh when tab regains focus (user switches back)
-    const onFocus = () => fetchFresh()
+    // Refresh when tab regains focus — but debounce so rapid tab-switching
+    // doesn't spam the server; only refetch if it's been a while.
+    const onFocus = () => { if (Date.now() - lastFetch > MIN_GAP_MS) fetchFresh() }
     window.addEventListener("focus", onFocus)
 
     return () => { clearInterval(id); window.removeEventListener("focus", onFocus) }
