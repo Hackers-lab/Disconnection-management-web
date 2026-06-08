@@ -29,10 +29,9 @@ type BulkPaymentRequest = {
 
 const sheets = google.sheets({ version: "v4", auth })
 
-// Parse a date string of DD-MM-YYYY, YYYY-MM-DD, MM/DD/YYYY etc. and add N days.
-// Returns DD-MM-YYYY (matches the rest of the app's display format).
-function addDays(dateStr: string, days: number): string {
-  if (!dateStr) return ""
+// Parse a date string of DD-MM-YYYY, YYYY-MM-DD, MM/DD/YYYY etc. into a Date.
+function parseFlexDate(dateStr: string): Date | null {
+  if (!dateStr) return null
   let d: Date | null = null
   if (/^\d{4}-\d{2}-\d{2}/.test(dateStr)) d = new Date(dateStr)
   else if (/^\d{2}-\d{2}-\d{4}/.test(dateStr)) {
@@ -42,7 +41,13 @@ function addDays(dateStr: string, days: number): string {
     const parsed = new Date(dateStr)
     if (!isNaN(parsed.getTime())) d = parsed
   }
-  if (!d || isNaN(d.getTime())) return ""
+  return d && !isNaN(d.getTime()) ? d : null
+}
+
+// Add N days to a flexible date string. Returns DD-MM-YYYY (the app's display format).
+function addDays(dateStr: string, days: number): string {
+  const d = parseFlexDate(dateStr)
+  if (!d) return ""
   d.setDate(d.getDate() + days)
   const dd = String(d.getDate()).padStart(2, "0")
   const mm = String(d.getMonth() + 1).padStart(2, "0")
@@ -152,9 +157,29 @@ export async function POST(request: NextRequest) {
     let fullCount = 0
     let partialCount = 0
 
-    for (const p of payments) {
-      const id = String(p.consumerId || "").trim()
+    // Collapse duplicate rows for the same consumer: sum the amounts (installments
+    // accumulate) and keep the latest paid date. This writes each consumer row
+    // exactly once and computes outstanding against the full total paid.
+    const aggregated = new Map<string, PaymentRow>()
+    for (const raw of payments) {
+      const id = String(raw.consumerId || "").trim()
       if (!id) continue
+      const amt = Number(raw.paidAmount) || 0
+      const existing = aggregated.get(id)
+      if (!existing) {
+        aggregated.set(id, { consumerId: id, paidAmount: amt, paidDate: raw.paidDate })
+        continue
+      }
+      existing.paidAmount += amt
+      const incoming = parseFlexDate(raw.paidDate)
+      const current = parseFlexDate(existing.paidDate)
+      if (incoming && (!current || incoming.getTime() > current.getTime())) {
+        existing.paidDate = raw.paidDate
+      }
+    }
+
+    for (const p of aggregated.values()) {
+      const id = p.consumerId
       const target = idToRow.get(id)
       if (!target) {
         notFound.push(id)
@@ -187,23 +212,41 @@ export async function POST(request: NextRequest) {
         eventDate: p.paidDate || todayDDMM,
       })
 
-      // Build per-cell writes only for columns we resolved.
-      const push = (col: number, val: string) => {
-        if (col === -1) return
+      // Collect the cells to write for this row (skipping unresolved columns),
+      // then coalesce adjacent columns into single contiguous ranges. When the
+      // payment columns sit together (the common appended-at-end layout) one
+      // consumer needs ~2-3 ValueRanges instead of 9 — ~5x smaller batchUpdate
+      // payload, well clear of the 60s timeout and Sheets API size limits.
+      const cells = [
+        { col: colMap.disconStatus,     val: "paid" },
+        { col: colMap.disconDate,       val: p.paidDate || todayDDMM },
+        { col: colMap.lastUpdated,      val: todayDDMM },
+        { col: colMap.paidAmount,       val: String(paidAmount) },
+        { col: colMap.paidDate,         val: p.paidDate || todayDDMM },
+        { col: colMap.paidType,         val: paidType },
+        { col: colMap.outstandingAfter, val: String(remaining) },
+        { col: colMap.nextPaymentDate,  val: nextDate },
+        { col: colMap.paymentSource,    val: source },
+      ]
+        .filter(c => c.col !== -1)
+        .sort((a, b) => a.col - b.col)
+
+      for (let k = 0; k < cells.length; ) {
+        const startCol = cells[k].col
+        const run: string[] = [cells[k].val]
+        let endCol = startCol
+        let j = k + 1
+        while (j < cells.length && cells[j].col === endCol + 1) {
+          run.push(cells[j].val)
+          endCol = cells[j].col
+          j++
+        }
         writes.push({
-          range: `'${sheetName}'!${colLetter(col)}${target.row}`,
-          values: [[val]],
+          range: `'${sheetName}'!${colLetter(startCol)}${target.row}:${colLetter(endCol)}${target.row}`,
+          values: [run],
         })
+        k = j
       }
-      push(colMap.disconStatus, "paid")
-      push(colMap.disconDate, p.paidDate || todayDDMM)
-      push(colMap.lastUpdated, todayDDMM)
-      push(colMap.paidAmount, String(paidAmount))
-      push(colMap.paidDate, p.paidDate || todayDDMM)
-      push(colMap.paidType, paidType)
-      push(colMap.outstandingAfter, String(remaining))
-      push(colMap.nextPaymentDate, nextDate)
-      push(colMap.paymentSource, source)
     }
 
     // 4. Single batchUpdate regardless of how many rows.
@@ -232,6 +275,7 @@ export async function POST(request: NextRequest) {
       success: true,
       summary: {
         receivedRows: payments.length,
+        uniqueConsumers: aggregated.size,
         matched: matched.length,
         notFound: notFound.length,
         fullPayments: fullCount,

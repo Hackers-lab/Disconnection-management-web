@@ -335,7 +335,7 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
   const [paymentParseError, setPaymentParseError] = useState<string | null>(null)
   const [paymentSubmitting, setPaymentSubmitting] = useState(false)
   const [paymentResult, setPaymentResult] = useState<{
-    receivedRows: number; matched: number; notFound: number;
+    receivedRows: number; uniqueConsumers: number; matched: number; notFound: number;
     fullPayments: number; partialPayments: number; notFoundIds: string[];
   } | null>(null)
 
@@ -1546,9 +1546,9 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
                   <CheckCircle2 className="h-4 w-4" />
                   <AlertDescription>
                     <div className="space-y-1">
-                      <div><strong>{paymentResult.matched}</strong> of <strong>{paymentResult.receivedRows}</strong> consumers updated.</div>
+                      <div><strong>{paymentResult.matched}</strong> of <strong>{paymentResult.uniqueConsumers}</strong> consumers updated.</div>
                       <div className="text-xs">
-                        Full: {paymentResult.fullPayments} &middot; Partial: {paymentResult.partialPayments} &middot; Not found: {paymentResult.notFound}
+                        {paymentResult.receivedRows} rows &rarr; {paymentResult.uniqueConsumers} consumers (duplicates summed) &middot; Full: {paymentResult.fullPayments} &middot; Partial: {paymentResult.partialPayments} &middot; Not found: {paymentResult.notFound}
                       </div>
                       {paymentResult.notFoundIds.length > 0 && (
                         <details className="text-xs mt-2">
