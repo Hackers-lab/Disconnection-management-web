@@ -308,7 +308,7 @@ export default function DashboardClient({ role, agencies }: DashboardClientProps
       // Sheet 1: all rows
       const allRows = consumers.map((c, i) => ({
         "#": i + 1,
-        "Consumer ID": c.consumerId,
+        "Consumer ID": /^\d+$/.test(c.consumerId) ? Number(c.consumerId) : c.consumerId,
         "Name": c.name,
         "Address": c.address,
         "Mobile": c.mobileNumber,
@@ -317,6 +317,7 @@ export default function DashboardClient({ role, agencies }: DashboardClientProps
         "Status": c.disconStatus,
         "Discon Date": c.disconDate || "-",
         "OSD (₹)": Number(c.d2NetOS || 0),
+        "Paid Amount (₹)": c.paidAmount && c.paidAmount.trim() !== "" ? Number(c.paidAmount) : "",
         "Meter Reading": c.reading || "-",
         "Remarks": c.notes || "-",
       }));
@@ -329,6 +330,7 @@ export default function DashboardClient({ role, agencies }: DashboardClientProps
           "Status": status,
           "Count": rows.length,
           "Total OSD (₹)": rows.reduce((s, c) => s + Number(c.d2NetOS || 0), 0),
+          "Total Paid Amount (₹)": rows.reduce((s, c) => s + (c.paidAmount && c.paidAmount.trim() !== "" ? Number(c.paidAmount) : 0), 0),
         }));
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summaryRows), "Status Summary");
 

@@ -170,12 +170,16 @@ export function DashboardStats({ consumers, loading = false, onStatusSelect }: D
         agencyReport[agency].notAttendedAmount += outstanding
         break
       case "agency paid":
-      case "paid":
+      case "paid": {
+        const actualPaid = consumer.paidAmount && consumer.paidAmount.trim() !== ""
+          ? Number.parseFloat(consumer.paidAmount)
+          : outstanding
         stats.paid++
-        stats.paidAmount += outstanding
+        stats.paidAmount += actualPaid
         agencyReport[agency].paid++
-        agencyReport[agency].paidAmount += outstanding
+        agencyReport[agency].paidAmount += actualPaid
         break
+      }
       case "disconnected":
         stats.disconnected++
         stats.disconnectedAmount += outstanding
