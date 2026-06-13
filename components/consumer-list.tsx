@@ -61,7 +61,7 @@ import {
 import { DashboardStats } from "./dashboard-stats"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import type { ConsumerData } from "@/lib/google-sheets"
-import { getFromCache, saveToCache, clearAllCache } from "@/lib/indexed-db"
+import { getFromCache, saveToCache, clearAllCache, getCacheAgeMs } from "@/lib/indexed-db"
 import { useToast } from "@/components/ui/use-toast"
 
 // Dynamically import heavy components to reduce initial bundle size
@@ -297,7 +297,7 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
 
         setSyncStatus('checking');
 
-        const countRes = await fetch(`/api/system/row-count?type=consumer`);
+        const countRes = await fetch(`/api/system/row-count?type=consumer`, { cache: 'no-store' });
         if (!countRes.ok) throw new Error(`Row count fetch failed: ${countRes.status}`);
         
         const countData = await countRes.json().catch(() => ({ count: 0, version: null }));
@@ -311,17 +311,22 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
         
         const isCacheEmpty = !cachedData || cachedData.length === 0;
         const isMismatch = serverCount !== localCount || serverVersion !== localVersion;
+        const cacheAgeMs = await getCacheAgeMs("consumers_data_cache");
+        const isCacheStale = cacheAgeMs !== null && cacheAgeMs > 24 * 60 * 60 * 1000; // 24 hours
 
-        if (isCacheEmpty || isMismatch) {
+        if (isCacheEmpty || isMismatch || isCacheStale) {
           if (isMismatch) {
              console.log("[Data Sync] Count or Version mismatch. Triggering full download.");
+             setSyncStatus('found');
+          } else if (isCacheStale) {
+             console.log(`[Data Sync] Cache is stale (${Math.round((cacheAgeMs ?? 0) / 3600000)}h old). Triggering full download.`);
              setSyncStatus('found');
           } else {
              console.log("[Data Sync] Cache is empty. Triggering full download.");
           }
           setSyncStatus('syncing');
           try {
-            const baseResponse = await fetch(`/api/consumers/base?v=${serverCount}`);
+            const baseResponse = await fetch(`/api/consumers/base?v=${serverCount}${serverVersion ? `&h=${serverVersion}` : ''}`);
             if (!baseResponse.ok) throw new Error("Base fetch failed");
             
             const cacheControl = baseResponse.headers.get('Cache-Control');
@@ -1192,6 +1197,36 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
               </div>
             </SheetContent>
           </Sheet>
+
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={handleManualRefresh}
+            disabled={syncStatus === 'checking' || syncStatus === 'syncing'}
+            className={`h-9 w-9 rounded-full shrink-0 transition-colors ${
+              syncStatus === 'updated' ? 'border-green-500 text-green-600 bg-green-50' :
+              syncStatus === 'checking' || syncStatus === 'syncing' ? 'border-blue-400 text-blue-500' :
+              syncStatus === 'found' ? 'border-orange-400 text-orange-500' : ''
+            }`}
+            title={
+              syncStatus === 'checking' ? 'Checking for updates...' :
+              syncStatus === 'found' ? 'Update found — downloading...' :
+              syncStatus === 'syncing' ? 'Downloading...' :
+              syncStatus === 'updated' ? 'Up to date' :
+              'Refresh data'
+            }
+          >
+            {syncStatus === 'checking'
+              ? <Loader2 className="h-4 w-4 animate-spin" />
+              : syncStatus === 'found'
+              ? <DownloadCloud className="h-4 w-4" />
+              : syncStatus === 'syncing'
+              ? <RefreshCw className="h-4 w-4 animate-spin" />
+              : syncStatus === 'updated'
+              ? <Check className="h-4 w-4" />
+              : <RefreshCw className="h-4 w-4" />
+            }
+          </Button>
 
           <div className="flex items-center border rounded-md bg-white ml-2 shrink-0">
             <Button
