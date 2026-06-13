@@ -1254,11 +1254,11 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
                 onClick={handleManualRefresh}
                 disabled={syncStatus === 'checking' || syncStatus === 'syncing'}
                 className={`flex items-center gap-1 rounded-full px-2 py-0.5 border transition-colors disabled:cursor-not-allowed ${
-                  syncStatus === 'checking' ? 'border-yellow-400 text-yellow-600 animate-pulse' :
-                  syncStatus === 'found'    ? 'border-orange-400 text-orange-500 animate-pulse' :
-                  syncStatus === 'syncing'  ? 'border-blue-400 text-blue-500' :
-                  syncStatus === 'updated'  ? 'border-green-500 text-green-600 bg-green-50' :
-                  'border-gray-200 text-gray-400 hover:border-gray-400 hover:text-gray-600'
+                  syncStatus === 'checking' ? 'border-yellow-400 bg-yellow-50 text-yellow-600 animate-pulse' :
+                  syncStatus === 'found'    ? 'border-orange-400 bg-orange-50 text-orange-500 animate-pulse' :
+                  syncStatus === 'syncing'  ? 'border-blue-400 bg-blue-50 text-blue-500' :
+                  syncStatus === 'updated'  ? 'border-green-500 bg-green-50 text-green-600' :
+                  'border-blue-300 bg-blue-50 text-blue-500 hover:border-blue-500 hover:bg-blue-100 hover:text-blue-700 active:scale-95 cursor-pointer'
                 }`}
                 title={
                   syncStatus === 'checking' ? 'Checking for updates...' :
@@ -1276,7 +1276,7 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
                   ? <><RefreshCw className="h-3 w-3 animate-spin" /><span className="text-[10px] font-medium">Downloading...</span></>
                   : syncStatus === 'updated'
                   ? <><Check className="h-3 w-3" /><span className="text-[10px] font-medium">Updated</span></>
-                  : <RefreshCw className="h-3 w-3" />
+                  : <><RefreshCw className="h-3 w-3" /><span className="text-[10px] font-medium">Refresh</span></>
                 }
               </button>
            </div>
