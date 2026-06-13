@@ -313,8 +313,15 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
         const isMismatch = serverCount !== localCount || serverVersion !== localVersion;
         const cacheAgeMs = await getCacheAgeMs("consumers_data_cache");
         const isCacheStale = cacheAgeMs !== null && cacheAgeMs > 24 * 60 * 60 * 1000; // 24 hours
+        // Detect split state: IndexedDB and localStorage got out of sync (e.g. server returned stale
+        // base data during a previous sync so IndexedDB count != the count we committed to localStorage).
+        const isCacheSplit = cachedData !== null && cachedData.length !== localCount;
 
-        if (isCacheEmpty || isMismatch || isCacheStale) {
+        if (isCacheEmpty || isMismatch || isCacheStale || isCacheSplit) {
+          if (isCacheSplit && !isMismatch) {
+            console.log(`[Data Sync] ⚠️ Split state: IndexedDB has ${cachedData?.length} records but localStorage says ${localCount}. Forcing re-download.`);
+            setSyncStatus('found');
+          }
           if (isMismatch) {
              console.log("[Data Sync] Count or Version mismatch. Triggering full download.");
              setSyncStatus('found');
@@ -337,19 +344,28 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
             await saveToCache(CACHE_KEY, baseData);
             await processData(baseData, cachedAgencies, true);
 
-            // Only "commit" the new count/version if the data was complete
-            if (cacheControl !== 'no-store') {
+            // Only "commit" the new count/version if the data was complete.
+            // Use baseData.length (actual records received) not serverCount (from a separate API call)
+            // so IndexedDB and localStorage always reflect the same thing even if the server's
+            // Data Cache returned slightly stale data during the base fetch.
+            const isCountConsistent = baseData.length === serverCount;
+            if (cacheControl !== 'no-store' && isCountConsistent) {
               console.log('[Data Sync] ✅ Integrity check passed. Updating local count and version.');
               await saveToCache(BASE_DATE_KEY, new Date().toISOString().split("T")[0]);
-              localStorage.setItem(ROW_COUNT_KEY, serverCount.toString());
+              localStorage.setItem(ROW_COUNT_KEY, baseData.length.toString());
               if (serverVersion) {
                 localStorage.setItem(CONSUMER_VERSION_KEY, serverVersion);
               }
               setSyncStatus('updated');
               finalStatus = 'updated';
+            } else if (!isCountConsistent) {
+              // Base API returned stale count (server Data Cache race). Save the actual count
+              // so IndexedDB and localStorage stay in sync, but don't commit version —
+              // next open will see count mismatch vs server and re-download.
+              console.log(`[Data Sync] ⚠️ Count mismatch: base returned ${baseData.length} records but row-count said ${serverCount}. Will re-check on next sync.`);
+              localStorage.setItem(ROW_COUNT_KEY, baseData.length.toString());
             } else {
-              console.log('[Data Sync] ⚠️ Integrity check failed. Local count/version preserved to force re-check on next sync.');
-              // Do not update status to 'updated', let it time out from 'syncing' to 'idle'
+              console.log('[Data Sync] ⚠️ Integrity check failed (no-store). Local count/version preserved to force re-check on next sync.');
             }
           } catch (e) {
             console.error("Base fetch error:", e);
