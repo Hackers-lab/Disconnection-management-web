@@ -1198,36 +1198,6 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
             </SheetContent>
           </Sheet>
 
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={handleManualRefresh}
-            disabled={syncStatus === 'checking' || syncStatus === 'syncing'}
-            className={`h-9 w-9 rounded-full shrink-0 transition-colors ${
-              syncStatus === 'updated' ? 'border-green-500 text-green-600 bg-green-50' :
-              syncStatus === 'checking' || syncStatus === 'syncing' ? 'border-blue-400 text-blue-500' :
-              syncStatus === 'found' ? 'border-orange-400 text-orange-500' : ''
-            }`}
-            title={
-              syncStatus === 'checking' ? 'Checking for updates...' :
-              syncStatus === 'found' ? 'Update found — downloading...' :
-              syncStatus === 'syncing' ? 'Downloading...' :
-              syncStatus === 'updated' ? 'Up to date' :
-              'Refresh data'
-            }
-          >
-            {syncStatus === 'checking'
-              ? <Loader2 className="h-4 w-4 animate-spin" />
-              : syncStatus === 'found'
-              ? <DownloadCloud className="h-4 w-4" />
-              : syncStatus === 'syncing'
-              ? <RefreshCw className="h-4 w-4 animate-spin" />
-              : syncStatus === 'updated'
-              ? <Check className="h-4 w-4" />
-              : <RefreshCw className="h-4 w-4" />
-            }
-          </Button>
-
           <div className="flex items-center border rounded-md bg-white ml-2 shrink-0">
             <Button
               variant="ghost"
@@ -1263,33 +1233,36 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
         <div className="flex justify-between items-center mt-2 text-xs text-gray-500">
            <div className="flex items-center gap-2">
               <span>{sortedConsumers.length} consumers</span>
-              
-              {/* Live Status Indicator */}
-              {syncStatus === 'checking' ? (
-                <div className="flex items-center gap-1 text-yellow-600 font-medium animate-pulse">
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                  <span>Checking Updates...</span>
-                </div>
-              ) : syncStatus === 'found' ? (
-                <div className="flex items-center gap-1 text-orange-600 font-medium animate-pulse">
-                  <DownloadCloud className="h-3 w-3" />
-                  <span>Update Found</span>
-                </div>
-              ) : syncStatus === 'syncing' ? (
-                <div className="flex items-center gap-1 text-red-600 animate-pulse font-medium">
-                  <RefreshCw className="h-3 w-3 animate-spin" />
-                  <span>Downloading...</span>
-                </div>
-              ) : syncStatus === 'updated' ? (
-                <div className="flex items-center gap-1 text-green-600 font-medium animate-in fade-in duration-500">
-                  <Check className="h-3 w-3" />
-                  <span>Updated</span>
-                </div>
-              ) : (
-                <div className="text-green-600/70" title="Data is up to date">
-                  <Check className="h-4 w-4" />
-                </div>
-              )}
+
+              <button
+                onClick={handleManualRefresh}
+                disabled={syncStatus === 'checking' || syncStatus === 'syncing'}
+                className={`flex items-center gap-1 rounded-full px-2 py-0.5 border transition-colors disabled:cursor-not-allowed ${
+                  syncStatus === 'checking' ? 'border-yellow-400 text-yellow-600 animate-pulse' :
+                  syncStatus === 'found'    ? 'border-orange-400 text-orange-500 animate-pulse' :
+                  syncStatus === 'syncing'  ? 'border-blue-400 text-blue-500' :
+                  syncStatus === 'updated'  ? 'border-green-500 text-green-600 bg-green-50' :
+                  'border-gray-200 text-gray-400 hover:border-gray-400 hover:text-gray-600'
+                }`}
+                title={
+                  syncStatus === 'checking' ? 'Checking for updates...' :
+                  syncStatus === 'found'    ? 'Update found — downloading...' :
+                  syncStatus === 'syncing'  ? 'Downloading...' :
+                  syncStatus === 'updated'  ? 'Up to date' :
+                  'Tap to refresh'
+                }
+              >
+                {syncStatus === 'checking'
+                  ? <><Loader2 className="h-3 w-3 animate-spin" /><span className="text-[10px] font-medium">Checking...</span></>
+                  : syncStatus === 'found'
+                  ? <><DownloadCloud className="h-3 w-3" /><span className="text-[10px] font-medium">Update Found</span></>
+                  : syncStatus === 'syncing'
+                  ? <><RefreshCw className="h-3 w-3 animate-spin" /><span className="text-[10px] font-medium">Downloading...</span></>
+                  : syncStatus === 'updated'
+                  ? <><Check className="h-3 w-3" /><span className="text-[10px] font-medium">Updated</span></>
+                  : <RefreshCw className="h-3 w-3" />
+                }
+              </button>
            </div>
            {(Object.values(filters).some((f) => f !== "All Agencies" && f !== "All Status" && f !== "All Classes" && f !== "All MRUs" && f !== "") ||
               minOsd > 0 ||
