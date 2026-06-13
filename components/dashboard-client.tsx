@@ -13,6 +13,7 @@ import { AnalysisDashboard } from "@/components/analysis-dashboard"
 import { ReconnectionList } from "@/components/reconnection-list"
 import { MeterList } from "@/components/meter-list"
 import { NscList } from "@/components/nsc-list"
+import { AgencyUpdatesReport } from "@/components/agency-updates-report"
 import type { ConsumerData } from "@/lib/google-sheets"
 import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
@@ -1021,6 +1022,10 @@ export default function DashboardClient({ role, agencies }: DashboardClientProps
             username={agencies[0] || role}
             agencies={agencies}
           />
+        )}
+
+        {activeView === "agency-updates" && (role === "admin" || role === "executive" || role === "viewer") && (
+          <AgencyUpdatesReport userRole={role} />
         )}
 
         {activeView === "analysis" && role === "admin" && (

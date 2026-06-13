@@ -4,7 +4,7 @@ import { useEffect, useState } from "react"
 import type { ConsumerData } from "@/lib/google-sheets"
 import type { DeemedVisitData } from "@/lib/dd-service"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { 
+import {
   Zap,
   RotateCcw,
   ClipboardCheck,
@@ -14,7 +14,6 @@ import {
   ArrowRight,
   RadioTower,
   Gauge,
-  BarChart3,
   X,
   Phone
 } from "lucide-react"
@@ -112,17 +111,6 @@ export function DashboardMenu({ onSelect, userRole, userAgencies = [] }: Dashboa
       borderColor: "hover:border-gray-300",
       allowed: ["admin"],
       status: "active"
-    },
-    {
-      id: "analysis",
-      title: "Analysis",
-      description: "Reports, trends and performance insights",
-      icon: BarChart3,
-      color: "text-indigo-600",
-      bgColor: "bg-indigo-50",
-      borderColor: "hover:border-indigo-200",
-      allowed: ["admin"],
-      status: "live"
     }
   ]
 

@@ -27,6 +27,8 @@ import {
   RotateCcw,
   Gauge,
   ClipboardCheck,
+  CalendarDays,
+  BarChart3,
 } from "lucide-react"
 import { useState, useEffect } from "react"
 import {
@@ -1145,6 +1147,16 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
                       <List className="h-4 w-4" />
                     </Button>
                   )}
+                  {canSeeAgencyUpdates && (
+                    <Button variant="ghost" size="sm" onClick={() => setActiveView("agency-updates")} title="Agency Updates Report">
+                      <CalendarDays className="h-4 w-4" />
+                    </Button>
+                  )}
+                  {userRole === "admin" && (
+                    <Button variant="ghost" size="sm" onClick={() => setActiveView("analysis")} title="Analysis Dashboard">
+                      <BarChart3 className="h-4 w-4" />
+                    </Button>
+                  )}
                   {userRole === "admin" && (
                     <Button variant="ghost" size="sm" onClick={() => window.open("/api/sheet-redirect", "_blank")} title="Edit DC List">
                       <FileSpreadsheet className="h-4 w-4" />
@@ -1248,7 +1260,23 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
                       <DropdownMenuSeparator />
                       <DropdownMenuItem onClick={handleUpload}>
                         <List className="mr-2 h-4 w-4" />
-                        <span>Agency Updates</span>
+                        <span>Agency Last Updates</span>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setActiveView("agency-updates")}>
+                        <CalendarDays className="mr-2 h-4 w-4 text-indigo-500" />
+                        <span className="font-medium">Agency Updates Report</span>
+                      </DropdownMenuItem>
+                    </>
+                  )}
+
+                  {isDisconnectionView && userRole === "admin" && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuLabel>Analysis</DropdownMenuLabel>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onClick={() => setActiveView("analysis")}>
+                        <BarChart3 className="mr-2 h-4 w-4 text-blue-500" />
+                        <span>Analysis Dashboard</span>
                       </DropdownMenuItem>
                     </>
                   )}

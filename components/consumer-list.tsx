@@ -1243,6 +1243,7 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
               <List className="h-4 w-4" />
             </Button>
           </div>
+
         </div>
 
         {/* Summary Footer in Sticky Header */}

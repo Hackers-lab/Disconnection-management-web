@@ -18,7 +18,7 @@ import type { ConsumerData } from "@/lib/google-sheets"
 import { Badge } from "@/components/ui/badge"
 
 // Define the available views
-export type ViewType = "disconnection" | "reconnection" | "deemed" | "nsc" | "meter" | "admin" | "home" | "analysis"
+export type ViewType = "disconnection" | "reconnection" | "deemed" | "nsc" | "meter" | "admin" | "home" | "analysis" | "agency-updates"
 
 interface AppSidebarProps {
   activeView: ViewType
@@ -98,12 +98,6 @@ export function AppSidebar({ activeView, setActiveView, userRole, isMobile = fal
       label: "NSC Inspection",
       icon: ClipboardCheck,
       allowedRoles: ["admin", "executive", "agency"]
-    },
-    {
-      id: "analysis",
-      label: "Analysis",
-      icon: BarChart3,
-      allowedRoles: ["admin"]
     },
     // Only show Admin Panel button here if you want it in the menu
     {
