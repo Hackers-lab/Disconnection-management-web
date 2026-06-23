@@ -216,6 +216,8 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
     const [zoneAgencyFilter, setZoneAgencyFilter] = useState("All");
     const [zoneViewMode, setZoneViewMode] = useState<"flat" | "agency">("agency");
     const [mruSearch, setMruSearch] = useState("");
+    const [resyncing, setResyncing] = useState(false);
+    const [resyncResult, setResyncResult] = useState<{ scanned: number; reassigned: number; skippedProtected: number; unchanged: number; unmapped: number } | null>(null);
 
     // Auto-suggest the column mapping using a 3-tier match:
     //  1. exact header-name match (synonyms, normalized)
@@ -516,6 +518,30 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
       }
     } catch { /* silent */ }
     finally { setZoneMapSaving(false) }
+  }
+
+  // Re-apply the current zone map to existing consumers without a DC re-upload.
+  // Reassigns consumers whose mapped agency differs; skips protected statuses.
+  const resyncAgencies = async () => {
+    if (!confirm(
+      "Re-apply the current zone map to all existing consumers?\n\n" +
+      "Consumers whose mapped agency has changed will be reassigned. " +
+      "Consumers in a protected status (disconnected, paid, visited, etc.) are skipped. " +
+      "No DC list upload is needed."
+    )) return
+    setResyncing(true)
+    setResyncResult(null)
+    try {
+      const resp = await fetch("/api/zone-map/resync", { method: "POST" })
+      const data = await resp.json()
+      if (!resp.ok || !data.success) throw new Error(data?.error || "Re-sync failed")
+      setResyncResult(data.summary)
+      setMessage({ type: "success", text: `Re-sync complete: ${data.summary.reassigned} consumers reassigned.` })
+    } catch (err) {
+      setMessage({ type: "error", text: err instanceof Error ? err.message : "Re-sync failed" })
+    } finally {
+      setResyncing(false)
+    }
   }
 
   const parseZoneCsv = (file: File) => {
@@ -1974,18 +2000,41 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
                 Changes are tracked in <span className="font-mono text-xs">ZoneMapHistory</span>.
               </p>
             </div>
-            <Button size="sm" variant="outline" onClick={() => {
-              const wb = XLSX.utils.book_new()
-              XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
-                ["MRU", "Agency", "Address"],
-                ["AB01MR", "AGENCY NAME", "Area / locality description"],
-                ["AB02MR", "AGENCY NAME 2", "North zone near substation"],
-              ]), "ZoneMap")
-              XLSX.writeFile(wb, "ZoneMap_Template.xlsx")
-            }}>
-              Download Template
-            </Button>
+            <div className="flex gap-2">
+              <Button size="sm" variant="outline" disabled={resyncing || zoneMapRows.length === 0}
+                onClick={resyncAgencies} title="Apply the current zone map to existing consumers — no DC upload needed">
+                {resyncing
+                  ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" /> Re-syncing…</>
+                  : <>Re-sync agencies</>}
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => {
+                const wb = XLSX.utils.book_new()
+                XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
+                  ["MRU", "Agency", "Address"],
+                  ["AB01MR", "AGENCY NAME", "Area / locality description"],
+                  ["AB02MR", "AGENCY NAME 2", "North zone near substation"],
+                ]), "ZoneMap")
+                XLSX.writeFile(wb, "ZoneMap_Template.xlsx")
+              }}>
+                Download Template
+              </Button>
+            </div>
           </div>
+
+          {resyncResult && (
+            <Alert>
+              <CheckCircle2 className="h-4 w-4" />
+              <AlertDescription>
+                <div className="flex flex-wrap gap-3 text-xs">
+                  <span className="text-purple-700">✓ {resyncResult.reassigned} reassigned</span>
+                  <span className="text-orange-700">⚠ {resyncResult.skippedProtected} skipped (protected status)</span>
+                  <span className="text-gray-600">{resyncResult.unchanged} already correct</span>
+                  <span className="text-gray-400">{resyncResult.unmapped} unmapped MRU</span>
+                  <span className="text-gray-400">({resyncResult.scanned} scanned)</span>
+                </div>
+              </AlertDescription>
+            </Alert>
+          )}
 
           {/* Guide */}
           <button className="text-xs text-blue-600 underline" onClick={() => setShowZoneGuide(g => !g)}>
