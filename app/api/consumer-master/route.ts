@@ -3,16 +3,30 @@ import { verifySession } from "@/lib/session"
 import {
   fetchMasterData,
   uploadMasterData,
+  invalidateMasterCache,
   type ConsumerMasterRow,
 } from "@/lib/consumer-master-service"
 
 // All roles can read the consumer master
-export async function GET() {
+export async function GET(request: NextRequest) {
   const session = await verifySession()
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   try {
+    const { searchParams } = new URL(request.url)
+    const isRefresh = searchParams.get("refresh") === "true"
+
+    if (isRefresh) {
+      invalidateMasterCache()
+    }
+
     const data = await fetchMasterData()
-    return NextResponse.json(data)
+    return NextResponse.json(data, {
+      headers: {
+        'Cache-Control': isRefresh
+          ? 'no-store'
+          : 'public, s-maxage=2592000, stale-while-revalidate=86400',
+      }
+    })
   } catch (e: any) {
     console.error("Consumer master fetch error:", e)
     return NextResponse.json({ error: e.message || "Failed" }, { status: 500 })
@@ -31,7 +45,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "rows array required" }, { status: 400 })
     }
     const rows = body.rows as ConsumerMasterRow[]
-    const result = await uploadMasterData(rows)
+    const clearExisting = body.clearExisting !== false
+    const result = await uploadMasterData(rows, clearExisting)
     return NextResponse.json({ success: true, count: result.count })
   } catch (e: any) {
     console.error("Consumer master upload error:", e)

@@ -36,7 +36,7 @@ type ZoneRow = { zone: string; agency: string; address?: string; updatedOn?: str
 
 export async function GET() {
   const session = await verifySession()
-  if (!session || session.role !== "admin") {
+  if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
   try {

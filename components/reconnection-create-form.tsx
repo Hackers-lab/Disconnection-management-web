@@ -8,8 +8,9 @@ import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { ArrowLeft, Search, Upload, Loader2, MapPin, Phone, Monitor, Building2 } from "lucide-react"
-import { getFromCache } from "@/lib/indexed-db"
+import { getFromCache, saveToCache } from "@/lib/indexed-db"
 import type { ConsumerData } from "@/lib/google-sheets"
+import type { ConsumerMasterRow } from "@/components/consumer-master"
 
 interface Props {
   agencies: string[]
@@ -27,6 +28,7 @@ export function ReconnectionCreateForm({ agencies, onSave, onCancel }: Props) {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [agencyList, setAgencyList] = useState<string[]>(agencies)
   const fileRef = useRef<HTMLInputElement>(null)
+  const [lookupStatus, setLookupStatus] = useState("")
 
   // Load full agency list — session.agencies is empty for admin/executive
   useEffect(() => {
@@ -63,7 +65,9 @@ export function ReconnectionCreateForm({ agencies, onSave, onCancel }: Props) {
     setLooking(true)
     setFound(null)
     setNotFound(false)
+    setLookupStatus("Searching active disconnection list...")
     try {
+      // 1. Try active disconnection list cache first
       const cache = await getFromCache<ConsumerData[]>("consumers_data_cache")
       const match = cache?.find(c => c.consumerId === id) || null
       if (match) {
@@ -71,10 +75,90 @@ export function ReconnectionCreateForm({ agencies, onSave, onCancel }: Props) {
         setMobile(match.mobileNumber || "")
         setAgency(match.agency || "")
       } else {
-        setNotFound(true)
+        // 2. Fall back to consumer master cache
+        setLookupStatus("Searching master database cache...")
+        let masterCache = await getFromCache<ConsumerMasterRow[]>("consumer_master_cache")
+        let masterMatch = masterCache?.find(c => c.consumerId === id) || null
+
+        // 3. If not found in local cache, perform a live force-refresh from the server
+        if (!masterMatch) {
+          setLookupStatus("Fetching master data from Google Sheet...")
+          try {
+            const res = await fetch("/api/consumer-master?refresh=true")
+            if (res.ok) {
+              const fresh: ConsumerMasterRow[] = await res.json()
+              setLookupStatus("We will save that for you...")
+              // Subtle delay so the user can read the friendly message
+              await new Promise(resolve => setTimeout(resolve, 800))
+              await saveToCache("consumer_master_cache", fresh)
+              masterCache = fresh
+              setLookupStatus("Searching updated master database...")
+              masterMatch = fresh.find(c => c.consumerId === id) || null
+            }
+          } catch (e) {
+            console.error("Failed to fetch fresh master data:", e)
+          }
+        }
+
+        if (masterMatch) {
+          // 4. Look up mapped agency from zone map cache
+          setLookupStatus("Fetching agency mapping...")
+          let mappedAgency = ""
+          try {
+            let zoneMap = await getFromCache<{ zone: string; agency: string }[]>("zone_map_cache")
+            if (!zoneMap || zoneMap.length === 0) {
+              const res = await fetch("/api/zone-map")
+              if (res.ok) {
+                const fresh = await res.json()
+                await saveToCache("zone_map_cache", fresh)
+                zoneMap = fresh
+              }
+            }
+            if (zoneMap && masterMatch.zone) {
+              setLookupStatus("Mapping agency from zone...")
+              const normalizedZone = masterMatch.zone.trim().toUpperCase()
+              const zoneMatch = zoneMap.find(z => z.zone.trim().toUpperCase() === normalizedZone)
+              if (zoneMatch) {
+                mappedAgency = zoneMatch.agency
+              }
+              // Subtle delay so the user can see the agency mapping complete
+              await new Promise(resolve => setTimeout(resolve, 500))
+            }
+          } catch (e) {
+            console.error("Failed to map agency from zone:", e)
+          }
+
+          const mapped: ConsumerData = {
+            offCode: "",
+            mru: "",
+            consumerId: masterMatch.consumerId,
+            name: masterMatch.name,
+            address: masterMatch.address,
+            baseClass: masterMatch.baseClass || "",
+            class: "",
+            natureOfConn: "",
+            govNonGov: "",
+            device: masterMatch.meterNo || "",
+            osDuedateRange: "",
+            d2NetOS: "",
+            disconStatus: "", // Empty string represents that this is from master list (not in active DC list)
+            disconDate: "",
+            gisPole: "",
+            mobileNumber: masterMatch.mobile || "",
+            latitude: masterMatch.latitude || "",
+            longitude: masterMatch.longitude || "",
+            agency: mappedAgency,
+          }
+          setFound(mapped)
+          setMobile(mapped.mobileNumber || "")
+          setAgency(mappedAgency)
+        } else {
+          setNotFound(true)
+        }
       }
     } finally {
       setLooking(false)
+      setLookupStatus("")
     }
   }
 
@@ -169,6 +253,17 @@ export function ReconnectionCreateForm({ agencies, onSave, onCancel }: Props) {
               {looking ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
             </Button>
           </div>
+          {looking && lookupStatus && (
+            <div className="flex items-center gap-3 p-3 rounded-lg border border-blue-100 bg-gradient-to-r from-blue-50 to-indigo-50 text-blue-800 shadow-sm transition-all duration-300 mt-2">
+              <div className="flex items-center justify-center h-8 w-8 rounded-full bg-blue-100/80 text-blue-600 shrink-0">
+                <Loader2 className="h-4 w-4 animate-spin" />
+              </div>
+              <div className="flex-1 space-y-0.5 text-left">
+                <p className="text-xs font-semibold uppercase tracking-wider text-blue-500">System Lookup</p>
+                <p className="text-sm text-blue-700 font-medium leading-none animate-pulse">{lookupStatus}</p>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -176,7 +271,9 @@ export function ReconnectionCreateForm({ agencies, onSave, onCancel }: Props) {
       {found && (
         <Card className="border-green-200 bg-green-50">
           <CardHeader className="pb-2 pt-4 px-4">
-            <CardTitle className="text-base text-green-800">Consumer found in DC list</CardTitle>
+            <CardTitle className="text-base text-green-800">
+              {found.disconStatus ? "Consumer found in DC list" : "Consumer found in master database"}
+            </CardTitle>
           </CardHeader>
           <CardContent className="px-4 pb-4 space-y-2">
             <p className="font-semibold text-gray-900">{found.name}</p>

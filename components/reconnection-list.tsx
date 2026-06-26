@@ -186,7 +186,7 @@ export function ReconnectionList({ userRole, userAgencies, username, agencies }:
   const overdue    = records.filter(r => r.status === "pending" && hoursAgo(r.createdAt) > 30).length
 
   return (
-    <div className="space-y-4">
+    <div className={`space-y-4 ${isAdmin ? "pb-24" : ""}`}>
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {[

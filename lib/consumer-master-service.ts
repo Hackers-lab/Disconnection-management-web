@@ -8,7 +8,7 @@ const sheets = google.sheets({ version: "v4", auth })
 
 export const MASTER_TAB = "Consumer_Master"
 const MASTER_TAG        = "consumer-master"
-const MASTER_REVALIDATE = 3600 // 1 hour — changes rarely
+const MASTER_REVALIDATE = 30 * 24 * 60 * 60 // 30 days — changes rarely
 
 export const MASTER_HEADERS = [
   "Consumer ID", "Name", "C/O", "Address", "Class",
@@ -81,37 +81,59 @@ export const fetchMasterData = unstable_cache(
 export function invalidateMasterCache() { revalidateTag(MASTER_TAG) }
 
 // ── Upload (replaces entire sheet data) ──────────────────────────────────────
-export async function uploadMasterData(rows: ConsumerMasterRow[]): Promise<{ count: number }> {
+export async function uploadMasterData(rows: ConsumerMasterRow[], clearExisting: boolean = true): Promise<{ count: number }> {
   const id = getSpreadsheetId()
   await ensureTab(id)
 
-  // Clear existing data (keep header row)
-  await sheets.spreadsheets.values.clear({
-    spreadsheetId: id,
-    range: `${MASTER_TAB}!A2:J`,
-  })
+  if (clearExisting) {
+    // Clear existing data (keep header row)
+    await sheets.spreadsheets.values.clear({
+      spreadsheetId: id,
+      range: `${MASTER_TAB}!A2:J`,
+    })
+  }
 
   if (rows.length === 0) {
     invalidateMasterCache()
     return { count: 0 }
   }
 
-  // Write in batches of 1000 to avoid payload limits
-  const BATCH = 1000
+  // Write in batches of 5000 to stay within API limits while minimising
+  // the number of round-trips (and therefore rate-limit risk).
+  // A 1-second pause between batches avoids the 60-writes/min/user quota.
+  const BATCH = 5000
+  let totalWritten = 0
   for (let i = 0; i < rows.length; i += BATCH) {
     const batch = rows.slice(i, i + BATCH)
     const values = batch.map(r => [
       r.consumerId, r.name, r.careOf, r.address, r.baseClass,
       r.meterNo, r.zone, r.mobile, r.latitude, r.longitude,
     ])
-    await sheets.spreadsheets.values.append({
-      spreadsheetId: id,
-      range: `${MASTER_TAB}!A:J`,
-      valueInputOption: "RAW",
-      requestBody: { values },
-    })
+
+    try {
+      const result = await sheets.spreadsheets.values.append({
+        spreadsheetId: id,
+        range: `${MASTER_TAB}!A:J`,
+        valueInputOption: "RAW",
+        requestBody: { values },
+      })
+      // Google returns the number of rows it actually wrote
+      const updatedRows = result.data.updates?.updatedRows ?? batch.length
+      totalWritten += updatedRows
+    } catch (err: any) {
+      console.error(`Consumer master batch ${i}-${i + batch.length} failed:`, err?.message || err)
+      // If we've written some batches already, report what we got. The caller
+      // will see count < rows.length and can surface the partial failure.
+      break
+    }
+
+    // Pause between batches to stay under Google Sheets API rate limits
+    if (i + BATCH < rows.length) {
+      await new Promise(resolve => setTimeout(resolve, 1000))
+    }
   }
 
   invalidateMasterCache()
-  return { count: rows.length }
+  return { count: totalWritten }
 }
+

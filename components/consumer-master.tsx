@@ -26,7 +26,7 @@ export interface ConsumerMasterRow {
 }
 
 const CACHE_KEY  = "consumer_master_cache"
-const CACHE_TTL  = 4 * 60 * 60 * 1000 // 4 hours
+const CACHE_TTL  = 30 * 24 * 60 * 60 * 1000 // 30 days
 
 const FIELD_LABELS: Record<keyof ConsumerMasterRow, string> = {
   consumerId: "Consumer ID",
@@ -151,6 +151,7 @@ export function ConsumerMaster({ role }: ConsumerMasterProps) {
   const [fileName, setFileName]           = useState("")
   const [mapping, setMapping]             = useState<ColumnMapping>({})
   const [uploading, setUploading]         = useState(false)
+  const [uploadProgress, setUploadProgress] = useState("") // e.g. "5000 / 15000"
   const [uploadResult, setUploadResult]   = useState<{ count: number } | null>(null)
 
   // Stats state
@@ -170,18 +171,21 @@ export function ConsumerMaster({ role }: ConsumerMasterProps) {
     loadData()
   }, [])
 
-  async function loadStats() {
+  async function loadStats(force = false) {
     setLoadingStats(true)
     try {
       const age = await getCacheAgeMs(CACHE_KEY)
       setCacheAge(typeof age === "number" ? age : null)
-      const cached = await getFromCache<ConsumerMasterRow[]>(CACHE_KEY)
-      if (cached && Array.isArray(cached)) {
-        setCount(cached.length)
-        setLoadingStats(false)
-        return
+      if (!force) {
+        const cached = await getFromCache<ConsumerMasterRow[]>(CACHE_KEY)
+        if (cached && Array.isArray(cached)) {
+          setCount(cached.length)
+          setLoadingStats(false)
+          return
+        }
       }
-      const res = await fetch("/api/consumer-master")
+      const url = force ? "/api/consumer-master?refresh=true" : "/api/consumer-master"
+      const res = await fetch(url)
       if (!res.ok) throw new Error()
       const data: ConsumerMasterRow[] = await res.json()
       await saveToCache(CACHE_KEY, data)
@@ -191,16 +195,19 @@ export function ConsumerMaster({ role }: ConsumerMasterProps) {
     }
   }
 
-  async function loadData() {
+  async function loadData(force = false) {
     try {
-      const cached = await getFromCache<ConsumerMasterRow[]>(CACHE_KEY)
-      const age    = await getCacheAgeMs(CACHE_KEY)
-      if (cached && Array.isArray(cached) && typeof age === "number" && age < CACHE_TTL) {
-        setAllData(cached)
-        setDataLoaded(true)
-        return
+      if (!force) {
+        const cached = await getFromCache<ConsumerMasterRow[]>(CACHE_KEY)
+        const age    = await getCacheAgeMs(CACHE_KEY)
+        if (cached && Array.isArray(cached) && typeof age === "number" && age < CACHE_TTL) {
+          setAllData(cached)
+          setDataLoaded(true)
+          return
+        }
       }
-      const res = await fetch("/api/consumer-master")
+      const url = force ? "/api/consumer-master?refresh=true" : "/api/consumer-master"
+      const res = await fetch(url)
       if (!res.ok) return
       const data: ConsumerMasterRow[] = await res.json()
       await saveToCache(CACHE_KEY, data)
@@ -268,6 +275,7 @@ export function ConsumerMaster({ role }: ConsumerMasterProps) {
       return
     }
     setUploading(true)
+    setUploadProgress("")
     try {
       const rows: ConsumerMasterRow[] = csvRows.map(r => ({
         consumerId: String(r[mapping.consumerId!] ?? "").trim(),
@@ -282,22 +290,30 @@ export function ConsumerMaster({ role }: ConsumerMasterProps) {
         longitude:  String(r[mapping.longitude ?? -1] ?? "").trim(),
       })).filter(r => r.consumerId && r.name)
 
-      // Upload in chunks of 2000 to avoid request body limit
-      const CHUNK = 2000
-      let uploaded = 0
+      // Upload in chunks of 5000 to match server batch size and reduce
+      // round-trips. Each POST call writes its chunk to the sheet.
+      const CHUNK = 5000
+      let serverConfirmed = 0
       for (let i = 0; i < rows.length; i += CHUNK) {
         const chunk = rows.slice(i, i + CHUNK)
+        setUploadProgress(`${Math.min(i + chunk.length, rows.length).toLocaleString()} / ${rows.length.toLocaleString()}`)
         const res = await fetch("/api/consumer-master", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ rows: chunk }),
+          body: JSON.stringify({
+            rows: chunk,
+            clearExisting: i === 0,
+          }),
         })
         if (!res.ok) { const e = await res.json(); throw new Error(e.error || "Upload failed") }
-        uploaded += chunk.length
+        const result = await res.json()
+        // Use the server-confirmed count (actual rows written to sheet)
+        serverConfirmed += result.count ?? chunk.length
       }
-      setUploadResult({ count: uploaded })
-      setCount(uploaded)
+      setUploadResult({ count: serverConfirmed })
+      setCount(serverConfirmed)
       // Refresh IndexedDB cache
+      setUploadProgress("Refreshing cache…")
       const fresh = await fetch("/api/consumer-master").then(r => r.json())
       await saveToCache(CACHE_KEY, fresh)
       setAllData(fresh)
@@ -305,11 +321,20 @@ export function ConsumerMaster({ role }: ConsumerMasterProps) {
       setCsvHeaders([])
       setCsvRows([])
       setFileName("")
-      toast({ title: `Uploaded ${uploaded.toLocaleString()} consumers successfully` })
+      if (serverConfirmed < rows.length) {
+        toast({
+          title: `Partial upload: ${serverConfirmed.toLocaleString()} of ${rows.length.toLocaleString()} written`,
+          description: "Some batches may have failed due to rate limiting. Try uploading the remaining rows again.",
+          variant: "destructive",
+        })
+      } else {
+        toast({ title: `Uploaded ${serverConfirmed.toLocaleString()} consumers successfully` })
+      }
     } catch (e: any) {
       toast({ title: "Upload failed", description: e.message, variant: "destructive" })
     } finally {
       setUploading(false)
+      setUploadProgress("")
     }
   }
 
@@ -333,7 +358,7 @@ export function ConsumerMaster({ role }: ConsumerMasterProps) {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={() => { setDataLoaded(false); loadStats(); loadData() }}>
+          <Button variant="outline" size="sm" onClick={() => { setDataLoaded(false); loadStats(true); loadData(true) }}>
             Refresh Cache
           </Button>
         </div>
@@ -432,7 +457,9 @@ export function ConsumerMaster({ role }: ConsumerMasterProps) {
 
                 <div className="flex items-center gap-3">
                   <Button onClick={handleUpload} disabled={uploading}>
-                    {uploading ? "Uploading…" : `Upload ${csvRows.length.toLocaleString()} rows`}
+                    {uploading
+                      ? (uploadProgress ? `Uploading ${uploadProgress}…` : "Preparing…")
+                      : `Upload ${csvRows.length.toLocaleString()} rows`}
                   </Button>
                   {uploadResult && (
                     <Badge variant="default">{uploadResult.count.toLocaleString()} uploaded</Badge>
