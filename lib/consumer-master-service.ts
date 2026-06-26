@@ -113,7 +113,7 @@ export async function uploadMasterData(rows: ConsumerMasterRow[], clearExisting:
     try {
       const result = await sheets.spreadsheets.values.append({
         spreadsheetId: id,
-        range: `${MASTER_TAB}!A:J`,
+        range: `${MASTER_TAB}!A:A`,
         valueInputOption: "RAW",
         requestBody: { values },
       })

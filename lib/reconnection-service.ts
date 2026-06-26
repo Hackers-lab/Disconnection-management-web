@@ -120,7 +120,7 @@ export async function createReconnectionRequest(
   const now = nowTs()
   await sheets.spreadsheets.values.append({
     spreadsheetId: id,
-    range: `${TAB}!A:P`,
+    range: `${TAB}!A:A`,
     valueInputOption: "RAW",
     requestBody: {
       values: [[
