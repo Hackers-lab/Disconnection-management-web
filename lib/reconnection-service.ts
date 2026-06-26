@@ -169,11 +169,19 @@ export async function updateReconnectionStatus(update: {
 }
 
 // ─── Blocked consumer IDs (pending > 30 hours) ───────────────────────────────
-export async function getBlockedConsumerIds(): Promise<string[]> {
+// Pass `agencies` to scope results to a specific agency (or set of agencies).
+// When omitted, ALL overdue consumer IDs across every agency are returned
+// (used by admin/executive warning banners).
+export async function getBlockedConsumerIds(agencies?: string[]): Promise<string[]> {
   const all = await fetchReconnectionData()
   const cutoff = Date.now() - 30 * 60 * 60 * 1000
+  const agenciesUpper = agencies?.map(a => a.trim().toUpperCase())
   return all
-    .filter(r => r.status === "pending" && parseTs(r.createdAt) < cutoff)
+    .filter(r =>
+      r.status === "pending" &&
+      parseTs(r.createdAt) < cutoff &&
+      (agenciesUpper === undefined || agenciesUpper.includes(r.agency.trim().toUpperCase()))
+    )
     .map(r => r.consumerId)
 }
 

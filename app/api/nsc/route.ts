@@ -38,6 +38,7 @@ export async function POST(request: NextRequest) {
       phase:         body.phase,
       agency:        body.agency,
       createdBy:     `${session.role}:${session.username}`,
+      officeRefNo:   body.officeRefNo   || "",
     })
     return NextResponse.json({ success: true, receiveNo })
   } catch (e: any) {

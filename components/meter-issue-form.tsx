@@ -7,12 +7,13 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { ArrowLeft, Search, X as XIcon } from "lucide-react"
+import { ArrowLeft, Search, X as XIcon, Loader2 } from "lucide-react"
 import { getFromCache, saveToCache } from "@/lib/indexed-db"
 import type { ConsumerData } from "@/lib/google-sheets"
 import type { NSCApplication } from "@/lib/nsc-types"
 import type { MeterStock, IssuePurpose } from "@/lib/meter-types"
 import { METER_TYPES } from "@/lib/meter-types"
+import { ConsumerMasterLookup } from "@/components/consumer-master"
 
 const PURPOSE_OPTIONS: { value: IssuePurpose; label: string }[] = [
   { value: "faulty_replacement", label: "Faulty / Defective Replacement" },
@@ -43,6 +44,7 @@ export function MeterIssueForm({ availableStock, agencies, onSave, onCancel }: P
   const [consumerFoundInDC, setConsumerFoundInDC] = useState(false)
   const [remarks, setRemarks]           = useState("")
   const [looking, setLooking]           = useState(false)
+  const [lookupSource, setLookupSource] = useState<"dc" | "master">("dc")
   const [agencyList, setAgencyList]     = useState<string[]>(agencies)
   const [nscApps, setNscApps]           = useState<NSCApplication[]>([])
   const [nscSelected, setNscSelected]   = useState<NSCApplication | null>(null)
@@ -70,13 +72,15 @@ export function MeterIssueForm({ availableStock, agencies, onSave, onCancel }: P
     if (purpose !== "nsc") return
     async function loadNsc() {
       const cached = await getFromCache<NSCApplication[]>("nsc_data_cache")
-      if (cached) setNscApps(cached.filter(a => a.status === "quotation_issued" && a.applicationNo))
+      const eligible = (a: NSCApplication) =>
+        (a.status === "quotation_issued" || a.status === "project_done" || a.status === "meter_returned") && !!a.applicationNo
+      if (cached) setNscApps(cached.filter(eligible))
       try {
         const res = await fetch("/api/nsc")
         if (res.ok) {
           const fresh: NSCApplication[] = await res.json()
           await saveToCache("nsc_data_cache", fresh)
-          setNscApps(fresh.filter(a => a.status === "quotation_issued" && a.applicationNo))
+          setNscApps(fresh.filter(eligible))
         }
       } catch { /* keep cached data */ }
     }
@@ -95,11 +99,16 @@ export function MeterIssueForm({ availableStock, agencies, onSave, onCancel }: P
       })
     : nscApps
 
+  const effectiveAddress = (app: NSCApplication) =>
+    app.verifyAddress && app.verifyAddress !== "ok" ? app.verifyAddress : app.address
+  const effectiveCareOf = (app: NSCApplication) =>
+    app.verifyCO && app.verifyCO !== "ok" ? app.verifyCO : app.careOf
+
   const selectNscApp = (app: NSCApplication) => {
     setNscSelected(app)
     setNscReceiveNo(app.receiveNo)
     setConsumerName(app.applicantName)
-    setConsumerAddress(app.address)
+    setConsumerAddress(effectiveAddress(app))
     setConsumerMobile(app.mobile)
     setConsumerDevice("")
     setAgency(app.agency || agency)
@@ -139,9 +148,23 @@ export function MeterIssueForm({ availableStock, agencies, onSave, onCancel }: P
     } finally { setLooking(false) }
   }
 
-  // Filter available meters by type + serial search
+  // Consumer Master selection handler
+  const handleMasterSelect = (row: { consumerId: string; name: string; address: string; mobile: string; meterNo: string }) => {
+    setConsumerId(row.consumerId)
+    setConsumerName(row.name)
+    setConsumerAddress(row.address)
+    setConsumerMobile(row.mobile)
+    setConsumerDevice(row.meterNo)
+    setConsumerFoundInDC(true)
+  }
+
+  // Phase derived from NSC selection (for phase-filtered meter display)
+  const nscPhase = nscSelected?.phase || ""
+
+  // Filter available meters by type + serial search + phase (for NSC)
   const filteredStock = availableStock.filter(m => {
     if (m.condition !== "available") return false
+    if (purpose === "nsc" && nscPhase && m.phase !== nscPhase) return false
     if (typeFilter !== "all" && m.typeLabel !== typeFilter) return false
     if (serialSearch.trim()) return m.serialNo.toLowerCase().includes(serialSearch.toLowerCase())
     return true
@@ -201,15 +224,23 @@ export function MeterIssueForm({ availableStock, agencies, onSave, onCancel }: P
                 /* Selected NSC app details card */
                 <div className="bg-green-50 border border-green-200 rounded-xl p-3 space-y-2">
                   <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="font-bold text-green-900">{nscSelected.applicantName}</p>
-                      {nscSelected.careOf && <p className="text-xs text-green-700">C/O {nscSelected.careOf}</p>}
-                      <p className="text-xs text-gray-600 mt-0.5">{nscSelected.address}</p>
-                      {nscSelected.mobile && <p className="text-xs text-gray-500 font-mono">{nscSelected.mobile}</p>}
+                    <div className="min-w-0 flex-1">
+                      <p className="font-bold text-green-900 text-base">{nscSelected.applicantName}</p>
+                      {effectiveCareOf(nscSelected) && (
+                        <p className="text-sm text-green-700 font-medium">C/O {effectiveCareOf(nscSelected)}</p>
+                      )}
                     </div>
                     <button onClick={clearNscSelection} className="shrink-0 text-gray-400 hover:text-red-500 mt-0.5">
                       <XIcon className="h-4 w-4" />
                     </button>
+                  </div>
+                  {/* Installation address — prominent */}
+                  <div className="bg-white border border-green-300 rounded-lg px-3 py-2 space-y-1">
+                    <p className="text-[10px] font-semibold text-green-700 uppercase tracking-wide">Installation Address</p>
+                    <p className="text-sm text-gray-800 font-medium">{effectiveAddress(nscSelected)}</p>
+                    {nscSelected.mobile && (
+                      <p className="text-sm font-mono text-blue-700 font-semibold tracking-wide">{nscSelected.mobile}</p>
+                    )}
                   </div>
                   <div className="flex flex-wrap gap-1.5 text-xs">
                     <span className="bg-white border border-green-300 text-green-800 px-2 py-0.5 rounded-full font-mono">{nscSelected.receiveNo}</span>
@@ -252,8 +283,9 @@ export function MeterIssueForm({ availableStock, agencies, onSave, onCancel }: P
                             <span className="text-xs text-blue-600 font-mono shrink-0">App: {app.applicationNo}</span>
                           </div>
                           <p className="text-sm font-semibold text-gray-900">{app.applicantName}</p>
-                          {app.careOf && <p className="text-xs text-gray-500">C/O {app.careOf}</p>}
-                          <p className="text-xs text-gray-500">{app.address}</p>
+                          {effectiveCareOf(app) && <p className="text-xs text-green-700 font-medium">C/O {effectiveCareOf(app)}</p>}
+                          <p className="text-xs text-gray-500">{effectiveAddress(app)}</p>
+                          {app.mobile && <p className="text-xs font-mono text-blue-600">{app.mobile}</p>}
                         </button>
                       ))}
                     </div>
@@ -263,15 +295,50 @@ export function MeterIssueForm({ availableStock, agencies, onSave, onCancel }: P
             </div>
           ) : (
             <div className="space-y-2">
-              <Label>Consumer ID *</Label>
-              <div className="flex gap-2">
-                <Input value={consumerId} onChange={e => { setConsumerId(e.target.value.replace(/\D/g, "").slice(0, 9)); setConsumerFoundInDC(false) }}
-                  placeholder="9-digit Consumer ID" className="font-mono" />
-                <Button variant="outline" onClick={lookupConsumer} disabled={looking}>
-                  {looking ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
-                </Button>
+              {/* Source toggle: DC list vs Consumer Master */}
+              <div className="flex gap-1 text-xs mb-1">
+                <button
+                  type="button"
+                  onClick={() => { setLookupSource("dc"); setConsumerFoundInDC(false); setConsumerId(""); setConsumerName(""); setConsumerAddress(""); setConsumerMobile(""); setConsumerDevice("") }}
+                  className={`px-3 py-1 rounded-full font-medium transition ${lookupSource === "dc" ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>
+                  DC List
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setLookupSource("master"); setConsumerFoundInDC(false); setConsumerId(""); setConsumerName(""); setConsumerAddress(""); setConsumerMobile(""); setConsumerDevice("") }}
+                  className={`px-3 py-1 rounded-full font-medium transition ${lookupSource === "master" ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>
+                  Consumer Master
+                </button>
               </div>
-              {consumerFoundInDC && consumerName && (
+
+              {lookupSource === "master" ? (
+                <div className="space-y-2">
+                  <Label>Search Consumer Master *</Label>
+                  <ConsumerMasterLookup
+                    onSelect={row => handleMasterSelect({ consumerId: row.consumerId, name: row.name, address: row.address, mobile: row.mobile, meterNo: row.meterNo })}
+                  />
+                  {consumerFoundInDC && consumerName && (
+                    <div className="text-sm text-green-700 space-y-0.5 bg-green-50 rounded p-2">
+                      <p className="font-medium">✓ {consumerId} — {consumerName}</p>
+                      {consumerAddress && <p className="text-xs text-gray-500">{consumerAddress}</p>}
+                      {consumerMobile  && <p className="text-xs text-gray-500 font-mono">{consumerMobile}</p>}
+                      {consumerDevice  && <p className="text-xs text-orange-600">Old meter: {consumerDevice}</p>}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <>
+                  <Label>Consumer ID *</Label>
+                  <div className="flex gap-2">
+                    <Input value={consumerId} onChange={e => { setConsumerId(e.target.value.replace(/\D/g, "").slice(0, 9)); setConsumerFoundInDC(false) }}
+                      placeholder="9-digit Consumer ID" className="font-mono" />
+                    <Button variant="outline" onClick={lookupConsumer} disabled={looking}>
+                      {looking ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                    </Button>
+                  </div>
+                </>
+              )}
+              {lookupSource === "dc" && consumerFoundInDC && consumerName && (
                 <div className="text-sm text-green-700 space-y-0.5">
                   <p className="font-medium">✓ {consumerName}</p>
                   {consumerAddress && <p className="text-xs text-gray-500">{consumerAddress}</p>}
@@ -279,7 +346,7 @@ export function MeterIssueForm({ availableStock, agencies, onSave, onCancel }: P
                   {consumerDevice  && <p className="text-xs text-orange-600">Old device: {consumerDevice}</p>}
                 </div>
               )}
-              {consumerId.length === 9 && !consumerFoundInDC && (
+              {lookupSource === "dc" && consumerId.length === 9 && !consumerFoundInDC && (
                 <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded px-2 py-1">
                   Not in DC list — please fill address, mobile & old device below.
                 </p>
@@ -328,7 +395,16 @@ export function MeterIssueForm({ availableStock, agencies, onSave, onCancel }: P
 
       {/* Meter selection */}
       <Card>
-        <CardHeader className="pb-2 pt-4 px-4"><CardTitle className="text-sm">Select Meter from Stock</CardTitle></CardHeader>
+        <CardHeader className="pb-2 pt-4 px-4">
+          <CardTitle className="text-sm flex items-center justify-between">
+            Select Meter from Stock
+            {purpose === "nsc" && nscPhase && (
+              <span className="text-xs font-normal bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
+                Showing {nscPhase} meters only
+              </span>
+            )}
+          </CardTitle>
+        </CardHeader>
         <CardContent className="px-4 pb-4 space-y-3">
           <Select value={typeFilter} onValueChange={setTypeFilter}>
             <SelectTrigger><SelectValue /></SelectTrigger>

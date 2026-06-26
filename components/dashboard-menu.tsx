@@ -15,7 +15,8 @@ import {
   RadioTower,
   Gauge,
   X,
-  Phone
+  Phone,
+  Users
 } from "lucide-react"
 import { ViewType } from "@/components/app-sidebar"
 import { getFromCache, saveToCache } from "@/lib/indexed-db"
@@ -98,6 +99,17 @@ export function DashboardMenu({ onSelect, userRole, userAgencies = [] }: Dashboa
       color: "text-green-600",
       bgColor: "bg-green-50",
       borderColor: "hover:border-green-200",
+      allowed: ["admin", "executive", "agency"],
+      status: "live"
+    },
+    {
+      id: "consumer-master",
+      title: "Consumer Master",
+      description: userRole === "admin" ? "Upload & search 45k consumer database" : "Search consumer details by ID or name",
+      icon: Users,
+      color: "text-teal-600",
+      bgColor: "bg-teal-50",
+      borderColor: "hover:border-teal-200",
       allowed: ["admin", "executive", "agency"],
       status: "live"
     },

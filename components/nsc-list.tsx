@@ -7,8 +7,11 @@ import { Input } from "@/components/ui/input"
 import { Card, CardContent } from "@/components/ui/card"
 import {
   Search, X, Plus, RefreshCw, Check, ChevronLeft, ChevronRight,
-  FileDown, Phone, MapPin, ClipboardList, Clock,
+  FileDown, Phone, MapPin, ClipboardList, Clock, FolderOpen, FileInput, Pencil, MoreVertical,
 } from "lucide-react"
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { useToast } from "@/components/ui/use-toast"
 import { getFromCache, saveToCache } from "@/lib/indexed-db"
 import { NSC_STATUS_COLORS, NSC_STATUS_LABELS, NSC_CLASSES } from "@/lib/nsc-types"
@@ -17,11 +20,18 @@ import { NscApplicationForm } from "@/components/nsc-application-form"
 import { NscInspectForm } from "@/components/nsc-inspect-form"
 import { NscProcessForm } from "@/components/nsc-process-form"
 import * as XLSX from "xlsx"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import {
+  CreateProjectForm, ProjectPOForm,
+  AgencyCompleteProjectForm, AdminApproveProjectForm,
+  LegacyImportPanel, ProjectCard,
+} from "@/components/nsc-project-form"
+import type { NSCProject } from "@/lib/nsc-types"
 
 const CACHE_KEY = "nsc_data_cache"
 const PAGE = 20
 
-type Tab  = "all" | "pending" | "inspected" | "completed" | "reports"
+type Tab  = "all" | "pending" | "inspected" | "completed" | "projects" | "reports"
 type View = "list" | "create" | "inspect" | "process"
 type SyncState = "idle" | "loading" | "updated"
 
@@ -53,6 +63,16 @@ export function NscList({ userRole, userAgencies, username, agencies }: Props) {
   const [historyApp, setHistoryApp] = useState<NSCApplication | null>(null)
   const [page, setPage]         = useState(1)
 
+  // Project state (additive)
+  const [projects, setProjects]                 = useState<NSCProject[]>([])
+  const [projectDialogApp, setProjectDialogApp] = useState<NSCApplication | null>(null)
+  const [showLegacyImport, setShowLegacyImport] = useState(false)
+  const [selectedProject, setSelectedProject]   = useState<NSCProject | null>(null)
+  const [projectAction, setProjectAction]       = useState<"po" | "complete" | "approve" | null>(null)
+  const [editingRefApp, setEditingRefApp]       = useState<NSCApplication | null>(null)
+  const [refNoInput, setRefNoInput]             = useState("")
+  const [savingRefNo, setSavingRefNo]           = useState(false)
+
   // ── Load ──────────────────────────────────────────────────────────────────
   const load = async (silent = false) => {
     if (!silent) setSyncState("loading")
@@ -75,12 +95,50 @@ export function NscList({ userRole, userAgencies, username, agencies }: Props) {
 
   useEffect(() => { load() }, [])
 
+  // Load projects (admin + agency)
+  useEffect(() => {
+    fetch("/api/nsc/project").then(r => r.ok ? r.json() : []).then(setProjects).catch(() => {})
+  }, [])
+
+  // Build receiveNo → project map
+  const projectMap = useMemo(() => {
+    const map: Record<string, NSCProject> = {}
+    projects.forEach(p => {
+      p.linkedApps.split(",").forEach(rn => { const t = rn.trim(); if (t) map[t] = p })
+    })
+    return map
+  }, [projects])
+
+  const reloadProjects = () =>
+    fetch("/api/nsc/project").then(r => r.ok ? r.json() : []).then(setProjects).catch(() => {})
+
+  const saveRefNo = async () => {
+    if (!editingRefApp) return
+    setSavingRefNo(true)
+    try {
+      const res = await fetch("/api/nsc/office-ref", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ receiveNo: editingRefApp.receiveNo, officeRefNo: refNoInput }),
+      })
+      if (!res.ok) throw new Error((await res.json()).error)
+      setApps(prev => prev.map(a => a.receiveNo === editingRefApp.receiveNo ? { ...a, officeRefNo: refNoInput } : a))
+      setEditingRefApp(null)
+      toast({ title: "Office reference number saved" })
+    } catch (e: any) {
+      toast({ title: "Failed", description: e.message, variant: "destructive" })
+    } finally {
+      setSavingRefNo(false)
+    }
+  }
+
   // ── Filter ────────────────────────────────────────────────────────────────
   const filtered = useMemo(() => {
     let data = apps
     if (tab === "pending")   data = data.filter(a => a.status === "pending")
     if (tab === "inspected") data = data.filter(a => a.status === "inspected")
-    if (tab === "completed") data = data.filter(a => a.status === "quotation_issued" || a.status === "dispute_issued")
+    if (tab === "completed") data = data.filter(a => ["quotation_issued", "dispute_issued", "project_required", "project_ongoing", "project_done"].includes(a.status))
+    if (tab === "projects")  data = data.filter(a => ["project_required", "project_ongoing", "project_done"].includes(a.status))
     if (isAgency) {
       const upper = userAgencies.map(a => a.toUpperCase())
       data = data.filter(a => upper.includes(a.agency.toUpperCase()))
@@ -88,11 +146,12 @@ export function NscList({ userRole, userAgencies, username, agencies }: Props) {
     if (search.trim()) {
       const q = search.toLowerCase()
       data = data.filter(a =>
-        a.receiveNo.toLowerCase().includes(q)      ||
-        a.applicantName.toLowerCase().includes(q)  ||
-        a.careOf.toLowerCase().includes(q)         ||
-        a.address.toLowerCase().includes(q)        ||
-        a.mobile.includes(q)                       ||
+        a.receiveNo.toLowerCase().includes(q)               ||
+        (a.officeRefNo || "").toLowerCase().includes(q)     ||
+        a.applicantName.toLowerCase().includes(q)           ||
+        a.careOf.toLowerCase().includes(q)                  ||
+        a.address.toLowerCase().includes(q)                 ||
+        a.mobile.includes(q)                                ||
         a.agency.toLowerCase().includes(q)
       )
     }
@@ -107,8 +166,9 @@ export function NscList({ userRole, userAgencies, username, agencies }: Props) {
   const scopedApps = isAgency
     ? apps.filter(a => userAgencies.map(x => x.toUpperCase()).includes(a.agency.toUpperCase()))
     : apps
-  const pendingCount   = scopedApps.filter(a => a.status === "pending").length
-  const inspectedCount = scopedApps.filter(a => a.status === "inspected").length
+  const pendingCount    = scopedApps.filter(a => a.status === "pending").length
+  const inspectedCount  = scopedApps.filter(a => a.status === "inspected").length
+  const projectCount    = scopedApps.filter(a => ["project_required", "project_ongoing", "project_done"].includes(a.status)).length
 
   // ── Export ────────────────────────────────────────────────────────────────
   const exportData = () => {
@@ -189,19 +249,39 @@ export function NscList({ userRole, userAgencies, username, agencies }: Props) {
           <Button size="sm" variant="ghost" onClick={() => load()} className="shrink-0">
             <RefreshCw className={`h-4 w-4 ${syncState === "loading" ? "animate-spin" : ""}`} />
           </Button>
+          {isAdmin && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="sm" variant="ghost" className="shrink-0">
+                  <MoreVertical className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => setShowLegacyImport(true)}>
+                  <FileInput className="h-4 w-4 mr-2" /> Import Legacy Applications
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
 
         {/* Tabs */}
         <div className="flex gap-1 overflow-x-auto pb-1">
           {(isAdmin
-            ? ["all", "pending", "inspected", "completed", "reports"] as Tab[]
-            : ["all", "pending", "inspected", "completed"] as Tab[]
+            ? ["all", "pending", "inspected", "completed", "projects", "reports"] as Tab[]
+            : ["all", "pending", "inspected", "completed", "projects"] as Tab[]
           ).map(t => {
-            const badge = t === "pending" ? pendingCount : t === "inspected" ? inspectedCount : 0
+            const label =
+              t === "all"       ? `All (${scopedApps.length})` :
+              t === "pending"   ? `Pending (${pendingCount})` :
+              t === "inspected" ? `Inspected (${inspectedCount})` :
+              t === "completed" ? "Completed" :
+              t === "projects"  ? `Projects${projectCount > 0 ? ` (${projectCount})` : ""}` :
+              "Reports"
             return (
               <button key={t} onClick={() => setTab(t)}
                 className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap transition relative ${tab === t ? "bg-green-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>
-                {t === "all" ? `All (${scopedApps.length})` : t === "pending" ? `Pending (${pendingCount})` : t === "inspected" ? `Inspected (${inspectedCount})` : t === "completed" ? "Completed" : "Reports"}
+                {label}
               </button>
             )
           })}
@@ -215,6 +295,30 @@ export function NscList({ userRole, userAgencies, username, agencies }: Props) {
 
       {/* Reports tab */}
       {tab === "reports" && isAdmin && <NscReports apps={apps} />}
+
+      {/* Projects tab */}
+      {tab === "projects" && (
+        <div className="space-y-3">
+          {projects.length === 0 ? (
+            <div className="text-center py-12 text-gray-400">
+              <FolderOpen className="h-10 w-10 mx-auto mb-3 opacity-30" />
+              <p>No projects yet</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {projects.map(p => (
+                <ProjectCard
+                  key={p.projectId}
+                  project={p}
+                  userRole={userRole}
+                  userAgencies={userAgencies}
+                  onAction={(proj, action) => { setSelectedProject(proj); setProjectAction(action) }}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Application cards */}
       {tab !== "reports" && (
@@ -231,9 +335,21 @@ export function NscList({ userRole, userAgencies, username, agencies }: Props) {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-mono text-xs text-gray-400">{app.receiveNo}</span>
+                      {app.officeRefNo && (
+                        <>
+                          <span className="text-xs text-gray-300">|</span>
+                          <span className="font-mono text-xs text-blue-600 font-medium">Ref: {app.officeRefNo}</span>
+                        </>
+                      )}
+                      {app.isLegacy === "true" && <Badge variant="outline" className="text-xs py-0 px-1 text-amber-700 border-amber-300">Legacy</Badge>}
                       <span className="text-xs text-gray-400">·</span>
                       <span className="text-xs font-medium text-gray-600">{CLASS_LABELS[app.appliedClass] || app.appliedClass} · {app.phase}</span>
                     </div>
+                    {app.projectId && (
+                      <p className="text-xs text-orange-600 font-mono mt-0.5">
+                        <FolderOpen className="inline h-3 w-3 mr-1" />{app.projectId}
+                      </p>
+                    )}
                     <p className="font-bold text-gray-900 mt-0.5">{app.applicantName}</p>
                     {app.careOf && <p className="text-xs text-gray-500">C/O {app.careOf}</p>}
                     <div className="flex items-start gap-1 mt-0.5">
@@ -306,6 +422,35 @@ export function NscList({ userRole, userAgencies, username, agencies }: Props) {
                       View / Override
                     </Button>
                   )}
+                  {/* Admin: create project from quotation_issued app */}
+                  {isAdmin && app.status === "quotation_issued" && !app.projectId && (
+                    <Button size="sm" variant="outline" className="h-8 text-orange-700 border-orange-200"
+                      onClick={() => setProjectDialogApp(app)}>
+                      <FolderOpen className="h-3 w-3 mr-1" /> Create Project
+                    </Button>
+                  )}
+                  {/* Admin: project statuses — view linked project */}
+                  {isAdmin && ["project_required", "project_ongoing", "project_done"].includes(app.status) && (
+                    <Button size="sm" variant="outline" className="flex-1 h-8 text-orange-700 border-orange-200"
+                      onClick={() => { setTab("projects") }}>
+                      <FolderOpen className="h-3 w-3 mr-1" /> View Projects
+                    </Button>
+                  )}
+                  {/* Admin: approve project if it's done */}
+                  {isAdmin && app.status === "project_ongoing" && projectMap[app.receiveNo]?.status === "done" && (
+                    <Button size="sm" className="h-8 bg-green-600 hover:bg-green-700 text-white"
+                      onClick={() => { setSelectedProject(projectMap[app.receiveNo]); setProjectAction("approve") }}>
+                      Approve Project
+                    </Button>
+                  )}
+                  {/* Agency: mark project complete */}
+                  {isAgency && ["project_required", "project_ongoing"].includes(app.status) && app.projectId &&
+                    projectMap[app.receiveNo]?.status === "ongoing" && projectMap[app.receiveNo]?.poNumber && (
+                    <Button size="sm" className="h-8 bg-amber-600 hover:bg-amber-700 text-white"
+                      onClick={() => { setSelectedProject(projectMap[app.receiveNo]); setProjectAction("complete") }}>
+                      Mark Work Done
+                    </Button>
+                  )}
                   {/* Admin: pending — can reassign */}
                   {isAdmin && app.status === "pending" && (
                     <Button size="sm" variant="outline" className="flex-1 h-8 text-purple-700 border-purple-200"
@@ -319,6 +464,15 @@ export function NscList({ userRole, userAgencies, username, agencies }: Props) {
                       <Check className="h-3 w-3" />
                       {app.status === "connection_effected" ? "Connection effected" : "Meter issued — awaiting installation"}
                     </p>
+                  )}
+                  {/* Admin: edit office ref no */}
+                  {isAdmin && (
+                    <button
+                      className="flex items-center gap-1 text-xs text-gray-400 hover:text-blue-600"
+                      onClick={() => { setEditingRefApp(app); setRefNoInput(app.officeRefNo || "") }}
+                      title="Edit office reference number">
+                      <Pencil className="h-3 w-3" /> {app.officeRefNo ? "Ref" : "Add Ref"}
+                    </button>
                   )}
                   {/* Admin: history button */}
                   {isAdmin && (
@@ -390,6 +544,90 @@ export function NscList({ userRole, userAgencies, username, agencies }: Props) {
           </div>
         </div>
       )}
+
+      {/* ── Project: Create dialog ────────────────────────────────────────── */}
+      <Dialog open={!!projectDialogApp} onOpenChange={open => { if (!open) setProjectDialogApp(null) }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader><DialogTitle>Create Infrastructure Project</DialogTitle></DialogHeader>
+          {projectDialogApp && (
+            <CreateProjectForm
+              application={projectDialogApp}
+              allApps={apps}
+              agencies={agencies}
+              onSuccess={() => { setProjectDialogApp(null); reloadProjects(); load(true) }}
+              onCancel={() => setProjectDialogApp(null)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Project: action dialog (PO / complete / approve) ──────────────── */}
+      <Dialog open={!!selectedProject && !!projectAction} onOpenChange={open => { if (!open) { setSelectedProject(null); setProjectAction(null) } }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>
+              {projectAction === "po"       ? "Enter PO Number" :
+               projectAction === "complete" ? "Mark Work Complete" :
+               "Approve Project"}
+            </DialogTitle>
+          </DialogHeader>
+          {selectedProject && projectAction === "po" && (
+            <ProjectPOForm
+              project={selectedProject}
+              onSuccess={() => { setSelectedProject(null); setProjectAction(null); reloadProjects() }}
+              onCancel={() => { setSelectedProject(null); setProjectAction(null) }}
+            />
+          )}
+          {selectedProject && projectAction === "complete" && (
+            <AgencyCompleteProjectForm
+              project={selectedProject}
+              onSuccess={() => { setSelectedProject(null); setProjectAction(null); reloadProjects(); load(true) }}
+              onCancel={() => { setSelectedProject(null); setProjectAction(null) }}
+            />
+          )}
+          {selectedProject && projectAction === "approve" && (
+            <AdminApproveProjectForm
+              project={selectedProject}
+              onSuccess={() => { setSelectedProject(null); setProjectAction(null); reloadProjects(); load(true) }}
+              onCancel={() => { setSelectedProject(null); setProjectAction(null) }}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Legacy import dialog ──────────────────────────────────────────── */}
+      <Dialog open={showLegacyImport} onOpenChange={setShowLegacyImport}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>Import Legacy Applications</DialogTitle></DialogHeader>
+          <LegacyImportPanel
+            onSuccess={count => { setShowLegacyImport(false); load(true); toast({ title: `${count} legacy records imported` }) }}
+            onCancel={() => setShowLegacyImport(false)}
+          />
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Edit office ref no dialog ─────────────────────────────────────── */}
+      <Dialog open={!!editingRefApp} onOpenChange={open => { if (!open) setEditingRefApp(null) }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>Office Reference Number</DialogTitle></DialogHeader>
+          {editingRefApp && (
+            <div className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                {editingRefApp.receiveNo} — {editingRefApp.applicantName}
+              </p>
+              <Input
+                placeholder="Office reference / serial number"
+                value={refNoInput}
+                onChange={e => setRefNoInput(e.target.value)}
+              />
+              <div className="flex gap-2">
+                <Button onClick={saveRefNo} disabled={savingRefNo}>{savingRefNo ? "Saving…" : "Save"}</Button>
+                <Button variant="outline" onClick={() => setEditingRefApp(null)}>Cancel</Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Pagination */}
       {totalPages > 1 && tab !== "reports" && (

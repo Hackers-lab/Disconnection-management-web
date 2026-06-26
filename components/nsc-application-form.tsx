@@ -24,6 +24,7 @@ export function NscApplicationForm({ agencies, onSave, onCancel }: Props) {
   const [appliedClass, setAppliedClass]   = useState("")
   const [phase, setPhase]                 = useState("")
   const [agency, setAgency]               = useState("")
+  const [officeRefNo, setOfficeRefNo]     = useState("")
   const [agencyList, setAgencyList]       = useState<string[]>(agencies)
   const [submitting, setSubmitting]       = useState(false)
 
@@ -56,7 +57,7 @@ export function NscApplicationForm({ agencies, onSave, onCancel }: Props) {
       const res = await fetch("/api/nsc", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ applicantName: applicantName.trim(), careOf: careOf.trim(), address: address.trim(), mobile: mobile.trim(), appliedClass, phase, agency }),
+        body: JSON.stringify({ applicantName: applicantName.trim(), careOf: careOf.trim(), address: address.trim(), mobile: mobile.trim(), appliedClass, phase, agency, officeRefNo: officeRefNo.trim() }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || "Failed")
@@ -101,6 +102,11 @@ export function NscApplicationForm({ agencies, onSave, onCancel }: Props) {
               className="font-mono"
               inputMode="numeric"
             />
+          </div>
+          <div className="space-y-1">
+            <Label>Office Reference Number <span className="text-gray-400 font-normal">(optional)</span></Label>
+            <Input value={officeRefNo} onChange={e => setOfficeRefNo(e.target.value)} placeholder="Manual serial or office ref" />
+            <p className="text-xs text-gray-400">Office-assigned reference — different from the auto-generated receive number</p>
           </div>
         </CardContent>
       </Card>

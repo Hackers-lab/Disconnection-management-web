@@ -8,7 +8,8 @@ import {
   Menu,
   Settings,
   UserX,
-  BarChart3        // For Analysis
+  BarChart3,       // For Analysis
+  Users            // For Consumer Master
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from "@/components/ui/sheet"
@@ -18,7 +19,7 @@ import type { ConsumerData } from "@/lib/google-sheets"
 import { Badge } from "@/components/ui/badge"
 
 // Define the available views
-export type ViewType = "disconnection" | "reconnection" | "deemed" | "nsc" | "meter" | "admin" | "home" | "analysis" | "agency-updates"
+export type ViewType = "disconnection" | "reconnection" | "deemed" | "nsc" | "meter" | "admin" | "home" | "analysis" | "agency-updates" | "consumer-master"
 
 interface AppSidebarProps {
   activeView: ViewType
@@ -97,6 +98,12 @@ export function AppSidebar({ activeView, setActiveView, userRole, isMobile = fal
       id: "nsc",
       label: "NSC Inspection",
       icon: ClipboardCheck,
+      allowedRoles: ["admin", "executive", "agency"]
+    },
+    {
+      id: "consumer-master",
+      label: "Consumer Master",
+      icon: Users,
       allowedRoles: ["admin", "executive", "agency"]
     },
     // Only show Admin Panel button here if you want it in the menu

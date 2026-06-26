@@ -5,7 +5,7 @@ import { unstable_cache, revalidateTag } from "next/cache"
 import { auth } from "./google-drive"
 import { getSpreadsheetId } from "./google-sheets-api"
 import { METER_TYPES } from "./meter-types"
-import { updateNSCMeterIssued, updateNSCConnectionEffected } from "./nsc-service"
+import { updateNSCMeterIssued, updateNSCConnectionEffected, updateNSCMeterReturned } from "./nsc-service"
 import { nowDate } from "./date-utils"
 import type {
   MeterStock, MeterIssue, StockSummary,
@@ -31,6 +31,7 @@ const ISSUES_HEADERS = [
   "Consumer Name", "Agency", "Serial No", "Meter Type", "Status",
   "Before Image", "After Image", "Last Reading", "New Reading",
   "Completion Ref", "Completed At", "Completed By", "Remarks", "Installation No",
+  "Address", "Mobile",
 ]
 
 // ─── Shared cross-instance cache (Next.js Data Cache) ─────────────────────────
@@ -100,6 +101,8 @@ function parseIssue(r: string[]): MeterIssue {
     completedBy:    r[16] || "",
     remarks:        r[17] || "",
     installationNo: r[18] || "",
+    address:        r[19] || "",
+    mobile:         r[20] || "",
   }
 }
 
@@ -114,7 +117,7 @@ async function _fetchStockRaw(): Promise<MeterStock[]> {
 async function _fetchIssuesRaw(): Promise<MeterIssue[]> {
   const id = getSpreadsheetId()
   await ensureTabs(id)
-  const res = await sheets.spreadsheets.values.get({ spreadsheetId: id, range: `${ISSUES_TAB}!A:S` })
+  const res = await sheets.spreadsheets.values.get({ spreadsheetId: id, range: `${ISSUES_TAB}!A:U` })
   return (res.data.values || []).slice(1).filter(r => r[0]).map(r => parseIssue(r.map(String)))
 }
 
@@ -184,6 +187,8 @@ export async function issueMeter(req: {
   consumerName: string
   agency:       string
   remarks?:     string
+  address?:     string
+  mobile?:      string
 }): Promise<string> {
   const id = getSpreadsheetId()
   await ensureTabs(id)
@@ -194,12 +199,12 @@ export async function issueMeter(req: {
   const issueId = await nextIssueId(id)
   const today = nowDate()
   await sheets.spreadsheets.values.append({
-    spreadsheetId: id, range: `${ISSUES_TAB}!A:R`,
+    spreadsheetId: id, range: `${ISSUES_TAB}!A:U`,
     valueInputOption: "RAW",
     requestBody: {
       values: [[issueId, today, req.purpose, req.consumerId, req.nscReceiveNo || "",
         req.consumerName, req.agency, req.serialNo, stock[idx].typeLabel, "issued",
-        "", "", "", "", "", "", "", req.remarks || ""]],
+        "", "", "", "", "", "", "", req.remarks || "", "", req.address || "", req.mobile || ""]],
     },
   })
   await sheets.spreadsheets.values.batchUpdate({
@@ -407,6 +412,9 @@ export async function returnMeterToStock(req: {
     })
   }
   invalidateMeterCache()
+  if (issue.purpose === "nsc" && issue.nscReceiveNo) {
+    await updateNSCMeterReturned(issue.nscReceiveNo)
+  }
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

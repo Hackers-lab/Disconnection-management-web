@@ -186,22 +186,31 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
     consumersRef.current = consumers
   }, [consumers])
 
-  // Blocked reconnection IDs — own effect so it runs immediately on mount
-  // and refreshes every 5 minutes independently of the main data sync
-  useEffect(() => {
-    const fetchBlocked = () =>
-      fetch("/api/reconnection/blocked-ids")
-        .then(r => r.ok ? r.json() : [])
-        .then((ids: string[]) => setBlockedIds(new Set(ids)))
-        .catch(() => {})
-    fetchBlocked()
-    const timer = setInterval(fetchBlocked, 5 * 60 * 1000)
-    return () => clearInterval(timer)
-  }, [])
 
   // Memoize agencies key to prevent unnecessary effect triggers on array reference changes
   const agenciesKey = useMemo(() => JSON.stringify(userAgencies), [userAgencies])
-          
+
+  // Blocked reconnection IDs — own effect so it runs immediately on mount
+  // and refreshes every 5 minutes independently of the main data sync.
+  // For agency users we scope the request to their own agencies so that
+  // another agency's overdue work does NOT lock them out of the module.
+  useEffect(() => {
+    const fetchBlocked = () => {
+      let url = "/api/reconnection/blocked-ids"
+      if (userRole === "agency" && userAgencies.length > 0) {
+        const param = userAgencies.map(a => encodeURIComponent(a)).join(",")
+        url = `${url}?agencies=${param}`
+      }
+      fetch(url)
+        .then(r => r.ok ? r.json() : [])
+        .then((ids: string[]) => setBlockedIds(new Set(ids)))
+        .catch(() => {})
+    }
+    fetchBlocked()
+    const timer = setInterval(fetchBlocked, 5 * 60 * 1000)
+    return () => clearInterval(timer)
+  }, [userRole, agenciesKey])
+
   useEffect(() => {
     const CACHE_KEY = "consumers_data_cache"
     const AGENCY_CACHE_KEY = "agencies_data_cache"

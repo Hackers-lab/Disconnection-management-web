@@ -48,6 +48,8 @@ export interface MeterIssue {
   completedAt:    string
   completedBy:    string
   remarks:        string
+  address:        string
+  mobile:         string
 }
 
 export interface StockSummary {

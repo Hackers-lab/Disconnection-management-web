@@ -12,7 +12,7 @@ const sheets = google.sheets({ version: "v4", auth })
 
 export const NSC_TAB = "NSC_Applications"
 
-// 43 columns A–AQ
+// 46 columns A–AU
 const NSC_HEADERS = [
   "Receive No", "Received Date", "Applicant Name", "C/O", "Address",
   "Mobile", "Applied Class", "Phase", "Agency", "Status",
@@ -32,6 +32,8 @@ const NSC_HEADERS = [
   "Memo No", "Application No", "Finalized At", "Finalized By",
   // Meter & connection milestones
   "Meter Issued At", "Connection Effected At", "Meter Serial No",
+  // Added columns (AS–AU) — safe to append, never break existing data
+  "Office Ref No", "Project ID", "Is Legacy",
 ]
 
 // ─── Shared cross-instance cache (Next.js Data Cache) ─────────────────────────
@@ -109,6 +111,9 @@ function parseRow(r: string[]): NSCApplication {
     meterIssuedAt:        r[41] || "",
     connectionEffectedAt: r[42] || "",
     meterSerialNo:        r[43] || "",
+    officeRefNo:          r[44] || "",
+    projectId:            r[45] || "",
+    isLegacy:             r[46] || "",
   }
 }
 
@@ -116,7 +121,7 @@ function parseRow(r: string[]): NSCApplication {
 async function _fetchApplicationsRaw(): Promise<NSCApplication[]> {
   const id = getSpreadsheetId()
   await ensureTab(id)
-  const res = await sheets.spreadsheets.values.get({ spreadsheetId: id, range: `${NSC_TAB}!A:AR` })
+  const res = await sheets.spreadsheets.values.get({ spreadsheetId: id, range: `${NSC_TAB}!A:AU` })
   return (res.data.values || []).slice(1).filter(r => r[0]).map(r => parseRow(r.map(String)))
 }
 
@@ -151,12 +156,13 @@ export async function createApplication(req: {
   phase:         string
   agency:        string
   createdBy:     string
+  officeRefNo?:  string
 }): Promise<string> {
   const id = getSpreadsheetId()
   await ensureTab(id)
   const receiveNo = await nextReceiveNo(id)
   const now = nowTs()
-  const row = new Array(41).fill("")
+  const row = new Array(47).fill("")
   row[0]  = receiveNo
   row[1]  = now.split(" ")[0]
   row[2]  = req.applicantName
@@ -169,8 +175,9 @@ export async function createApplication(req: {
   row[9]  = "pending"
   row[10] = req.createdBy
   row[11] = now
+  row[44] = req.officeRefNo || ""
   await sheets.spreadsheets.values.append({
-    spreadsheetId: id, range: `${NSC_TAB}!A:AO`,
+    spreadsheetId: id, range: `${NSC_TAB}!A:AU`,
     valueInputOption: "RAW",
     requestBody: { values: [row] },
   })
@@ -330,4 +337,117 @@ export async function updateNSCConnectionEffected(receiveNo: string): Promise<vo
     },
   })
   invalidateNSCCache()
+}
+
+// ─── Called by meter-service when NSC meter is returned to stock ─────────────
+export async function updateNSCMeterReturned(receiveNo: string): Promise<void> {
+  if (!receiveNo) return
+  const id = getSpreadsheetId()
+  await ensureTab(id)
+  const all = await _fetchApplicationsRaw()
+  const idx = all.findIndex(a => a.receiveNo === receiveNo)
+  if (idx === -1) return
+  const row = idx + 2
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: id, range: `${NSC_TAB}!J${row}`,
+    valueInputOption: "RAW",
+    requestBody: { values: [["meter_returned"]] },
+  })
+  invalidateNSCCache()
+}
+
+// ─── Update office reference number (always editable) ────────────────────────
+export async function updateOfficeRefNo(receiveNo: string, officeRefNo: string): Promise<void> {
+  const id = getSpreadsheetId()
+  await ensureTab(id)
+  const all = await _fetchApplicationsRaw()
+  const idx = all.findIndex(a => a.receiveNo === receiveNo)
+  if (idx === -1) throw new Error("Application not found")
+  const row = idx + 2
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: id, range: `${NSC_TAB}!AS${row}`,
+    valueInputOption: "RAW",
+    requestBody: { values: [[officeRefNo]] },
+  })
+  invalidateNSCCache()
+}
+
+// ─── Link an application to a project ────────────────────────────────────────
+export async function updateNSCProjectLink(receiveNo: string, projectId: string, newStatus?: string): Promise<void> {
+  const id = getSpreadsheetId()
+  await ensureTab(id)
+  const all = await _fetchApplicationsRaw()
+  const idx = all.findIndex(a => a.receiveNo === receiveNo)
+  if (idx === -1) throw new Error("Application not found")
+  const row = idx + 2
+  const updates: any[] = [
+    { range: `${NSC_TAB}!AT${row}`, values: [[projectId]] },
+  ]
+  if (newStatus) updates.push({ range: `${NSC_TAB}!J${row}`, values: [[newStatus]] })
+  await sheets.spreadsheets.values.batchUpdate({
+    spreadsheetId: id,
+    requestBody: { valueInputOption: "RAW", data: updates },
+  })
+  invalidateNSCCache()
+}
+
+// ─── Bulk legacy import ───────────────────────────────────────────────────────
+export interface LegacyImportRow {
+  applicantName: string
+  careOf:        string
+  address:       string
+  mobile:        string
+  appliedClass:  string
+  phase:         string
+  agency:        string
+  officeRefNo:   string   // original serial from Excel
+  receivedDate:  string   // original date (YYYY-MM-DD)
+  status:        string   // current status if known
+  createdBy:     string
+}
+
+export async function importLegacyApplications(rows: LegacyImportRow[]): Promise<number> {
+  const id = getSpreadsheetId()
+  await ensureTab(id)
+  const existing = await _fetchApplicationsRaw()
+  const fy = currentFY()
+  const prefix = `NSC/${fy}/`
+  const nums = existing
+    .filter(a => a.receiveNo.startsWith(prefix))
+    .map(a => parseInt(a.receiveNo.slice(prefix.length), 10))
+    .filter(n => !isNaN(n))
+  let counter = nums.length ? Math.max(...nums) : 0
+
+  const values = rows.map(r => {
+    counter++
+    const receiveNo = `${prefix}${String(counter).padStart(4, "0")}`
+    const row = new Array(47).fill("")
+    row[0]  = receiveNo
+    row[1]  = r.receivedDate
+    row[2]  = r.applicantName
+    row[3]  = r.careOf
+    row[4]  = r.address
+    row[5]  = r.mobile
+    row[6]  = r.appliedClass
+    row[7]  = r.phase
+    row[8]  = r.agency
+    row[9]  = r.status || "pending"
+    row[10] = r.createdBy
+    row[11] = nowTs()
+    row[44] = r.officeRefNo
+    row[46] = "true"   // isLegacy
+    return row
+  })
+
+  // Append in batches
+  const BATCH = 200
+  for (let i = 0; i < values.length; i += BATCH) {
+    await sheets.spreadsheets.values.append({
+      spreadsheetId: id, range: `${NSC_TAB}!A:AU`,
+      valueInputOption: "RAW",
+      requestBody: { values: values.slice(i, i + BATCH) },
+    })
+  }
+  invalidateNSCCache()
+  return values.length
 }

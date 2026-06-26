@@ -30,6 +30,8 @@ export async function POST(request: NextRequest) {
       consumerName: body.consumerName || "",
       agency:       body.agency,
       remarks:      body.remarks || "",
+      address:      body.address || "",
+      mobile:       body.mobile  || "",
     })
     return NextResponse.json({ success: true, issueId })
   } catch (e: any) {

@@ -441,6 +441,12 @@ export function MeterList({ userRole, userAgencies, username, agencies }: Props)
                       {issue.consumerId && <span className="font-mono">({issue.consumerId})</span>}
                       {issue.nscReceiveNo && <span className="font-mono text-green-700">NSC: {issue.nscReceiveNo}</span>}
                     </p>
+                    {(issue.address || issue.mobile) && (
+                      <div className="mt-1 bg-blue-50 border border-blue-100 rounded-lg px-2.5 py-1.5 space-y-0.5">
+                        {issue.address && <p className="text-xs text-gray-700">{issue.address}</p>}
+                        {issue.mobile  && <p className="text-xs font-mono font-semibold text-blue-700">{issue.mobile}</p>}
+                      </div>
+                    )}
                     <p className="text-xs text-gray-500 mt-0.5">
                       Agency: <span className="font-medium">{issue.agency}</span>
                       <span className="ml-2 text-gray-400">Issued: {issue.issueDate}</span>
