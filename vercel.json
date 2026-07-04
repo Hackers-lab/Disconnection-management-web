@@ -1,4 +1,5 @@
 {
+  "fluid": false,
   "functions": {
     "app/api/meters/finalize/route.ts": { "maxDuration": 60 },
     "app/api/meters/route.ts":          { "maxDuration": 30 },
