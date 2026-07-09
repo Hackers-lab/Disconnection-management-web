@@ -289,6 +289,12 @@ export function ReconnectionList({ userRole, userAgencies, username, agencies }:
                     </div>
                     <p className="font-semibold text-gray-900 mt-1 truncate">{r.name}</p>
                     <p className="text-xs font-mono text-gray-500">{r.consumerId}</p>
+                    {r.device && (
+                      <p className="text-xs text-gray-600 mt-0.5">
+                        <span className="text-gray-400">Meter:</span>{" "}
+                        <span className="font-mono font-medium">{r.device}</span>
+                      </p>
+                    )}
                     {r.address && (
                       <div className="flex items-start gap-1 mt-1">
                         <MapPin className="h-3 w-3 text-gray-400 mt-0.5 shrink-0" />
