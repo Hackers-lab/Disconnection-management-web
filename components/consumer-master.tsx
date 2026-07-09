@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useToast } from "@/components/ui/use-toast"
 import { getFromCache, saveToCache, getCacheAgeMs } from "@/lib/indexed-db"
+import { Search, X, User, MapPin, Phone, Monitor, Map, ChevronDown, ChevronUp, Upload, ExternalLink } from "lucide-react"
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 export interface ConsumerMasterRow {
@@ -164,6 +165,8 @@ export function ConsumerMaster({ role }: ConsumerMasterProps) {
   const [results, setResults]             = useState<ConsumerMasterRow[]>([])
   const [allData, setAllData]             = useState<ConsumerMasterRow[]>([])
   const [dataLoaded, setDataLoaded]       = useState(false)
+  const [selectedConsumer, setSelectedConsumer] = useState<ConsumerMasterRow | null>(null)
+  const [showUpload, setShowUpload]       = useState(false)
   const timerRef                          = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
@@ -346,7 +349,7 @@ export function ConsumerMaster({ role }: ConsumerMasterProps) {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Header + stats */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
@@ -364,150 +367,261 @@ export function ConsumerMaster({ role }: ConsumerMasterProps) {
         </div>
       </div>
 
-      {/* Upload section (admin only) */}
-      {isAdmin && (
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-base">Upload Consumer Data (CSV)</CardTitle>
-              <Button
-                size="sm" variant="outline"
-                onClick={() => {
-                  const headers = ["Consumer ID", "Name", "C/O", "Address", "Class", "Meter No", "Zone", "Mobile", "Latitude", "Longitude"]
-                  const sample  = ["100000001", "John Doe", "Father Name", "Village / Ward / Block / District", "LT Domestic", "OLDMTR001", "Zone A", "9876543210", "25.123456", "88.654321"]
-                  const csv     = [headers, sample].map(r => r.join(",")).join("\n")
-                  const blob    = new Blob([csv], { type: "text/csv" })
-                  const url     = URL.createObjectURL(blob)
-                  const a       = document.createElement("a")
-                  a.href        = url
-                  a.download    = "consumer_master_template.csv"
-                  a.click()
-                  URL.revokeObjectURL(url)
-                }}
-              >
-                Download Template
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div
-              className="border-2 border-dashed rounded-lg p-6 text-center cursor-pointer hover:border-primary transition-colors"
-              onClick={() => document.getElementById("cm-file-input")?.click()}
-              onDragOver={e => e.preventDefault()}
-              onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) handleFileDrop(f) }}
-            >
-              <input
-                id="cm-file-input"
-                type="file"
-                accept=".csv"
-                className="hidden"
-                onChange={e => { const f = e.target.files?.[0]; if (f) handleFileDrop(f) }}
-              />
-              {fileName
-                ? <p className="font-medium">{fileName} <span className="text-muted-foreground text-sm">— {csvRows.length.toLocaleString()} rows</span></p>
-                : <p className="text-muted-foreground">Drop a CSV here or click to choose</p>}
-            </div>
-
-            {/* Column mapping */}
-            {csvHeaders.length > 0 && (
-              <div className="space-y-3">
-                <p className="text-sm font-medium">Map CSV columns to fields (<span className="text-red-500">*</span> required)</p>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  {(Object.keys(FIELD_LABELS) as (keyof ConsumerMasterRow)[]).map(field => (
-                    <div key={field} className="space-y-1">
-                      <Label className="text-xs">
-                        {FIELD_LABELS[field]}
-                        {REQUIRED_FIELDS.includes(field) && <span className="text-red-500 ml-1">*</span>}
-                      </Label>
-                      <Select
-                        value={mapping[field] !== undefined ? String(mapping[field]) : "__none"}
-                        onValueChange={v => setMapping(prev => {
-                          const next = { ...prev }
-                          if (v === "__none") delete next[field]
-                          else next[field] = Number(v)
-                          return next
-                        })}
-                      >
-                        <SelectTrigger className="h-8 text-xs">
-                          <SelectValue placeholder="— skip —" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="__none">— skip —</SelectItem>
-                          {csvHeaders.map((h, i) => (
-                            <SelectItem key={i} value={String(i)}>{h}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Preview */}
-                {csvRows.length > 0 && mapping.consumerId !== undefined && mapping.name !== undefined && (
-                  <div className="text-xs border rounded p-2 bg-muted space-y-1">
-                    <p className="font-medium">Preview (first 3 rows):</p>
-                    {csvRows.slice(0, 3).map((r, i) => (
-                      <p key={i} className="text-muted-foreground truncate">
-                        {String(r[mapping.consumerId!] ?? "").trim()} — {String(r[mapping.name!] ?? "").trim()}
-                        {mapping.address !== undefined && ` — ${String(r[mapping.address] ?? "").trim()}`}
-                      </p>
-                    ))}
-                  </div>
-                )}
-
-                <div className="flex items-center gap-3">
-                  <Button onClick={handleUpload} disabled={uploading}>
-                    {uploading
-                      ? (uploadProgress ? `Uploading ${uploadProgress}…` : "Preparing…")
-                      : `Upload ${csvRows.length.toLocaleString()} rows`}
-                  </Button>
-                  {uploadResult && (
-                    <Badge variant="default">{uploadResult.count.toLocaleString()} uploaded</Badge>
-                  )}
-                  <p className="text-xs text-muted-foreground">This replaces all existing consumer data.</p>
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Search / browse */}
-      <Card>
-        <CardHeader><CardTitle className="text-base">Search Consumers</CardTitle></CardHeader>
-        <CardContent className="space-y-3">
+      {/* Search section — always on top */}
+      <div className="bg-white rounded-xl shadow-sm border p-4 space-y-3">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 h-4 w-4" />
           <Input
             placeholder="Search by consumer ID, name, or meter number…"
             value={query}
             onChange={e => handleSearch(e.target.value)}
+            className="pl-10 pr-8 rounded-xl h-11 text-base"
           />
-          {results.length > 0 && (
-            <div className="border rounded-md divide-y text-sm max-h-[400px] overflow-y-auto">
-              {results.map((r, i) => (
-                <div key={i} className="px-3 py-2">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-medium">{r.consumerId}</span>
-                    <span>{r.name}</span>
-                    {r.baseClass && <Badge variant="outline" className="text-xs">{r.baseClass}</Badge>}
-                    {r.zone && <Badge variant="secondary" className="text-xs">{r.zone}</Badge>}
+          {query && <X className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-red-500 cursor-pointer" onClick={() => { setQuery(""); setResults([]) }} />}
+        </div>
+        {results.length > 0 && (
+          <div className="space-y-2 max-h-[60vh] overflow-y-auto">
+            {results.map((r, i) => (
+              <div key={i}
+                className="border rounded-xl p-3 cursor-pointer hover:shadow-md hover:border-blue-200 transition-all duration-200 bg-white"
+                onClick={() => setSelectedConsumer(r)}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <User className="h-4 w-4 text-gray-400 shrink-0" />
+                      <span className="font-semibold text-gray-900 truncate">{r.name}</span>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5 ml-6">
+                      <span className="text-xs font-mono text-gray-500">{r.consumerId}</span>
+                      {r.meterNo && (
+                        <span className="text-xs text-gray-500 flex items-center gap-1">
+                          <Monitor className="h-3 w-3" />{r.meterNo}
+                        </span>
+                      )}
+                      {r.mobile && (
+                        <span className="text-xs text-blue-600 flex items-center gap-1">
+                          <Phone className="h-3 w-3" />{r.mobile}
+                        </span>
+                      )}
+                    </div>
+                    {r.address && (
+                      <div className="flex items-start gap-1.5 mt-1 ml-6">
+                        <MapPin className="h-3 w-3 text-gray-400 mt-0.5 shrink-0" />
+                        <span className="text-xs text-gray-500 line-clamp-1">{r.address}</span>
+                      </div>
+                    )}
                   </div>
-                  <div className="text-xs text-muted-foreground mt-0.5">
-                    {r.careOf && `C/O ${r.careOf} · `}{r.address}
-                    {r.meterNo && ` · Meter: ${r.meterNo}`}
-                    {r.mobile && ` · ${r.mobile}`}
+                  <div className="flex flex-col items-end gap-1 shrink-0">
+                    {r.baseClass && <Badge variant="outline" className="text-[10px] rounded-full">{r.baseClass}</Badge>}
+                    {r.zone && <Badge variant="secondary" className="text-[10px] rounded-full">{r.zone}</Badge>}
                   </div>
                 </div>
-              ))}
+              </div>
+            ))}
+          </div>
+        )}
+        {query && results.length === 0 && dataLoaded && (
+          <p className="text-sm text-muted-foreground text-center py-4">No consumers matched &quot;{query}&quot;.</p>
+        )}
+        {!dataLoaded && (
+          <p className="text-sm text-muted-foreground text-center py-2">Loading data…</p>
+        )}
+      </div>
+
+      {/* Upload section (admin only) — collapsible */}
+      {isAdmin && (
+        <div className="border rounded-xl overflow-hidden">
+          <button
+            className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100 transition-colors text-sm font-medium text-gray-700"
+            onClick={() => setShowUpload(!showUpload)}
+          >
+            <span className="flex items-center gap-2"><Upload className="h-4 w-4" />Upload Consumer Data (CSV)</span>
+            {showUpload ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+          </button>
+          {showUpload && (
+            <div className="p-4 space-y-4 border-t bg-white">
+              <div className="flex justify-end">
+                <Button
+                  size="sm" variant="outline"
+                  onClick={() => {
+                    const headers = ["Consumer ID", "Name", "C/O", "Address", "Class", "Meter No", "Zone", "Mobile", "Latitude", "Longitude"]
+                    const sample  = ["100000001", "John Doe", "Father Name", "Village / Ward / Block / District", "LT Domestic", "OLDMTR001", "Zone A", "9876543210", "25.123456", "88.654321"]
+                    const csv     = [headers, sample].map(r => r.join(",")).join("\n")
+                    const blob    = new Blob([csv], { type: "text/csv" })
+                    const url     = URL.createObjectURL(blob)
+                    const a       = document.createElement("a")
+                    a.href        = url
+                    a.download    = "consumer_master_template.csv"
+                    a.click()
+                    URL.revokeObjectURL(url)
+                  }}
+                >
+                  Download Template
+                </Button>
+              </div>
+              <div
+                className="border-2 border-dashed rounded-lg p-6 text-center cursor-pointer hover:border-primary transition-colors"
+                onClick={() => document.getElementById("cm-file-input")?.click()}
+                onDragOver={e => e.preventDefault()}
+                onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) handleFileDrop(f) }}
+              >
+                <input
+                  id="cm-file-input"
+                  type="file"
+                  accept=".csv"
+                  className="hidden"
+                  onChange={e => { const f = e.target.files?.[0]; if (f) handleFileDrop(f) }}
+                />
+                {fileName
+                  ? <p className="font-medium">{fileName} <span className="text-muted-foreground text-sm">— {csvRows.length.toLocaleString()} rows</span></p>
+                  : <p className="text-muted-foreground">Drop a CSV here or click to choose</p>}
+              </div>
+
+              {/* Column mapping */}
+              {csvHeaders.length > 0 && (
+                <div className="space-y-3">
+                  <p className="text-sm font-medium">Map CSV columns to fields (<span className="text-red-500">*</span> required)</p>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    {(Object.keys(FIELD_LABELS) as (keyof ConsumerMasterRow)[]).map(field => (
+                      <div key={field} className="space-y-1">
+                        <Label className="text-xs">
+                          {FIELD_LABELS[field]}
+                          {REQUIRED_FIELDS.includes(field) && <span className="text-red-500 ml-1">*</span>}
+                        </Label>
+                        <Select
+                          value={mapping[field] !== undefined ? String(mapping[field]) : "__none"}
+                          onValueChange={v => setMapping(prev => {
+                            const next = { ...prev }
+                            if (v === "__none") delete next[field]
+                            else next[field] = Number(v)
+                            return next
+                          })}
+                        >
+                          <SelectTrigger className="h-8 text-xs">
+                            <SelectValue placeholder="— skip —" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="__none">— skip —</SelectItem>
+                            {csvHeaders.map((h, i) => (
+                              <SelectItem key={i} value={String(i)}>{h}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Preview */}
+                  {csvRows.length > 0 && mapping.consumerId !== undefined && mapping.name !== undefined && (
+                    <div className="text-xs border rounded p-2 bg-muted space-y-1">
+                      <p className="font-medium">Preview (first 3 rows):</p>
+                      {csvRows.slice(0, 3).map((r, i) => (
+                        <p key={i} className="text-muted-foreground truncate">
+                          {String(r[mapping.consumerId!] ?? "").trim()} — {String(r[mapping.name!] ?? "").trim()}
+                          {mapping.address !== undefined && ` — ${String(r[mapping.address] ?? "").trim()}`}
+                        </p>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="flex items-center gap-3">
+                    <Button onClick={handleUpload} disabled={uploading}>
+                      {uploading
+                        ? (uploadProgress ? `Uploading ${uploadProgress}…` : "Preparing…")
+                        : `Upload ${csvRows.length.toLocaleString()} rows`}
+                    </Button>
+                    {uploadResult && (
+                      <Badge variant="default">{uploadResult.count.toLocaleString()} uploaded</Badge>
+                    )}
+                    <p className="text-xs text-muted-foreground">This replaces all existing consumer data.</p>
+                  </div>
+                </div>
+              )}
             </div>
           )}
-          {query && results.length === 0 && dataLoaded && (
-            <p className="text-sm text-muted-foreground">No consumers matched "{query}".</p>
-          )}
-          {!dataLoaded && (
-            <p className="text-sm text-muted-foreground">Loading data…</p>
-          )}
-        </CardContent>
-      </Card>
+        </div>
+      )}
+
+      {/* ── Consumer detail popup ─────────────────────────────────────── */}
+      {selectedConsumer && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center" onClick={() => setSelectedConsumer(null)}>
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+          <div className="relative bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-lg max-h-[85vh] overflow-y-auto shadow-2xl animate-in slide-in-from-bottom duration-200 m-0 sm:m-4"
+            onClick={e => e.stopPropagation()}>
+            {/* Close button */}
+            <button className="absolute top-3 right-3 z-10 h-8 w-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center transition-colors"
+              onClick={() => setSelectedConsumer(null)}>
+              <X className="h-4 w-4 text-gray-600" />
+            </button>
+
+            {/* Header */}
+            <div className="bg-gradient-to-br from-blue-600 to-blue-700 text-white p-5 rounded-t-2xl">
+              <p className="text-lg font-bold">{selectedConsumer.name}</p>
+              {selectedConsumer.careOf && <p className="text-blue-200 text-sm mt-0.5">C/O {selectedConsumer.careOf}</p>}
+              <p className="text-blue-200 text-xs font-mono mt-1">{selectedConsumer.consumerId}</p>
+            </div>
+
+            {/* Details */}
+            <div className="p-5 space-y-4">
+              {/* Quick action buttons */}
+              <div className="flex gap-2">
+                {selectedConsumer.mobile && (
+                  <a href={`tel:${selectedConsumer.mobile}`}
+                    className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-green-50 text-green-700 rounded-xl text-sm font-semibold border border-green-200 hover:bg-green-100 transition-colors">
+                    <Phone className="h-4 w-4" /> Call
+                  </a>
+                )}
+                {selectedConsumer.latitude && selectedConsumer.longitude && (
+                  <a href={`https://www.google.com/maps?q=${selectedConsumer.latitude},${selectedConsumer.longitude}`}
+                    target="_blank" rel="noopener noreferrer"
+                    className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-blue-50 text-blue-700 rounded-xl text-sm font-semibold border border-blue-200 hover:bg-blue-100 transition-colors">
+                    <Map className="h-4 w-4" /> Map
+                  </a>
+                )}
+              </div>
+
+              {/* Info rows */}
+              <div className="space-y-3">
+                {[
+                  { icon: <MapPin className="h-4 w-4" />, label: "Address", value: selectedConsumer.address },
+                  { icon: <Monitor className="h-4 w-4" />, label: "Meter No", value: selectedConsumer.meterNo },
+                  { icon: <Phone className="h-4 w-4" />, label: "Mobile", value: selectedConsumer.mobile },
+                ].filter(row => row.value).map(row => (
+                  <div key={row.label} className="flex items-start gap-3 py-2 border-b border-gray-50 last:border-0">
+                    <div className="h-8 w-8 rounded-lg bg-gray-100 flex items-center justify-center text-gray-500 shrink-0">{row.icon}</div>
+                    <div className="min-w-0">
+                      <p className="text-[10px] uppercase tracking-wider text-gray-400 font-semibold">{row.label}</p>
+                      <p className="text-sm text-gray-900 font-medium break-words">{row.value}</p>
+                    </div>
+                  </div>
+                ))}
+                {/* Badges row */}
+                <div className="flex flex-wrap gap-2 pt-1">
+                  {selectedConsumer.baseClass && <Badge variant="outline" className="rounded-full">{selectedConsumer.baseClass}</Badge>}
+                  {selectedConsumer.zone && <Badge variant="secondary" className="rounded-full">{selectedConsumer.zone}</Badge>}
+                </div>
+                {/* Lat/Long */}
+                {selectedConsumer.latitude && selectedConsumer.longitude && (
+                  <div className="flex items-start gap-3 py-2">
+                    <div className="h-8 w-8 rounded-lg bg-gray-100 flex items-center justify-center text-gray-500 shrink-0"><Map className="h-4 w-4" /></div>
+                    <div>
+                      <p className="text-[10px] uppercase tracking-wider text-gray-400 font-semibold">Coordinates</p>
+                      <p className="text-sm text-gray-900 font-mono">{selectedConsumer.latitude}, {selectedConsumer.longitude}</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Bottom close */}
+            <div className="p-4 border-t">
+              <Button variant="outline" className="w-full rounded-xl" onClick={() => setSelectedConsumer(null)}>Close</Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
+

@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { ArrowLeft, Camera, Upload, Loader2, MapPin, Phone, IndianRupee } from "lucide-react"
+import { ArrowLeft, Camera, Upload, Loader2, MapPin, Phone, IndianRupee, Monitor } from "lucide-react"
 import type { ReconnectionRequest } from "@/lib/reconnection-service"
 
 interface Props {
@@ -161,6 +161,12 @@ export function ReconnectionUpdateForm({ request, userRole, username, onSave, on
               {request.agency}
             </span>
           </div>
+          {request.device && (
+            <div className="flex items-center gap-2 text-sm text-gray-600">
+              <Monitor className="h-4 w-4 text-gray-400" />
+              <span>Meter: <span className="font-mono font-medium">{request.device}</span></span>
+            </div>
+          )}
           <div className="flex items-start gap-2 text-sm text-gray-600">
             <MapPin className="h-4 w-4 mt-0.5 shrink-0 text-gray-400" />
             <span>{request.address}</span>

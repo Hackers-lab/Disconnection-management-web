@@ -9,7 +9,7 @@ import {
   Search, X, Plus, RotateCcw, MapPin, Phone, Clock,
   CheckCircle2, Lock, XCircle, ChevronLeft, ChevronRight,
   Loader2, Download, Image as ImageIcon, RefreshCw, Check,
-  DownloadCloud,
+  DownloadCloud, Monitor, Building2, User,
 } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
 import type { ReconnectionRequest } from "@/lib/reconnection-service"
@@ -46,11 +46,23 @@ function hoursAgo(ts: string): number {
 }
 
 function StatusBadge({ status }: { status: ReconnectionRequest["status"] }) {
-  if (status === "pending")     return <Badge className="bg-yellow-100 text-yellow-800">Pending</Badge>
-  if (status === "reconnected") return <Badge className="bg-green-100 text-green-800">Reconnected</Badge>
-  if (status === "door_locked") return <Badge className="bg-orange-100 text-orange-800">Door Locked</Badge>
-  if (status === "cancelled")   return <Badge className="bg-gray-100 text-gray-600">Cancelled</Badge>
-  return <Badge>{status}</Badge>
+  const styles: Record<string, string> = {
+    pending:     "bg-amber-50 text-amber-700 border border-amber-200",
+    reconnected: "bg-emerald-50 text-emerald-700 border border-emerald-200",
+    door_locked: "bg-orange-50 text-orange-700 border border-orange-200",
+    cancelled:   "bg-gray-50 text-gray-500 border border-gray-200",
+  }
+  const labels: Record<string, string> = {
+    pending: "⏳ Pending",
+    reconnected: "✅ Reconnected",
+    door_locked: "🔒 Door Locked",
+    cancelled: "✕ Cancelled",
+  }
+  return (
+    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${styles[status] || ""}`}>
+      {labels[status] || status}
+    </span>
+  )
 }
 
 export function ReconnectionList({ userRole, userAgencies, username, agencies }: Props) {
@@ -102,7 +114,8 @@ export function ReconnectionList({ userRole, userAgencies, username, agencies }:
       const q = search.toLowerCase()
       data = data.filter(r =>
         r.consumerId.includes(q) || r.name.toLowerCase().includes(q) ||
-        r.mobile.includes(q) || r.agency.toLowerCase().includes(q)
+        r.mobile.includes(q) || r.agency.toLowerCase().includes(q) ||
+        (r.device && r.device.toLowerCase().includes(q))
       )
     }
     if (dateFrom) data = data.filter(r => r.createdAt >= dateFrom)
@@ -190,33 +203,33 @@ export function ReconnectionList({ userRole, userAgencies, username, agencies }:
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {[
-          { label: "Pending",     value: pending,     color: "text-yellow-700", bg: "bg-yellow-50" },
-          { label: "Reconnected", value: reconnected,  color: "text-green-700",  bg: "bg-green-50" },
-          { label: "Door Locked", value: doorLocked,  color: "text-orange-700", bg: "bg-orange-50" },
-          { label: "Overdue >30h",value: overdue,     color: "text-red-700",    bg: "bg-red-50" },
+          { label: "Pending",     value: pending,     color: "text-amber-700",  bg: "bg-gradient-to-br from-amber-50 to-yellow-50",  border: "border-amber-100" },
+          { label: "Reconnected", value: reconnected,  color: "text-emerald-700", bg: "bg-gradient-to-br from-emerald-50 to-green-50", border: "border-emerald-100" },
+          { label: "Door Locked", value: doorLocked,  color: "text-orange-700", bg: "bg-gradient-to-br from-orange-50 to-amber-50",  border: "border-orange-100" },
+          { label: "Overdue >30h",value: overdue,     color: "text-red-700",    bg: "bg-gradient-to-br from-red-50 to-rose-50",      border: "border-red-100" },
         ].map(s => (
-          <div key={s.label} className={`${s.bg} rounded-xl p-3 flex flex-col items-center`}>
-            <span className={`text-2xl font-bold ${s.color}`}>{s.value}</span>
-            <span className="text-xs text-gray-500 mt-0.5">{s.label}</span>
+          <div key={s.label} className={`${s.bg} ${s.border} border rounded-2xl p-4 flex flex-col items-center shadow-sm`}>
+            <span className={`text-3xl font-extrabold ${s.color} tabular-nums`}>{s.value}</span>
+            <span className="text-xs text-gray-500 mt-1 font-medium">{s.label}</span>
           </div>
         ))}
       </div>
 
       {/* Controls */}
-      <div className="bg-white p-4 rounded-lg shadow-sm border sticky top-[64px] z-30 space-y-3">
+      <div className="bg-white p-4 rounded-xl shadow-sm border sticky top-[64px] z-30 space-y-3">
         <div className="flex items-center gap-2">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 h-4 w-4" />
             <Input value={search} onChange={e => setSearch(e.target.value)}
-              placeholder="Search ID, name, mobile, agency..." className="pl-10 pr-8" />
+              placeholder="Search ID, name, mobile, meter..." className="pl-10 pr-8 rounded-xl" />
             {search && <X className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-red-500 cursor-pointer" onClick={() => setSearch("")} />}
           </div>
           {isAdmin && (
-            <Button size="sm" variant="outline" onClick={downloadReport} className="shrink-0">
+            <Button size="sm" variant="outline" onClick={downloadReport} className="shrink-0 rounded-xl">
               <Download className="h-4 w-4" />
             </Button>
           )}
-          <Button size="sm" variant="ghost" onClick={load} className="shrink-0">
+          <Button size="sm" variant="ghost" onClick={() => load()} className="shrink-0">
             <RefreshCw className={`h-4 w-4 ${syncState === "loading" ? "animate-spin" : ""}`} />
           </Button>
         </div>
@@ -225,10 +238,10 @@ export function ReconnectionList({ userRole, userAgencies, username, agencies }:
         {isAdmin && (
           <div className="grid grid-cols-2 gap-2">
             <Input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
-              className="h-8 text-xs" placeholder="From" />
+              className="h-8 text-xs rounded-lg" placeholder="From" />
             <div className="flex gap-1">
               <Input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
-                className="h-8 text-xs flex-1" placeholder="To" />
+                className="h-8 text-xs flex-1 rounded-lg" placeholder="To" />
               {(dateFrom || dateTo) && (
                 <Button size="sm" variant="ghost" className="h-8 w-8 p-0 shrink-0"
                   onClick={() => { setDateFrom(""); setDateTo("") }}>
@@ -240,11 +253,13 @@ export function ReconnectionList({ userRole, userAgencies, username, agencies }:
         )}
 
         {/* Tabs */}
-        <div className="flex gap-1 overflow-x-auto pb-1">
+        <div className="flex gap-1.5 overflow-x-auto pb-1">
           {(["all", "pending", "reconnected", "door_locked"] as Tab[]).map(t => (
             <button key={t} onClick={() => setTab(t)}
-              className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap transition ${
-                tab === t ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+              className={`px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all duration-200 ${
+                tab === t
+                  ? "bg-blue-600 text-white shadow-md shadow-blue-200"
+                  : "bg-gray-100 text-gray-600 hover:bg-gray-200"
               }`}>
               {t === "all" ? "All" : t === "door_locked" ? "Door Locked" : t.charAt(0).toUpperCase() + t.slice(1)}
               {" "}
@@ -271,90 +286,122 @@ export function ReconnectionList({ userRole, userAgencies, username, agencies }:
           </div>
         ) : paginated.map(r => {
           const hrs = hoursAgo(r.createdAt)
-          const overdue = r.status === "pending" && hrs > 30
+          const overdueFlag = r.status === "pending" && hrs > 30
           return (
-            <Card key={r.requestId} className={`overflow-hidden transition-shadow hover:shadow-md ${overdue ? "border-red-300 border-2" : ""}`}>
-              <CardContent className="p-4">
-                <div className="flex justify-between items-start gap-2">
-                  <div className="min-w-0">
+            <Card key={r.requestId} className={`overflow-hidden transition-all duration-200 hover:shadow-lg ${
+              overdueFlag ? "border-red-300 border-2 bg-red-50/30" : "hover:border-blue-200"
+            }`}>
+              <CardContent className="p-0">
+                {/* Top color strip */}
+                <div className={`h-1 ${
+                  r.status === "reconnected" ? "bg-emerald-500"
+                  : r.status === "door_locked" ? "bg-orange-400"
+                  : r.status === "cancelled" ? "bg-gray-300"
+                  : overdueFlag ? "bg-red-500" : "bg-amber-400"
+                }`} />
+
+                <div className="p-4">
+                  {/* Header row: request info + status */}
+                  <div className="flex justify-between items-start gap-2">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-mono text-xs text-gray-400">{r.requestId}</span>
-                      <span className="text-xs text-gray-400">•</span>
-                      <span className="text-xs text-gray-400">{r.source === "dc_list" ? "DC List" : "Manual"}</span>
-                      {overdue && (
-                        <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-medium animate-pulse">
-                          ⚠ {Math.floor(hrs)}h — DC Blocked
+                      <span className="font-mono text-[11px] text-gray-400 bg-gray-50 px-1.5 py-0.5 rounded">{r.requestId}</span>
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
+                        r.source === "dc_list"
+                          ? "bg-blue-50 text-blue-600 border border-blue-100"
+                          : "bg-purple-50 text-purple-600 border border-purple-100"
+                      }`}>
+                        {r.source === "dc_list" ? "DC List" : "Manual"}
+                      </span>
+                      {overdueFlag && (
+                        <span className="text-[10px] bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-bold animate-pulse">
+                          ⚠ {Math.floor(hrs)}h overdue
                         </span>
                       )}
                     </div>
-                    <p className="font-semibold text-gray-900 mt-1 truncate">{r.name}</p>
-                    <p className="text-xs font-mono text-gray-500">{r.consumerId}</p>
-                    {r.device && (
-                      <p className="text-xs text-gray-600 mt-0.5">
-                        <span className="text-gray-400">Meter:</span>{" "}
-                        <span className="font-mono font-medium">{r.device}</span>
-                      </p>
-                    )}
+                    <StatusBadge status={r.status} />
+                  </div>
+
+                  {/* Consumer details */}
+                  <div className="mt-3 space-y-1.5">
+                    <div className="flex items-center gap-2">
+                      <User className="h-4 w-4 text-gray-400 shrink-0" />
+                      <p className="font-semibold text-gray-900 truncate">{r.name}</p>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 ml-6">
+                      <span className="text-xs font-mono text-gray-500">ID: {r.consumerId}</span>
+                      {r.device && (
+                        <span className="text-xs text-gray-500 flex items-center gap-1">
+                          <Monitor className="h-3 w-3 text-gray-400" />
+                          <span className="font-mono">{r.device}</span>
+                        </span>
+                      )}
+                    </div>
+
                     {r.address && (
-                      <div className="flex items-start gap-1 mt-1">
+                      <div className="flex items-start gap-2 ml-6">
                         <MapPin className="h-3 w-3 text-gray-400 mt-0.5 shrink-0" />
                         <p className="text-xs text-gray-500 line-clamp-1">{r.address}</p>
                       </div>
                     )}
-                    {r.mobile && (
-                      <div className="flex items-center gap-1 mt-1">
-                        <Phone className="h-3 w-3 text-gray-400" />
-                        <a href={`tel:${r.mobile}`} className="text-xs text-blue-600">{r.mobile}</a>
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex flex-col items-end gap-1 shrink-0">
-                    <StatusBadge status={r.status} />
-                    <span className="text-xs text-gray-400">{r.agency}</span>
-                  </div>
-                </div>
 
-                <div className="flex items-center justify-between mt-3 pt-3 border-t">
-                  <div className="text-xs text-gray-400 flex items-center gap-1">
-                    <Clock className="h-3 w-3" />
-                    {formatTs(r.createdAt)}
-                    {r.status !== "pending" && r.updatedAt && (
-                      <span className="ml-2">→ {formatTs(r.updatedAt)}</span>
-                    )}
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 ml-6">
+                      {r.mobile && (
+                        <a href={`tel:${r.mobile}`} className="text-xs text-blue-600 flex items-center gap-1 hover:underline">
+                          <Phone className="h-3 w-3" />
+                          {r.mobile}
+                        </a>
+                      )}
+                      <span className="text-xs text-gray-400 flex items-center gap-1">
+                        <Building2 className="h-3 w-3" />
+                        {r.agency}
+                      </span>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    {r.imageUrl && (
-                      <a href={r.imageUrl} target="_blank" rel="noopener noreferrer"
-                        className="text-xs text-blue-600 flex items-center gap-1">
-                        <ImageIcon className="h-3 w-3" /> Image
-                      </a>
-                    )}
-                    {canUpdate(r) && (
-                      <Button size="sm" className="h-7 text-xs bg-blue-600 hover:bg-blue-700 text-white"
-                        onClick={() => { setSelected(r); setView("update") }}>
-                        Update
-                      </Button>
-                    )}
-                    {isAdmin && r.status === "pending" && (
-                      <Button size="sm" variant="outline" className="h-7 text-xs text-red-600 border-red-200"
-                        onClick={async () => {
-                          if (!confirm("Cancel this request?")) return
-                          // Optimistic update — reflect immediately in UI
-                          setRecords(prev => {
-                            const updated = prev.map(x => x.requestId === r.requestId ? { ...x, status: "cancelled" as const } : x)
-                            saveToCache(CACHE_KEY, updated)
-                            return updated
-                          })
-                          // Background persist
-                          fetch("/api/reconnection/update", {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ requestId: r.requestId, status: "cancelled" }),
-                          }).then(() => load(true)).catch(() => load(true))
-                        }}>
-                        Cancel
-                      </Button>
-                    )}
+
+                  {/* Footer: timestamps + actions */}
+                  <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-100">
+                    <div className="text-[11px] text-gray-400 flex items-center gap-1">
+                      <Clock className="h-3 w-3" />
+                      {formatTs(r.createdAt)}
+                      {r.status !== "pending" && r.updatedAt && (
+                        <span className="ml-1.5 text-emerald-600">→ {formatTs(r.updatedAt)}</span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {r.imageUrl && (
+                        <a href={r.imageUrl} target="_blank" rel="noopener noreferrer"
+                          className="text-xs text-blue-600 flex items-center gap-1 hover:underline">
+                          <ImageIcon className="h-3 w-3" /> Photo
+                        </a>
+                      )}
+                      {canUpdate(r) && (
+                        <Button size="sm" className="h-7 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow-sm"
+                          onClick={() => { setSelected(r); setView("update") }}>
+                          Update
+                        </Button>
+                      )}
+                      {isAdmin && r.status === "pending" && (
+                        <Button size="sm" variant="outline" className="h-7 text-xs text-red-600 border-red-200 rounded-lg hover:bg-red-50"
+                          onClick={async () => {
+                            if (!confirm("Cancel this request?")) return
+                            // Optimistic update — reflect immediately in UI
+                            setRecords(prev => {
+                              const updated = prev.map(x => x.requestId === r.requestId ? { ...x, status: "cancelled" as const } : x)
+                              saveToCache(CACHE_KEY, updated)
+                              return updated
+                            })
+                            // Background persist
+                            fetch("/api/reconnection/update", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ requestId: r.requestId, status: "cancelled" }),
+                            }).then(() => load(true)).catch(() => load(true))
+                          }}>
+                          Cancel
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 </div>
               </CardContent>
@@ -365,12 +412,12 @@ export function ReconnectionList({ userRole, userAgencies, username, agencies }:
 
       {/* Pagination */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-between bg-white p-4 rounded-lg shadow-sm border">
-          <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}>
+        <div className="flex items-center justify-between bg-white p-4 rounded-xl shadow-sm border">
+          <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="rounded-lg">
             <ChevronLeft className="h-4 w-4 mr-1" /> Previous
           </Button>
           <span className="text-sm text-gray-600">Page {currentPage} of {totalPages}</span>
-          <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}>
+          <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="rounded-lg">
             Next <ChevronRight className="h-4 w-4 ml-1" />
           </Button>
         </div>
