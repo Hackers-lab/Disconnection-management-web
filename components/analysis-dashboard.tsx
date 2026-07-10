@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import * as XLSX from "xlsx"
+// xlsx loaded dynamically in exportExcel()
 import {
   BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, CartesianGrid,
 } from "recharts"
@@ -192,7 +192,7 @@ export function AnalysisDashboard({ userRole }: AnalysisDashboardProps) {
 
   // --- export ---
   const tableColumns = (): GroupMetricKey[] => columns
-  const exportExcel = () => {
+  const exportExcel = async () => {
     const header = ["Rank", GROUP_FIELDS.find(g => g.key === groupBy)?.label || groupBy,
       ...tableColumns().map(k => METRIC_BY_KEY[k].label), ...(hasScore ? ["Score"] : [])]
     const body = sortedRows.map(g => [
@@ -200,6 +200,7 @@ export function AnalysisDashboard({ userRole }: AnalysisDashboardProps) {
       ...tableColumns().map(k => Number((g as any)[k] || 0)),
       ...(hasScore ? [Number((g.score ?? 0).toFixed(1))] : []),
     ])
+    const XLSX = await import("xlsx")
     const ws = XLSX.utils.aoa_to_sheet([header, ...body])
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, "Analysis")

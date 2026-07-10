@@ -5,9 +5,7 @@ import { getFromCache } from "@/lib/indexed-db"
 import type { ConsumerData } from "@/lib/google-sheets"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
-import jsPDF from "jspdf"
-import autoTable from "jspdf-autotable"
-import * as XLSX from "xlsx"
+// jsPDF, autoTable, and XLSX are loaded dynamically in the export functions to optimize initial bundle size
 import {
   Download,
   FileSpreadsheet,
@@ -156,7 +154,9 @@ export function AgencyUpdatesReport({ userRole }: AgencyUpdatesReportProps) {
   }, [agencies, agencyTotals, dateTotals, grandTotal, dates])
 
   // PDF Export
-  function exportPDF() {
+  async function exportPDF() {
+    const { default: jsPDF } = await import("jspdf")
+    const { default: autoTable } = await import("jspdf-autotable")
     const doc = new jsPDF({ orientation: "landscape" })
     const pw = doc.internal.pageSize.width
 
@@ -237,7 +237,8 @@ export function AgencyUpdatesReport({ userRole }: AgencyUpdatesReportProps) {
   }
 
   // Excel Export
-  function exportExcel() {
+  async function exportExcel() {
+    const XLSX = await import("xlsx")
     const wb = XLSX.utils.book_new()
 
     // Sheet 1 — Matrix

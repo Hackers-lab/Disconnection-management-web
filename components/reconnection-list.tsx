@@ -16,7 +16,7 @@ import type { ReconnectionRequest } from "@/lib/reconnection-service"
 import { ReconnectionCreateForm } from "@/components/reconnection-create-form"
 import { ReconnectionUpdateForm } from "@/components/reconnection-update-form"
 import { getFromCache, saveToCache } from "@/lib/indexed-db"
-import * as XLSX from "xlsx"
+// xlsx is loaded dynamically in downloadReport() to avoid bundling ~1MB upfront
 
 const CACHE_KEY = "reconnection_data_cache"
 
@@ -137,8 +137,9 @@ export function ReconnectionList({ userRole, userAgencies, username, agencies }:
   }
 
   // ── Excel download ────────────────────────────────────────────────────────
-  const downloadReport = () => {
+  const downloadReport = async () => {
     if (!isAdmin) return
+    const XLSX = (await import("xlsx")).default ?? await import("xlsx")
     const rows = filtered.map((r, i) => ({
       "#": i + 1,
       "Request ID": r.requestId,
@@ -352,10 +353,10 @@ export function ReconnectionList({ userRole, userAgencies, username, agencies }:
                           {r.mobile}
                         </a>
                       )}
-                      <span className="text-xs text-gray-400 flex items-center gap-1">
-                        <Building2 className="h-3 w-3" />
+                      <Badge variant="outline" className="ml-auto bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100/80 text-[10px] font-bold px-2 py-0.5 rounded-md flex items-center gap-1 shrink-0 uppercase tracking-wider">
+                        <Building2 className="h-3 w-3 text-indigo-500" />
                         {r.agency}
-                      </span>
+                      </Badge>
                     </div>
                   </div>
 

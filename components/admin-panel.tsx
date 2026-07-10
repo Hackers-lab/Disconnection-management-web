@@ -2,7 +2,7 @@
 
 
 import Papa from "papaparse";
-import * as XLSX from "xlsx";
+// xlsx loaded dynamically inside various handlers to optimize initial bundle size
 import { getFromCache, saveToCache } from "@/lib/indexed-db";
 import { Table, TableHeader, TableRow, TableHead, TableCell, TableBody } from "@/components/ui/table";
 import React, { useState, useEffect, useMemo } from "react"
@@ -134,6 +134,7 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
                 setMessage({ type: "error", text: "No cached data found. Please open the Disconnection List first so data loads into your browser." });
                 return;
             }
+            const XLSX = await import("xlsx")
             // Convert to CSV using XLSX (already in deps)
             const headers = [
                 "off_code","MRU","Consumer Id","Name","Address","Base Class","Class",
@@ -357,15 +358,17 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
   }
 
   // Convert Excel serial date or string to DD-MM-YYYY (matches app convention).
-  const normalizeDate = (raw: any): string => {
+  const normalizeDate = (raw: any, XLSX?: any): string => {
     if (raw === null || raw === undefined || raw === "") return ""
     // Excel serial number
     if (typeof raw === "number") {
-      const d = XLSX.SSF.parse_date_code(raw)
-      if (d) {
-        const dd = String(d.d).padStart(2, "0")
-        const mm = String(d.m).padStart(2, "0")
-        return `${dd}-${mm}-${d.y}`
+      if (XLSX) {
+        const d = XLSX.SSF.parse_date_code(raw)
+        if (d) {
+          const dd = String(d.d).padStart(2, "0")
+          const mm = String(d.m).padStart(2, "0")
+          return `${dd}-${mm}-${d.y}`
+        }
       }
     }
     const s = String(raw).trim()
@@ -394,8 +397,9 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
     const isExcel = /\.(xlsx|xls)$/i.test(file.name)
     if (isExcel) {
       const reader = new FileReader()
-      reader.onload = (e) => {
+      reader.onload = async (e) => {
         try {
+          const XLSX = await import("xlsx")
           const data = new Uint8Array(e.target?.result as ArrayBuffer)
           const wb = XLSX.read(data, { type: "array", cellDates: false })
           const ws = wb.Sheets[wb.SheetNames[0]]
@@ -404,7 +408,7 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
             setPaymentParseError("Excel must have at least a header row and one data row.")
             return
           }
-          processPaymentRows(rows as any[][])
+          await processPaymentRows(rows as any[][])
         } catch (err: any) {
           setPaymentParseError(`Excel parse failed: ${err?.message || err}`)
         }
@@ -414,20 +418,20 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
       Papa.parse<any[]>(file, {
         header: false,
         skipEmptyLines: true,
-        complete: (res: any) => {
+        complete: async (res: any) => {
           const rows = (res.data as any[][]) || []
           if (rows.length < 2) {
             setPaymentParseError("CSV must have at least a header row and one data row.")
             return
           }
-          processPaymentRows(rows)
+          await processPaymentRows(rows)
         },
         error: (err: any) => setPaymentParseError(`CSV parse failed: ${err?.message || err}`),
       })
     }
   }
 
-  const processPaymentRows = (rows: any[][]) => {
+  const processPaymentRows = async (rows: any[][]) => {
     const headers = (rows[0] || []).map((h) => String(h ?? ""))
     const { idIdx, amtIdx, dateIdx } = detectPaymentColumns(headers)
     if (idIdx === -1 || amtIdx === -1) {
@@ -436,6 +440,7 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
       )
       return
     }
+    const XLSX = await import("xlsx")
     const parsed: PaymentParsed[] = []
     for (let i = 1; i < rows.length; i++) {
       const r = rows[i] || []
@@ -445,7 +450,7 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
       const amt = parseFloat(amtRaw)
       if (!isFinite(amt) || amt <= 0) continue
       const dateRaw = dateIdx !== -1 ? r[dateIdx] : ""
-      parsed.push({ consumerId: id, paidAmount: amt, paidDate: normalizeDate(dateRaw) })
+      parsed.push({ consumerId: id, paidAmount: amt, paidDate: normalizeDate(dateRaw, XLSX) })
     }
     setPaymentRows(parsed)
   }
@@ -1608,7 +1613,8 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
               >
                 {backupDownloading ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" />Preparing…</> : "⬇ Backup Current List"}
               </Button>
-              <Button size="sm" variant="outline" onClick={() => {
+              <Button size="sm" variant="outline" onClick={async () => {
+                const XLSX = await import("xlsx")
                 const wb = XLSX.utils.book_new()
                 XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
                   ["off_code", "MRU", "Consumer Id", "Name", "Address", "Base Class", "Device", "O/S Duedate Range", "D2 Net O/S", "Mobile Number"],
@@ -1679,7 +1685,8 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
                     setDcUploadResult(null)
                     if (/\.(xlsx|xls)$/i.test(file.name)) {
                       const reader = new FileReader()
-                      reader.onload = (ev) => {
+                      reader.onload = async (ev) => {
+                        const XLSX = await import("xlsx")
                         const wb = XLSX.read(new Uint8Array(ev.target?.result as ArrayBuffer), { type: "array" })
                         const ws = wb.Sheets[wb.SheetNames[0]]
                         const rows = XLSX.utils.sheet_to_json<any[]>(ws, { header: 1, defval: "" }) as any[][]
@@ -2007,7 +2014,8 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
                   ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" /> Re-syncing…</>
                   : <>Re-sync agencies</>}
               </Button>
-              <Button size="sm" variant="outline" onClick={() => {
+              <Button size="sm" variant="outline" onClick={async () => {
+                const XLSX = await import("xlsx")
                 const wb = XLSX.utils.book_new()
                 XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
                   ["MRU", "Agency", "Address"],
@@ -2133,7 +2141,8 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
                           setZoneUploadFileName(file.name)
                           if (/\.(xlsx|xls)$/i.test(file.name)) {
                             const reader = new FileReader()
-                            reader.onload = (ev) => {
+                            reader.onload = async (ev) => {
+                              const XLSX = await import("xlsx")
                               const wb = XLSX.read(new Uint8Array(ev.target?.result as ArrayBuffer), { type: "array" })
                               const ws = wb.Sheets[wb.SheetNames[0]]
                               const rows = XLSX.utils.sheet_to_json<any[]>(ws, { header: 1, defval: "" }) as any[][]

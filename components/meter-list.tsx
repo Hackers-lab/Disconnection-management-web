@@ -20,7 +20,8 @@ import { MeterIssueForm } from "@/components/meter-issue-form"
 import { MeterCompleteForm } from "@/components/meter-complete-form"
 import { printMeterSlip } from "@/components/meter-slip"
 import { getFromCache, saveToCache } from "@/lib/indexed-db"
-import * as XLSX from "xlsx"
+// xlsx loaded dynamically to reduce initial bundle size
+const loadXLSX = () => import("xlsx")
 
 const ADMIN_CACHE_KEY  = "meter_stock_cache"
 const AGENCY_CACHE_KEY = "meter_issues_cache"
@@ -231,7 +232,7 @@ export function MeterList({ userRole, userAgencies, username, agencies }: Props)
   }
 
   // ── Export handler ────────────────────────────────────────────────────────
-  const exportIssues = () => {
+  const exportIssues = async () => {
     if (filteredIssues.length === 0) { toast({ title: "No data to export" }); return }
     const rows = filteredIssues.map(i => ({
       "Issue ID":       i.issueId,
@@ -251,6 +252,7 @@ export function MeterList({ userRole, userAgencies, username, agencies }: Props)
       "Completed By":   i.completedBy,
       "Remarks":        i.remarks,
     }))
+    const XLSX = await loadXLSX()
     const ws = XLSX.utils.json_to_sheet(rows)
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, "Meter Issues")
@@ -682,7 +684,8 @@ function ReportsPanel({ issues, summary, onExport }: { issues: MeterIssue[]; sum
     total:     issues.filter(i => i.agency === agency).length,
   })).sort((a, b) => b.total - a.total)
 
-  const exportReport = () => {
+  const exportReport = async () => {
+    const XLSX = await loadXLSX()
     const wb = XLSX.utils.book_new()
     // Summary sheet
     const summaryRows = [
@@ -860,6 +863,7 @@ function AddStockForm({ onSave, onCancel }: { onSave: () => void; onCancel: () =
   const handleExcel = (file: File) => {
     const reader = new FileReader()
     reader.onload = async (ev) => {
+      const XLSX = await loadXLSX()
       const wb = XLSX.read(ev.target?.result, { type: "array" })
       const ws = wb.Sheets[wb.SheetNames[0]]
       const rows: any[] = XLSX.utils.sheet_to_json(ws)

@@ -1,24 +1,26 @@
 "use client"
 
 import { useState, useRef, useEffect } from "react"
+import dynamic from "next/dynamic"
 import { getFromCache, saveToCache } from "@/lib/indexed-db"
 import { DashboardShell } from "@/components/dashboard-shell"
 import { ViewType } from "@/components/app-sidebar"
 import { DashboardProvider } from "@/components/dashboard-context"
 import { DashboardMenu } from "@/components/dashboard-menu" 
-import { ConsumerList } from "@/components/consumer-list"
-import { AdminPanel } from "@/components/admin-panel"
-import { DDList } from "@/components/dd-list"
-import { AnalysisDashboard } from "@/components/analysis-dashboard"
-import { ReconnectionList } from "@/components/reconnection-list"
-import { MeterList } from "@/components/meter-list"
-import { NscList } from "@/components/nsc-list"
-import { AgencyUpdatesReport } from "@/components/agency-updates-report"
-import { ConsumerMaster } from "@/components/consumer-master"
 import type { ConsumerData } from "@/lib/google-sheets"
-import jsPDF from "jspdf"
-import autoTable from "jspdf-autotable"
-import * as XLSX from "xlsx" //
+// Heavy libraries loaded dynamically in download functions
+// import jsPDF / autoTable / XLSX — see handleDownloadConfirm, generateStatusReport, downloadPDF
+
+// Lazy-load view components to reduce initial bundle from ~3800 to ~800 modules
+const ConsumerList = dynamic(() => import("@/components/consumer-list").then(m => ({ default: m.ConsumerList })), { ssr: false })
+const AdminPanel = dynamic(() => import("@/components/admin-panel").then(m => ({ default: m.AdminPanel })), { ssr: false })
+const DDList = dynamic(() => import("@/components/dd-list").then(m => ({ default: m.DDList })), { ssr: false })
+const AnalysisDashboard = dynamic(() => import("@/components/analysis-dashboard").then(m => ({ default: m.AnalysisDashboard })), { ssr: false })
+const ReconnectionList = dynamic(() => import("@/components/reconnection-list").then(m => ({ default: m.ReconnectionList })), { ssr: false })
+const MeterList = dynamic(() => import("@/components/meter-list").then(m => ({ default: m.MeterList })), { ssr: false })
+const NscList = dynamic(() => import("@/components/nsc-list").then(m => ({ default: m.NscList })), { ssr: false })
+const AgencyUpdatesReport = dynamic(() => import("@/components/agency-updates-report").then(m => ({ default: m.AgencyUpdatesReport })), { ssr: false })
+const ConsumerMaster = dynamic(() => import("@/components/consumer-master").then(m => ({ default: m.ConsumerMaster })), { ssr: false })
 
 // UI Components for the Dialog
 import { Button } from "@/components/ui/button"
@@ -150,7 +152,7 @@ export default function DashboardClient({ role, agencies }: DashboardClientProps
   };
 
   // --- 2. EXECUTE DOWNLOAD ---
-  const handleDownloadConfirm = () => {
+  const handleDownloadConfirm = async () => {
     const topN = parseInt(downloadCount, 10);
     if (!topN || topN <= 0) {
       alert("Invalid number entered.");
@@ -167,7 +169,8 @@ export default function DashboardClient({ role, agencies }: DashboardClientProps
     const topConsumers = sorted.slice(0, topN);
 
     if (downloadFormat === "excel") {
-      // --- EXCEL LOGIC ---
+      // --- EXCEL LOGIC (dynamic import) ---
+      const XLSX = await import("xlsx")
       const excelData = topConsumers.map((c, index) => ({
         "Rank": index + 1,
         "Consumer ID": c.consumerId,
@@ -213,7 +216,9 @@ export default function DashboardClient({ role, agencies }: DashboardClientProps
       XLSX.writeFile(workbook, `Top_${topN}_Defaulters_${new Date().toISOString().slice(0,10)}.xlsx`);
 
     } else {
-      // --- PDF LOGIC (Existing) ---
+      // --- PDF LOGIC (dynamic import) ---
+      const { default: jsPDF } = await import("jspdf")
+      const { default: autoTable } = await import("jspdf-autotable")
       const doc = new jsPDF({ orientation: "landscape" });
       doc.setFontSize(16);
       doc.setTextColor(40, 53, 147);
@@ -270,7 +275,7 @@ export default function DashboardClient({ role, agencies }: DashboardClientProps
   };
 
   // --- STATUS REPORT ---
-  const generateStatusReport = () => {
+  const generateStatusReport = async () => {
     if (!consumerListRef.current) return;
     let consumers = [...consumerListRef.current.getCurrentConsumers()];
 
@@ -306,6 +311,7 @@ export default function DashboardClient({ role, agencies }: DashboardClientProps
     });
 
     if (downloadFormat === "excel") {
+      const XLSX = await import("xlsx")
       const wb = XLSX.utils.book_new();
       // Sheet 1: all rows
       const allRows = consumers.map((c, i) => ({
@@ -339,6 +345,8 @@ export default function DashboardClient({ role, agencies }: DashboardClientProps
       XLSX.writeFile(wb, `Status_Report_${new Date().toISOString().slice(0,10)}.xlsx`);
     } else {
       // PDF — one page per status group
+      const { default: jsPDF } = await import("jspdf")
+      const { default: autoTable } = await import("jspdf-autotable")
       const doc = new jsPDF({ orientation: "landscape" });
       const pageW = doc.internal.pageSize.width;
       let firstPage = true;
@@ -405,12 +413,14 @@ export default function DashboardClient({ role, agencies }: DashboardClientProps
   };
 
   // --- STANDARD REPORT PDF (Unchanged) ---
-  const downloadPDF = () => {
+  const downloadPDF = async () => {
     if (activeView !== "disconnection" || !consumerListRef.current) {
       alert("Please open the Disconnection List to download data.");
       return;
     }
     
+    const { default: jsPDF } = await import("jspdf")
+    const { default: autoTable } = await import("jspdf-autotable")
     const consumers = [...consumerListRef.current.getCurrentConsumers()];
     const doc = new jsPDF({ orientation: "landscape" });
     const isAdmin = role === "admin" || role === "viewer" || role === "executive";

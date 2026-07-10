@@ -19,7 +19,7 @@ import type { NSCApplication } from "@/lib/nsc-types"
 import { NscApplicationForm } from "@/components/nsc-application-form"
 import { NscInspectForm } from "@/components/nsc-inspect-form"
 import { NscProcessForm } from "@/components/nsc-process-form"
-import * as XLSX from "xlsx"
+// xlsx loaded dynamically to reduce bundle size
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import {
   CreateProjectForm, ProjectPOForm,
@@ -171,7 +171,7 @@ export function NscList({ userRole, userAgencies, username, agencies }: Props) {
   const projectCount    = scopedApps.filter(a => ["project_required", "project_ongoing", "project_done"].includes(a.status)).length
 
   // ── Export ────────────────────────────────────────────────────────────────
-  const exportData = () => {
+  const exportData = async () => {
     if (filtered.length === 0) { toast({ title: "No data to export" }); return }
     const rows = filtered.map(a => ({
       "Receive No":        a.receiveNo,
@@ -195,6 +195,7 @@ export function NscList({ userRole, userAgencies, username, agencies }: Props) {
       "Inspected At":      a.inspectedAt,
       "Finalized At":      a.finalizedAt,
     }))
+    const XLSX = await import("xlsx")
     const ws = XLSX.utils.json_to_sheet(rows)
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, "NSC Applications")
@@ -680,7 +681,8 @@ function NscReports({ apps }: { apps: NSCApplication[] }) {
     rejected:  apps.filter(a => a.agency === ag && a.agencyDecision === "rejected").length,
   })).sort((a, b) => b.total - a.total)
 
-  const exportReport = () => {
+  const exportReport = async () => {
+    const XLSX = await import("xlsx")
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
       ["Metric", "Count"],
