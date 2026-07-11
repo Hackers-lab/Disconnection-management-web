@@ -9,7 +9,7 @@ import {
   Search, X, Plus, RotateCcw, MapPin, Phone, Clock,
   CheckCircle2, Lock, XCircle, ChevronLeft, ChevronRight,
   Loader2, Download, Image as ImageIcon, RefreshCw, Check,
-  DownloadCloud, Monitor, Building2, User,
+  DownloadCloud, Monitor, Building2, User, Edit,
 } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
 import type { ReconnectionRequest } from "@/lib/reconnection-service"
@@ -245,7 +245,7 @@ export function ReconnectionList({ userRole, userAgencies, username, agencies }:
   return (
     <div className={`space-y-4 ${isAdmin ? "pb-24" : ""}`}>
       {/* Controls & Search */}
-      <div className="bg-white p-3 rounded-xl shadow-sm border space-y-2">
+      <div className="bg-white p-4 rounded-lg shadow-sm border space-y-3">
         <div className="flex items-center gap-2">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 h-4 w-4" />
@@ -272,34 +272,41 @@ export function ReconnectionList({ userRole, userAgencies, username, agencies }:
               <Download className="h-4 w-4" />
             </Button>
           )}
-          <Button size="sm" variant="ghost" onClick={() => load()} className="shrink-0 h-9 w-9 p-0">
-            <RefreshCw className={`h-4 w-4 ${syncState === "loading" ? "animate-spin" : ""}`} />
-          </Button>
         </div>
 
-        {/* Compact stats row below search/filter row */}
-        <div className="flex items-center gap-1.5 flex-wrap text-[10px] sm:text-xs font-semibold text-gray-500 border-t pt-2 mt-1">
-          <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-800 px-2 py-0.5 rounded-md border border-amber-100">
-            Pending: <span className="font-bold">{pendingCount}</span>
-          </span>
-          <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-800 px-2 py-0.5 rounded-md border border-emerald-100">
-            Reconnected: <span className="font-bold">{reconnectedCount}</span>
-          </span>
-          <span className="inline-flex items-center gap-1 bg-orange-50 text-orange-800 px-2 py-0.5 rounded-md border border-orange-100">
-            Door Locked: <span className="font-bold">{doorLockedCount}</span>
-          </span>
-          <span className="inline-flex items-center gap-1 bg-red-50 text-red-800 px-2 py-0.5 rounded-md border border-red-100">
-            Overdue: <span className="font-bold">{overdueCount}</span>
-          </span>
-          <span className="inline-flex items-center gap-1 bg-gray-50 text-gray-700 px-2 py-0.5 rounded-md border border-gray-200">
-            Total: <span className="font-bold">{allCount}</span>
-          </span>
-        </div>
-
-        <div className="flex items-center gap-3 text-xs text-gray-500 pt-0.5">
-          <span>{filtered.length} records found</span>
-          {syncState === "loading" && <span className="flex items-center gap-1 text-yellow-600 animate-pulse"><Loader2 className="h-3 w-3 animate-spin" />Loading...</span>}
-          {syncState === "updated" && <span className="flex items-center gap-1 text-green-600"><Check className="h-3 w-3" />Updated</span>}
+        <div className="flex justify-between items-center mt-2 text-xs text-gray-500">
+          <div className="flex items-center gap-2">
+            <span>{filtered.length} records</span>
+            <button
+              onClick={() => load()}
+              disabled={syncState === "loading"}
+              className={`flex items-center gap-1 rounded-full px-2 py-0.5 border transition-colors disabled:cursor-not-allowed ${
+                syncState === "loading"
+                  ? "border-blue-400 bg-blue-50 text-blue-500"
+                  : syncState === "updated"
+                  ? "border-green-500 bg-green-50 text-green-600"
+                  : "border-blue-300 bg-blue-50 text-blue-500 hover:border-blue-500 hover:bg-blue-100 hover:text-blue-700 active:scale-95 cursor-pointer"
+              }`}
+              title={syncState === "loading" ? "Loading data..." : "Tap to refresh"}
+            >
+              {syncState === "loading" ? (
+                <>
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  <span className="text-[10px] font-medium">Loading...</span>
+                </>
+              ) : syncState === "updated" ? (
+                <>
+                  <Check className="h-3 w-3" />
+                  <span className="text-[10px] font-medium">Updated</span>
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="h-3 w-3" />
+                  <span className="text-[10px] font-medium">Refresh</span>
+                </>
+              )}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -314,25 +321,21 @@ export function ReconnectionList({ userRole, userAgencies, username, agencies }:
           const overdueFlag = r.isOverdue
           const hrs = r.overdueHours
           return (
-            <Card key={r.requestId} className={`overflow-hidden transition-all duration-200 hover:shadow-lg ${
-              overdueFlag ? "border-red-300 border-2 bg-red-50/30" : "hover:border-blue-200"
+            <Card key={r.requestId} className={`hover:shadow-md transition-all duration-200 overflow-hidden max-w-full ${
+              overdueFlag ? "ring-2 ring-red-500 border-red-300" : "hover:border-blue-200"
             }`}>
-              <CardContent className="p-0">
-                {/* Top color strip */}
-                <div className={`h-1 ${
-                  r.status === "reconnected" ? "bg-emerald-500"
-                  : r.status === "door_locked" && r.effectiveStatus === "door_locked" ? "bg-orange-400"
-                  : r.status === "cancelled" ? "bg-gray-300"
-                  : overdueFlag ? "bg-red-500"
-                  : r.status === "door_locked" && r.effectiveStatus === "pending" ? "bg-pink-400"
-                  : "bg-amber-400"
-                }`} />
-
-                <div className="p-4">
-                  {/* Header row: request info + status */}
-                  <div className="flex justify-between items-start gap-2">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-mono text-[11px] text-gray-400 bg-gray-50 px-1.5 py-0.5 rounded">{r.requestId}</span>
+              <CardHeader className="pb-3 break-words whitespace-normal">
+                <div className="flex items-start justify-between w-full gap-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <CardTitle className="text-lg break-words whitespace-normal line-clamp-2 leading-tight font-semibold text-gray-900">{r.name}</CardTitle>
+                      {overdueFlag && (
+                        <span className="shrink-0 text-[10px] font-bold uppercase tracking-wide bg-red-600 text-white px-1.5 py-0.5 rounded animate-pulse">OVERDUE</span>
+                      )}
+                    </div>
+                    <p className="text-sm text-gray-600 font-mono mt-1">ID: {r.consumerId}</p>
+                    <div className="flex items-center gap-1.5 flex-wrap mt-2">
+                      <span className="font-mono text-[10px] text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">{r.requestId}</span>
                       <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
                         r.source === "dc_list"
                           ? "bg-blue-50 text-blue-600 border border-blue-100"
@@ -341,96 +344,97 @@ export function ReconnectionList({ userRole, userAgencies, username, agencies }:
                         {r.source === "dc_list" ? "DC List" : "Manual"}
                       </span>
                       {overdueFlag && (
-                        <span className="text-[10px] bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-bold animate-pulse">
+                        <span className="text-[10px] text-red-600 font-bold">
                           ⚠ {Math.floor(hrs)}h overdue
                         </span>
                       )}
                     </div>
+                  </div>
+                  <div className="flex flex-col items-end space-y-1.5 shrink-0">
                     <StatusBadge status={r.status} effectiveStatus={r.effectiveStatus} />
+                    <Badge variant="outline" className="text-[10px] font-bold uppercase tracking-wider bg-indigo-50 text-indigo-700 border-indigo-200">
+                      {r.agency}
+                    </Badge>
                   </div>
-
-                  {/* Consumer details */}
-                  <div className="mt-3 space-y-1.5">
-                    <div className="flex items-center gap-2">
-                      <User className="h-4 w-4 text-gray-400 shrink-0" />
-                      <p className="font-semibold text-gray-900 truncate">{r.name}</p>
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 ml-6">
-                      <span className="text-xs font-mono text-gray-500">ID: {r.consumerId}</span>
-                      {r.device && (
-                        <span className="text-xs text-gray-500 flex items-center gap-1">
-                          <Monitor className="h-3 w-3 text-gray-400" />
-                          <span className="font-mono">{r.device}</span>
-                        </span>
-                      )}
-                    </div>
-
-                    {r.address && (
-                      <div className="flex items-start gap-2 ml-6">
-                        <MapPin className="h-3 w-3 text-gray-400 mt-0.5 shrink-0" />
-                        <p className="text-xs text-gray-500 line-clamp-1">{r.address}</p>
-                      </div>
-                    )}
-
-                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 ml-6">
-                      {r.mobile && (
-                        <a href={`tel:${r.mobile}`} className="text-xs text-blue-600 flex items-center gap-1 hover:underline">
-                          <Phone className="h-3 w-3" />
-                          {r.mobile}
-                        </a>
-                      )}
-                      <Badge variant="outline" className="ml-auto bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100/80 text-[10px] font-bold px-2 py-0.5 rounded-md flex items-center gap-1 shrink-0 uppercase tracking-wider">
-                        <Building2 className="h-3 w-3 text-indigo-500" />
-                        {r.agency}
-                      </Badge>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-3 break-words whitespace-normal">
+                {r.address && (
+                  <div className="flex items-start space-x-2 min-w-0">
+                    <MapPin className="h-4 w-4 text-gray-400 mt-0.5 flex-shrink-0" />
+                    <p className="text-sm text-gray-600 line-clamp-2" title={r.address}>{r.address}</p>
+                  </div>
+                )}
+                {r.mobile && (
+                  <a href={`tel:${r.mobile}`} className="flex items-center space-x-2 hover:underline">
+                    <Phone className="h-4 w-4 text-gray-400" />
+                    <p className="text-sm text-blue-600">{r.mobile}</p>
+                  </a>
+                )}
+                {r.device && (
+                  <div className="flex items-center space-x-2">
+                    <Monitor className="h-4 w-4 text-gray-400" />
+                    <div className="flex-1">
+                      <p className="text-sm text-gray-600 font-mono">{r.device}</p>
+                      <p className="text-[10px] text-gray-500">Meter / Device</p>
                     </div>
                   </div>
+                )}
 
-                  {/* Footer: timestamps + actions */}
-                  <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-100">
-                    <div className="text-[11px] text-gray-400 flex items-center gap-1">
-                      <Clock className="h-3 w-3" />
-                      {formatTs(r.createdAt)}
-                      {r.status !== "pending" && r.updatedAt && (
-                        <span className="ml-1.5 text-emerald-600">→ {formatTs(r.updatedAt)}</span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {r.imageUrl && (
-                        <a href={r.imageUrl} target="_blank" rel="noopener noreferrer"
-                          className="text-xs text-blue-600 flex items-center gap-1 hover:underline">
-                          <ImageIcon className="h-3 w-3" /> Photo
-                        </a>
-                      )}
-                      {canUpdate(r) && (
-                        <Button size="sm" className="h-7 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow-sm"
-                          onClick={() => { setSelected(r); setView("update") }}>
-                          Update
-                        </Button>
-                      )}
-                      {isAdmin && r.effectiveStatus === "pending" && (
-                        <Button size="sm" variant="outline" className="h-7 text-xs text-red-600 border-red-200 rounded-lg hover:bg-red-50"
-                          onClick={async () => {
-                            if (!confirm("Cancel this request?")) return
-                            // Optimistic update — reflect immediately in UI
-                            setRecords(prev => {
-                              const updated = prev.map(x => x.requestId === r.requestId ? { ...x, status: "cancelled" as const } : x)
-                              saveToCache(CACHE_KEY, updated)
-                              return updated
-                            })
-                            // Background persist
-                            fetch("/api/reconnection/update", {
-                              method: "POST",
-                              headers: { "Content-Type": "application/json" },
-                              body: JSON.stringify({ requestId: r.requestId, status: "cancelled" }),
-                            }).then(() => load(true)).catch(() => load(true))
-                          }}>
-                          Cancel
-                        </Button>
-                      )}
-                    </div>
+                <div className="grid grid-cols-2 gap-2 text-xs text-gray-600 pt-2 border-t border-dashed">
+                  <div>
+                    <span className="font-semibold text-gray-500">Created:</span> {formatTs(r.createdAt)}
                   </div>
+                  {r.status !== "pending" && r.updatedAt ? (
+                    <div>
+                      <span className="font-semibold text-emerald-600">Updated:</span> {formatTs(r.updatedAt)}
+                    </div>
+                  ) : null}
+                </div>
+
+                {r.imageUrl && (
+                  <div className="pt-2 pb-1 relative z-10">
+                    <a href={r.imageUrl} target="_blank" rel="noopener noreferrer"
+                      className="inline-flex items-center space-x-1.5 text-xs font-medium text-blue-600 hover:text-blue-800 hover:underline transition-colors cursor-pointer">
+                      <ImageIcon className="h-3.5 w-3.5" /> <span>View Evidence Image</span>
+                    </a>
+                  </div>
+                )}
+
+                {/* Actions / Buttons */}
+                <div className="flex items-center gap-2 mt-4">
+                  {canUpdate(r) && (
+                    <Button
+                      onClick={() => { setSelected(r); setView("update") }}
+                      className="flex-1 bg-slate-950 hover:bg-slate-900 text-white text-xs font-semibold h-9 rounded-lg shadow-sm transition-colors"
+                      size="sm"
+                    >
+                      <Edit className="h-4 w-4 mr-2" />
+                      Update Status
+                    </Button>
+                  )}
+                  {isAdmin && r.effectiveStatus === "pending" && (
+                    <Button
+                      variant="outline"
+                      className="text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700 h-9 w-9 p-0 shrink-0 rounded-lg transition-colors"
+                      title="Cancel Request"
+                      onClick={async () => {
+                        if (!confirm("Cancel this request?")) return
+                        setRecords(prev => {
+                          const updated = prev.map(x => x.requestId === r.requestId ? { ...x, status: "cancelled" as const } : x)
+                          saveToCache(CACHE_KEY, updated)
+                          return updated
+                        })
+                        fetch("/api/reconnection/update", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ requestId: r.requestId, status: "cancelled" }),
+                        }).then(() => load(true)).catch(() => load(true))
+                      }}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  )}
                 </div>
               </CardContent>
             </Card>
