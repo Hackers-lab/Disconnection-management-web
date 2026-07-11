@@ -56,7 +56,7 @@ export function DashboardMenu({ onSelect, userRole, userAgencies = [], permissio
       icon: Zap,
       color: "text-red-600",
       bgColor: "bg-red-50",
-      borderColor: "hover:border-red-200",
+      borderColor: "hover:border-red-400 hover:shadow-red-500/10",
       allowed: ["all"],
       status: "live"
     },
@@ -67,7 +67,7 @@ export function DashboardMenu({ onSelect, userRole, userAgencies = [], permissio
       icon: RotateCcw,
       color: "text-blue-600",
       bgColor: "bg-blue-50",
-      borderColor: "hover:border-blue-200",
+      borderColor: "hover:border-blue-400 hover:shadow-blue-500/10",
       allowed: ["admin", "executive", "agency"],
       status: "live"
     },
@@ -78,7 +78,7 @@ export function DashboardMenu({ onSelect, userRole, userAgencies = [], permissio
       icon: UserX,
       color: "text-orange-600",
       bgColor: "bg-orange-50",
-      borderColor: "hover:border-orange-200",
+      borderColor: "hover:border-orange-400 hover:shadow-orange-500/10",
       allowed: ["admin", "executive", "agency"],
       status: "live"
     },
@@ -87,9 +87,9 @@ export function DashboardMenu({ onSelect, userRole, userAgencies = [], permissio
       title: "DTR Verification",
       description: "Verify transformer existence and record inspection parameters",
       icon: RadioTower,
-      color: "text-orange-600",
-      bgColor: "bg-orange-50",
-      borderColor: "hover:border-orange-200",
+      color: "text-amber-600",
+      bgColor: "bg-amber-50",
+      borderColor: "hover:border-amber-400 hover:shadow-amber-500/10",
       allowed: ["admin", "executive", "agency"],
       status: "live"
     },
@@ -100,7 +100,7 @@ export function DashboardMenu({ onSelect, userRole, userAgencies = [], permissio
       icon: Gauge,
       color: "text-purple-600",
       bgColor: "bg-purple-50",
-      borderColor: "hover:border-purple-200",
+      borderColor: "hover:border-purple-400 hover:shadow-purple-500/10",
       allowed: ["admin", "executive", "agency"],
       status: "live"
     },
@@ -111,7 +111,7 @@ export function DashboardMenu({ onSelect, userRole, userAgencies = [], permissio
       icon: ClipboardCheck,
       color: "text-green-600",
       bgColor: "bg-green-50",
-      borderColor: "hover:border-green-200",
+      borderColor: "hover:border-green-400 hover:shadow-green-500/10",
       allowed: ["admin", "executive", "agency"],
       status: "live"
     },
@@ -121,8 +121,8 @@ export function DashboardMenu({ onSelect, userRole, userAgencies = [], permissio
       description: userRole === "admin" ? "Upload & search 45k consumer database" : "Search consumer details by ID or name",
       icon: Users,
       color: "text-teal-600",
-      bgColor: "bg-teal-55",
-      borderColor: "hover:border-teal-200",
+      bgColor: "bg-teal-50",
+      borderColor: "hover:border-teal-400 hover:shadow-teal-500/10",
       allowed: ["admin", "executive", "agency"],
       status: "live"
     },
@@ -133,7 +133,7 @@ export function DashboardMenu({ onSelect, userRole, userAgencies = [], permissio
       icon: ClipboardCheck,
       color: "text-indigo-600",
       bgColor: "bg-indigo-50",
-      borderColor: "hover:border-indigo-200",
+      borderColor: "hover:border-indigo-400 hover:shadow-indigo-500/10",
       allowed: ["admin", "executive", "agency"],
       status: "live"
     },
@@ -144,7 +144,7 @@ export function DashboardMenu({ onSelect, userRole, userAgencies = [], permissio
       icon: Settings,
       color: "text-gray-600",
       bgColor: "bg-gray-50",
-      borderColor: "hover:border-gray-300",
+      borderColor: "hover:border-gray-400 hover:shadow-gray-500/10",
       allowed: ["admin"],
       status: "active"
     }
@@ -382,83 +382,78 @@ export function DashboardMenu({ onSelect, userRole, userAgencies = [], permissio
               return (
                 <Card 
                   key={module.id} 
-                  className={`group relative cursor-pointer transition-all duration-300 hover:shadow-xl hover:-translate-y-1 border border-gray-200 ${module.borderColor} overflow-hidden`}
+                  className={`group relative cursor-pointer transition-all duration-500 hover:shadow-2xl hover:-translate-y-1.5 border border-gray-200/80 bg-white/70 backdrop-blur-md rounded-2xl ${module.borderColor} overflow-hidden`}
                   onClick={() => {
                     if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
                     onSelect(module.id as ViewType)
                   }}
                 >
-                  {/* Badges and Card Content logic remains same... */}
                   {module.id === "disconnection" && (
-                    <div className={`absolute top-2 right-2 md:top-4 md:right-4 z-20 flex items-center justify-center text-white text-[10px] md:text-xs font-bold min-w-[1.5rem] h-6 px-1.5 md:min-w-[2rem] md:h-8 md:px-2 rounded-full shadow-lg border-2 border-white ${
-                      loadingModules["disconnection"] ? "bg-blue-500 animate-pulse" : pendingCount > 0 ? "bg-red-600" : "bg-gray-400"
+                    <div className={`absolute top-2 right-2 md:top-4 md:right-4 z-20 flex items-center justify-center text-white text-[10px] md:text-xs font-bold min-w-[1.5rem] h-6 px-1.5 md:min-w-[2rem] md:h-8 md:px-2 rounded-full shadow-lg border-2 border-white ring-2 ring-red-500/10 transition-all duration-300 group-hover:scale-105 ${
+                      loadingModules["disconnection"] ? "bg-blue-500 animate-pulse" : pendingCount > 0 ? "bg-red-600 shadow-red-500/20" : "bg-gray-400 shadow-gray-400/20"
                     }`}>
                       {loadingModules["disconnection"] ? <RefreshCw className="h-3 w-3 animate-spin" /> : pendingCount}
                     </div>
                   )}
                   {module.id === "deemed" && (
-                    <div className={`absolute top-2 right-2 md:top-4 md:right-4 z-20 flex items-center justify-center text-white text-[10px] md:text-xs font-bold min-w-[1.5rem] h-6 px-1.5 md:min-w-[2rem] md:h-8 md:px-2 rounded-full shadow-lg border-2 border-white ${
-                      loadingModules["deemed"] ? "bg-blue-500 animate-pulse" : ddPendingCount > 0 ? "bg-red-600" : "bg-gray-400"
+                    <div className={`absolute top-2 right-2 md:top-4 md:right-4 z-20 flex items-center justify-center text-white text-[10px] md:text-xs font-bold min-w-[1.5rem] h-6 px-1.5 md:min-w-[2rem] md:h-8 md:px-2 rounded-full shadow-lg border-2 border-white ring-2 ring-orange-500/10 transition-all duration-300 group-hover:scale-105 ${
+                      loadingModules["deemed"] ? "bg-blue-500 animate-pulse" : ddPendingCount > 0 ? "bg-orange-600 shadow-orange-500/20" : "bg-gray-400 shadow-gray-400/20"
                     }`}>
                       {loadingModules["deemed"] ? <RefreshCw className="h-3 w-3 animate-spin" /> : ddPendingCount}
                     </div>
                   )}
                   {module.id === "reconnection" && (
-                    <div className={`absolute top-2 right-2 md:top-4 md:right-4 z-20 flex items-center justify-center text-white text-[10px] md:text-xs font-bold min-w-[1.5rem] h-6 px-1.5 md:min-w-[2rem] md:h-8 md:px-2 rounded-full shadow-lg border-2 border-white ${
-                      loadingModules["reconnection"] ? "bg-blue-500 animate-pulse" : reconnectionPendingCount > 0 ? "bg-blue-600" : "bg-gray-400"
+                    <div className={`absolute top-2 right-2 md:top-4 md:right-4 z-20 flex items-center justify-center text-white text-[10px] md:text-xs font-bold min-w-[1.5rem] h-6 px-1.5 md:min-w-[2rem] md:h-8 md:px-2 rounded-full shadow-lg border-2 border-white ring-2 ring-blue-500/10 transition-all duration-300 group-hover:scale-105 ${
+                      loadingModules["reconnection"] ? "bg-blue-500 animate-pulse" : reconnectionPendingCount > 0 ? "bg-blue-600 shadow-blue-500/20" : "bg-gray-400 shadow-gray-400/20"
                     }`}>
                       {loadingModules["reconnection"] ? <RefreshCw className="h-3 w-3 animate-spin" /> : reconnectionPendingCount}
                     </div>
                   )}
                   {module.id === "nsc" && (
-                    <div className={`absolute top-2 right-2 md:top-4 md:right-4 z-20 flex items-center justify-center text-white text-[10px] md:text-xs font-bold min-w-[1.5rem] h-6 px-1.5 md:min-w-[2rem] md:h-8 md:px-2 rounded-full shadow-lg border-2 border-white ${
+                    <div className={`absolute top-2 right-2 md:top-4 md:right-4 z-20 flex items-center justify-center text-white text-[10px] md:text-xs font-bold min-w-[1.5rem] h-6 px-1.5 md:min-w-[2rem] md:h-8 md:px-2 rounded-full shadow-lg border-2 border-white ring-2 ring-green-500/10 transition-all duration-300 group-hover:scale-105 ${
                       loadingModules["nsc"] ? "bg-blue-500 animate-pulse" : nscPendingCount > 0 ? "bg-green-600" : "bg-gray-400"
                     }`}>
                       {loadingModules["nsc"] ? <RefreshCw className="h-3 w-3 animate-spin" /> : nscPendingCount}
                     </div>
                   )}
                   {module.id === "meter" && (
-                    <div className={`absolute top-2 right-2 md:top-4 md:right-4 z-20 flex items-center justify-center text-white text-[10px] md:text-xs font-bold min-w-[1.5rem] h-6 px-1.5 md:min-w-[2rem] md:h-8 md:px-2 rounded-full shadow-lg border-2 border-white ${
+                    <div className={`absolute top-2 right-2 md:top-4 md:right-4 z-20 flex items-center justify-center text-white text-[10px] md:text-xs font-bold min-w-[1.5rem] h-6 px-1.5 md:min-w-[2rem] md:h-8 md:px-2 rounded-full shadow-lg border-2 border-white ring-2 ring-purple-500/10 transition-all duration-300 group-hover:scale-105 ${
                       loadingModules["meter"] ? "bg-blue-500 animate-pulse" : meterPendingCount > 0 ? "bg-purple-600" : "bg-gray-400"
                     }`}>
                       {loadingModules["meter"] ? <RefreshCw className="h-3 w-3 animate-spin" /> : meterPendingCount}
                     </div>
                   )}
                   {module.id === "meter-replacement" && (
-                    <div className={`absolute top-2 right-2 md:top-4 md:right-4 z-20 flex items-center justify-center text-white text-[10px] md:text-xs font-bold min-w-[1.5rem] h-6 px-1.5 md:min-w-[2rem] md:h-8 md:px-2 rounded-full shadow-lg border-2 border-white ${
+                    <div className={`absolute top-2 right-2 md:top-4 md:right-4 z-20 flex items-center justify-center text-white text-[10px] md:text-xs font-bold min-w-[1.5rem] h-6 px-1.5 md:min-w-[2rem] md:h-8 md:px-2 rounded-full shadow-lg border-2 border-white ring-2 ring-indigo-500/10 transition-all duration-300 group-hover:scale-105 ${
                       loadingModules["meter-replacement"] ? "bg-blue-500 animate-pulse" : replacementPendingCount > 0 ? "bg-indigo-600" : "bg-gray-400"
                     }`}>
                       {loadingModules["meter-replacement"] ? <RefreshCw className="h-3 w-3 animate-spin" /> : replacementPendingCount}
                     </div>
                   )}
                   {module.id === "dtr" && (
-                    <div className={`absolute top-2 right-2 md:top-4 md:right-4 z-20 flex items-center justify-center text-white text-[10px] md:text-xs font-bold min-w-[1.5rem] h-6 px-1.5 md:min-w-[2rem] md:h-8 md:px-2 rounded-full shadow-lg border-2 border-white ${
+                    <div className={`absolute top-2 right-2 md:top-4 md:right-4 z-20 flex items-center justify-center text-white text-[10px] md:text-xs font-bold min-w-[1.5rem] h-6 px-1.5 md:min-w-[2rem] md:h-8 md:px-2 rounded-full shadow-lg border-2 border-white ring-2 ring-teal-500/10 transition-all duration-300 group-hover:scale-105 ${
                       loadingModules["dtr"] ? "bg-blue-500 animate-pulse" : dtrPendingCount > 0 ? "bg-teal-600" : "bg-gray-400"
                     }`}>
                       {loadingModules["dtr"] ? <RefreshCw className="h-3 w-3 animate-spin" /> : dtrPendingCount}
                     </div>
                   )}
 
-                  <div className={`absolute top-0 right-0 p-2 md:p-4 opacity-10 group-hover:opacity-20 transition-opacity duration-300`}>
-                     <Icon className={`h-16 w-16 md:h-24 md:w-24 ${module.color}`} />
+                  <div className={`absolute top-0 right-0 p-2 md:p-4 opacity-5 group-hover:opacity-10 transition-opacity duration-500`}>
+                     <Icon className={`h-16 w-16 md:h-24 md:w-24 ${module.color} transition-transform duration-500 group-hover:scale-110`} />
                   </div>
 
                   <CardHeader className="relative pb-2 p-3 md:p-6">
-                    <div className={`w-10 h-10 md:w-12 md:h-12 rounded-lg md:rounded-xl ${module.bgColor} flex items-center justify-center mb-2 md:mb-4 transition-transform duration-300 group-hover:scale-110`}>
+                    <div className={`w-10 h-10 md:w-12 md:h-12 rounded-lg md:rounded-xl ${module.bgColor} flex items-center justify-center mb-2 md:mb-4 transition-transform duration-500 group-hover:scale-110 group-hover:rotate-3 shadow-sm`}>
                       <Icon className={`h-5 w-5 md:h-6 md:w-6 ${module.color}`} />
                     </div>
-                    <CardTitle className="text-sm md:text-xl font-semibold text-gray-900 group-hover:text-blue-600 transition-colors">
+                    <CardTitle className="text-sm md:text-xl font-bold text-gray-900 group-hover:text-blue-600 transition-colors">
                       {module.title}
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="relative p-3 pt-0 md:p-6 md:pt-0">
-                    <p className="text-xs md:text-sm text-gray-500 mb-2 md:mb-4 line-clamp-2">
+                    <p className="text-xs md:text-sm text-gray-500 line-clamp-2">
                       {module.description}
                     </p>
-                    <div className="hidden md:flex items-center text-sm font-medium text-blue-600 opacity-0 transform translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300">
-                      Access Module <ArrowRight className="ml-2 h-4 w-4" />
-                    </div>
-                    {/* Live/Soon Tags logic remains same... */}
                   </CardContent>
                 </Card>
               )
