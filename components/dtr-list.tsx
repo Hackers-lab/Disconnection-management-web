@@ -50,8 +50,11 @@ import {
   TrendingUp,
   Building2,
   X,
-  Camera
+  Camera,
+  SlidersHorizontal
 } from "lucide-react"
+
+import { NearbyDtrMap } from "@/components/nearby-dtr-map"
 
 interface Props {
   userRole: string
@@ -84,10 +87,12 @@ export function DTRList({ userRole, userAgencies = [], username, agencies = [], 
   const { toast } = useToast()
   const [records, setRecords] = useState<DTRRecord[]>([])
   const [syncState, setSyncState] = useState<SyncState>("loading")
-  const [tab, setTab] = useState<TabType>("all")
+  const [tab, setTab] = useState<TabType>("pending")
   const [search, setSearch] = useState("")
   const [selectedFeeder, setSelectedFeeder] = useState<string>("all")
   const [selectedPainting, setSelectedPainting] = useState<string>("all")
+  const [showFilters, setShowFilters] = useState(false)
+  const [showMap, setShowMap] = useState(false)
   
   const [currentPage, setCurrentPage] = useState(1)
   const [selectedDtr, setSelectedDtr] = useState<DTRRecord | null>(null)
@@ -464,11 +469,8 @@ export function DTRList({ userRole, userAgencies = [], username, agencies = [], 
       
       {/* Top Header */}
       <div className="flex justify-between items-center flex-wrap gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-gray-900">DTR Physical Verification</h1>
-          <p className="text-sm text-gray-500 mt-0.5">Audit Distribution Transformers and log field conditions</p>
-        </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-bold tracking-tight text-gray-900">DTR Verification</h1>
           <Badge variant="outline" className="bg-white border-gray-200 py-1 px-2.5">
             {syncState === "loading" && <Loader2 className="h-3 w-3 animate-spin mr-1.5 text-blue-600" />}
             {syncState === "updated" && <CheckCircle2 className="h-3 w-3 mr-1.5 text-green-600" />}
@@ -478,131 +480,110 @@ export function DTRList({ userRole, userAgencies = [], username, agencies = [], 
         </div>
       </div>
 
-      {/* Stats Dashboard */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        
-        {/* Verification Progress */}
-        <Card className="border border-gray-150 shadow-sm relative overflow-hidden">
-          <CardContent className="p-5 space-y-2">
-            <p className="text-xs font-semibold text-blue-600 uppercase tracking-wider">Verification Progress</p>
-            <div className="flex justify-between items-baseline">
-              <span className="text-2xl font-bold text-gray-900">{stats.completed}</span>
-              <span className="text-sm font-semibold text-gray-500">/ {stats.total} DTRs</span>
-            </div>
-            <div className="space-y-1">
-              <Progress value={stats.progress} className="h-2 bg-blue-50" />
-              <p className="text-[10px] text-right font-medium text-blue-600">{stats.progress}% Completed</p>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Painting Progress */}
-        <Card className="border border-gray-150 shadow-sm relative overflow-hidden">
-          <CardContent className="p-5 space-y-2">
-            <p className="text-xs font-semibold text-orange-600 uppercase tracking-wider">Painting Completed</p>
-            <div className="flex justify-between items-baseline">
-              <span className="text-2xl font-bold text-gray-900">{stats.paintingDone}</span>
-              <span className="text-sm font-semibold text-gray-500">/ {stats.total} DTRs</span>
-            </div>
-            <div className="space-y-1">
-              <Progress value={stats.paintingProgress} className="h-2 bg-orange-50" />
-              <p className="text-[10px] text-right font-medium text-orange-600">{stats.paintingProgress}% Painted</p>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Pending Card */}
-        <Card className="border border-gray-150 shadow-sm">
-          <CardContent className="p-5 flex items-center justify-between">
-            <div className="space-y-1">
-              <p className="text-xs font-semibold text-red-600 uppercase tracking-wider">Pending Audit</p>
-              <p className="text-2xl font-bold text-gray-900">{stats.pending}</p>
-            </div>
-            <div className="p-3 bg-red-50 rounded-2xl">
-              <AlertCircle className="h-6 w-6 text-red-600" />
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Total Transformers */}
-        <Card className="border border-gray-150 shadow-sm">
-          <CardContent className="p-5 flex items-center justify-between">
-            <div className="space-y-1">
-              <p className="text-xs font-semibold text-indigo-600 uppercase tracking-wider">Total in System</p>
-              <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
-            </div>
-            <div className="p-3 bg-indigo-50 rounded-2xl">
-              <RadioTower className="h-6 w-6 text-indigo-600" />
-            </div>
-          </CardContent>
-        </Card>
-
-      </div>
-
       {/* Filter and Control Bar */}
       <div className="bg-white border rounded-2xl p-4 shadow-sm space-y-4">
-        
-        {/* Status Tab Toggle */}
-        <div className="flex gap-2 border-b pb-2 flex-wrap">
-          {(["all", "pending", "completed"] as TabType[]).map(t => (
-            <Button
-              key={t}
-              variant={tab === t ? "default" : "ghost"}
-              className={`h-9 px-4 rounded-xl capitalize font-medium ${
-                tab === t 
-                  ? "bg-blue-600 hover:bg-blue-700 text-white" 
-                  : "text-gray-650 hover:bg-gray-50"
-              }`}
-              onClick={() => setTab(t)}
-            >
-              {t === "all" ? "All Transformers" : t === "pending" ? "Pending Audit" : "Verified DTRs"}
-            </Button>
-          ))}
-        </div>
-
-        {/* Dropdowns & Search */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-          
-          {/* Search Box */}
-          <div className="relative md:col-span-2">
+        {/* Row 1: Search and Filters toggle button */}
+        <div className="flex gap-3">
+          <div className="relative flex-grow">
             <Search className="absolute left-3.5 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
             <Input
               placeholder="Search Code, Feeder, Landmark, Agency..."
               value={search}
               onChange={e => setSearch(e.target.value)}
-              className="pl-10 h-11 rounded-xl"
+              className="pl-10 h-11 rounded-xl bg-white border-slate-200"
             />
           </div>
 
-          {/* Feeder Select */}
-          <div className="relative">
-            <Select value={selectedFeeder} onValueChange={setSelectedFeeder}>
-              <SelectTrigger className="h-11 rounded-xl">
-                <SelectValue placeholder="All Feeders" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Feeders</SelectItem>
-                {feeders.map(f => (
-                  <SelectItem key={f} value={f}>{f}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          <Button
+            variant={showFilters ? "default" : "outline"}
+            onClick={() => setShowFilters(!showFilters)}
+            className={`h-11 w-11 p-0 rounded-xl flex items-center justify-center ${
+              showFilters 
+                ? "bg-slate-900 text-white hover:bg-slate-800" 
+                : "text-slate-700 border-slate-200 hover:bg-slate-50"
+            }`}
+            title="Toggle Filters"
+          >
+            <SlidersHorizontal className="h-4 w-4" />
+          </Button>
+        </div>
 
-          {/* Painting Select */}
-          <div className="relative">
-            <Select value={selectedPainting} onValueChange={setSelectedPainting}>
-              <SelectTrigger className="h-11 rounded-xl">
-                <SelectValue placeholder="Painting Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Painting</SelectItem>
-                <SelectItem value="Done">Done</SelectItem>
-                <SelectItem value="Pending">Pending</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+        {/* Row 2: Collapsible Filters */}
+        {showFilters && (
+          <div className="flex gap-3 pt-3 border-t border-slate-100 flex-wrap animate-in slide-in-from-top-2 duration-200">
+            {/* Status Select */}
+            <div className="flex flex-col gap-1 w-full sm:w-48">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Audit Status</span>
+              <Select value={tab} onValueChange={(val: any) => { setTab(val); setShowMap(false); }}>
+                <SelectTrigger className="h-10 rounded-xl bg-white border-slate-200 text-xs font-semibold">
+                  <SelectValue placeholder="All Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Transformers</SelectItem>
+                  <SelectItem value="pending">Pending Audit</SelectItem>
+                  <SelectItem value="completed">Verified DTRs</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
 
+            {/* Feeder Select */}
+            <div className="flex flex-col gap-1 w-full sm:w-48">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Feeder Name</span>
+              <Select value={selectedFeeder} onValueChange={setSelectedFeeder}>
+                <SelectTrigger className="h-10 rounded-xl bg-white border-slate-200 text-xs font-semibold">
+                  <SelectValue placeholder="All Feeders" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Feeders</SelectItem>
+                  {feeders.map(f => (
+                    <SelectItem key={f} value={f}>{f}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Painting Select */}
+            <div className="flex flex-col gap-1 w-full sm:w-48">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Painting Status</span>
+              <Select value={selectedPainting} onValueChange={setSelectedPainting}>
+                <SelectTrigger className="h-10 rounded-xl bg-white border-slate-200 text-xs font-semibold">
+                  <SelectValue placeholder="Painting Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Painting</SelectItem>
+                  <SelectItem value="Done">Done</SelectItem>
+                  <SelectItem value="Pending">Pending</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        )}
+
+        {/* Row 3: Locate Nearby DTR Button */}
+        <Button
+          type="button"
+          onClick={() => setShowMap(!showMap)}
+          className={`w-full h-12 rounded-xl font-extrabold flex items-center justify-center gap-2 text-sm shadow-md transition-all duration-300 transform hover:scale-[1.01] bg-gradient-to-r from-blue-600 to-indigo-650 hover:from-blue-700 hover:to-indigo-750 text-white`}
+        >
+          <MapPin className="h-4.5 w-4.5 animate-bounce" />
+          {showMap ? "Hide Navigation Radar" : "Locate Nearby DTR"}
+        </Button>
+
+        {/* Row 4: Compact Progress Bar */}
+        <div className="pt-3 border-t flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-1.5 text-slate-500">
+            <span className="font-semibold text-slate-700">Audit Progress:</span>
+            <span className="font-bold text-slate-900">{stats.completed}</span>
+            <span>of</span>
+            <span className="font-bold text-slate-900">{stats.total}</span>
+            <span>completed ({stats.progress}%)</span>
+          </div>
+          <div className="w-full sm:w-64 bg-slate-100 h-2 rounded-full overflow-hidden">
+            <div 
+              className="bg-blue-600 h-full rounded-full transition-all duration-500" 
+              style={{ width: `${stats.progress}%` }} 
+            />
+          </div>
         </div>
 
       </div>
@@ -1061,6 +1042,17 @@ export function DTRList({ userRole, userAgencies = [], username, agencies = [], 
               </Table>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* POPUP MODAL 3: NEARBY DTR MAP RADAR */}
+      <Dialog open={showMap} onOpenChange={setShowMap}>
+        <DialogContent className="max-w-4xl w-[95vw] p-0 rounded-2xl overflow-hidden border bg-white text-slate-900">
+          <DialogHeader className="sr-only">
+            <DialogTitle>Nearby DTR Radar</DialogTitle>
+            <DialogDescription>Interactive map showing distribution transformers nearby using GPS coordinates.</DialogDescription>
+          </DialogHeader>
+          <NearbyDtrMap records={records} onClose={() => setShowMap(false)} />
         </DialogContent>
       </Dialog>
 
