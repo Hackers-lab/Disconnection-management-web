@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge"
 import type { ConsumerData } from "@/lib/google-sheets"
+import { getFromCache, saveToCache } from "@/lib/indexed-db"
 
 interface ConsumerFormProps {
   consumer: ConsumerData
@@ -52,12 +53,26 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
   }[]>([])
 
   const loadHistory = async () => {
-    if (historyEntries.length > 0) { setHistoryOpen(true); return }
-    setHistoryLoading(true)
-    setHistoryOpen(true)
+    const cacheKey = `consumer_history_${consumer.consumerId}`
+    const cached = await getFromCache<any[]>(cacheKey)
+    if (cached) {
+      setHistoryEntries(cached)
+    }
+
+    if (historyEntries.length > 0 || cached) {
+      setHistoryOpen(true)
+    } else {
+      setHistoryLoading(true)
+      setHistoryOpen(true)
+    }
+
     try {
       const resp = await fetch(`/api/consumers/history?id=${encodeURIComponent(consumer.consumerId)}`)
-      if (resp.ok) setHistoryEntries(await resp.json())
+      if (resp.ok) {
+        const data = await resp.json()
+        setHistoryEntries(data)
+        await saveToCache(cacheKey, data)
+      }
     } catch { /* silent */ }
     finally { setHistoryLoading(false) }
   }

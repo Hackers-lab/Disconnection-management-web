@@ -25,6 +25,7 @@ import {
   DialogContent,
   DialogTitle,
   DialogDescription,
+  DialogHeader,
 } from "@/components/ui/dialog"
 import { format } from "date-fns"
 import {
@@ -57,6 +58,11 @@ import {
   Loader2,
   DownloadCloud,
   Activity,
+  History,
+  Wallet,
+  PowerOff,
+  Footprints,
+  PlusCircle,
 } from "lucide-react"
 import { DashboardStats } from "./dashboard-stats"
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -167,11 +173,13 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
   const [viewMode, setViewMode] = useState<"card" | "list">("card")
   const [previewConsumer, setPreviewConsumer] = useState<ConsumerData | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
+  const [activeHistoryConsumer, setActiveHistoryConsumer] = useState<ConsumerData | null>(null)
 
   // Handle back button navigation for modals/overlays
   useBackNavigation(isFilterOpen, () => setIsFilterOpen(false))
   useBackNavigation(!!selectedConsumer, () => setSelectedConsumer(null))
   useBackNavigation(!!previewConsumer, () => setPreviewConsumer(null))
+  useBackNavigation(!!activeHistoryConsumer, () => setActiveHistoryConsumer(null))
   useBackNavigation(showAdminPanel, onCloseAdminPanel)
 
   useEffect(() => {
@@ -1320,7 +1328,20 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
                         <span className="shrink-0 text-[10px] font-bold uppercase tracking-wide bg-red-600 text-white px-1.5 py-0.5 rounded">URGENT</span>
                       )}
                     </div>
-                    <p className="text-sm text-gray-600">{consumer.consumerId}</p>
+                    <div className="flex items-center gap-1.5 mt-1">
+                      <p className="text-sm text-gray-600 font-mono">ID: {consumer.consumerId}</p>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
+                          setActiveHistoryConsumer(consumer)
+                        }}
+                        className="text-gray-400 hover:text-slate-900 transition-colors p-1 rounded hover:bg-gray-100 cursor-pointer"
+                        title="View history"
+                      >
+                        <History className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
                     {consumer.mru ? (
                       <Badge variant="outline" className="mt-2 text-[10px] uppercase tracking-[0.08em]">
                         {consumer.mru}
@@ -1451,7 +1472,18 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
                     <tr key={consumer.consumerId} className={`hover:bg-gray-50 transition-colors ${(consumer.priority || "").toLowerCase() === "urgent" ? "bg-red-50 border-l-4 border-red-500" : ""}`}>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1.5">
-                          <span className="font-medium text-gray-900">{consumer.consumerId}</span>
+                          <span className="font-medium text-gray-900 font-mono">{consumer.consumerId}</span>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
+                              setActiveHistoryConsumer(consumer)
+                            }}
+                            className="text-gray-400 hover:text-slate-900 transition-colors p-1 rounded hover:bg-gray-100 cursor-pointer"
+                            title="View history"
+                          >
+                            <History className="h-3.5 w-3.5" />
+                          </button>
                           {(consumer.priority || "").toLowerCase() === "urgent" && (
                             <span className="text-[9px] font-bold uppercase tracking-wide bg-red-600 text-white px-1 py-0.5 rounded">URGENT</span>
                           )}
@@ -1528,7 +1560,20 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
                 <div className="flex justify-between items-start">
                   <div className="flex items-center gap-2 min-w-0 flex-1 mr-2">
                      <div className="shrink-0">{getStatusIcon(consumer.disconStatus)}</div>
-                     <div className="font-semibold text-sm text-gray-900 shrink-0">{consumer.consumerId}</div>
+                     <div className="flex items-center gap-1 shrink-0">
+                       <span className="font-semibold text-sm text-gray-900 font-mono">{consumer.consumerId}</span>
+                       <button
+                         onClick={(e) => {
+                           e.stopPropagation()
+                           if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
+                           setActiveHistoryConsumer(consumer)
+                         }}
+                         className="text-gray-400 hover:text-slate-900 transition-colors p-1 rounded hover:bg-gray-100 cursor-pointer"
+                         title="View history"
+                       >
+                         <History className="h-3.5 w-3.5" />
+                       </button>
+                     </div>
                      {(consumer.priority || "").toLowerCase() === "urgent" && (
                        <span className="text-[9px] font-bold uppercase bg-red-600 text-white px-1 py-0.5 rounded shrink-0">URGENT</span>
                      )}
@@ -1746,8 +1791,145 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Consumer History Dialog */}
+      {activeHistoryConsumer && (
+        <ConsumerHistoryDialog
+          consumer={activeHistoryConsumer}
+          onClose={() => setActiveHistoryConsumer(null)}
+        />
+      )}
     </div>
   )
 })
+
+function ConsumerHistoryDialog({ consumer, onClose }: { consumer: ConsumerData; onClose: () => void }) {
+  const [historyEntries, setHistoryEntries] = useState<any[]>([])
+  const [historyLoading, setHistoryLoading] = useState(false)
+
+  const eventMeta = (h: { action: string; newStatus: string }) => {
+    const a = (h.action || "").toLowerCase()
+    const ns = (h.newStatus || "").toLowerCase()
+    if (a === "paid" || ns === "paid") return { label: "Paid", Icon: Wallet, color: "text-green-600", ring: "bg-green-100" }
+    if (a === "removed_from_upload") return { label: "Removed from list", Icon: Trash2, color: "text-red-600", ring: "bg-red-100" }
+    if (a.startsWith("in_new_list")) return { label: "Listed in cycle", Icon: PlusCircle, color: "text-blue-600", ring: "bg-blue-100" }
+    if (ns === "disconnected" || ns.includes("disconnect")) return { label: "Disconnected", Icon: PowerOff, color: "text-red-600", ring: "bg-red-100" }
+    if (ns === "visited" || ns === "not found") return { label: ns === "visited" ? "Visited" : "Not found", Icon: Footprints, color: "text-amber-600", ring: "bg-amber-100" }
+    return { label: (h.action || "Updated").replace(/_/g, " "), Icon: Clock, color: "text-gray-500", ring: "bg-gray-100" }
+  }
+
+  const getValidUrl = (url: string | undefined) => {
+    if (!url) return "#"
+    const clean = url.trim()
+    if (clean.startsWith("http://") || clean.startsWith("https://")) return clean
+    return `https://${clean}`
+  }
+
+  useEffect(() => {
+    let active = true
+    const loadHistory = async () => {
+      const cacheKey = `consumer_history_${consumer.consumerId}`
+      const cached = await getFromCache<any[]>(cacheKey)
+      if (cached && active) {
+        setHistoryEntries(cached)
+      } else {
+        setHistoryLoading(true)
+      }
+
+      try {
+        const resp = await fetch(`/api/consumers/history?id=${encodeURIComponent(consumer.consumerId)}`)
+        if (resp.ok && active) {
+          const data = await resp.json()
+          setHistoryEntries(data)
+          await saveToCache(cacheKey, data)
+        }
+      } catch (err) {
+        console.error(err)
+      } finally {
+        if (active) setHistoryLoading(false)
+      }
+    }
+    loadHistory()
+    return () => {
+      active = false
+    }
+  }, [consumer.consumerId])
+
+  return (
+    <Dialog open={true} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto rounded-lg">
+        <DialogHeader>
+          <DialogTitle>Consumer History — {consumer.consumerId}</DialogTitle>
+          <DialogDescription className="sr-only">Timeline of changes for consumer {consumer.consumerId}</DialogDescription>
+        </DialogHeader>
+        {historyLoading && historyEntries.length === 0 && (
+          <div className="flex items-center justify-center py-8 gap-2 text-sm text-gray-500">
+            <Loader2 className="h-4 w-4 animate-spin" /> Loading history…
+          </div>
+        )}
+        {!historyLoading && historyEntries.length === 0 && (
+          <p className="text-sm text-gray-400 py-6 text-center">No history recorded yet.</p>
+        )}
+        {historyEntries.length > 0 && (
+          <div className="mt-2 relative pl-5">
+            <span className="absolute left-[9px] top-1 bottom-1 w-px bg-gray-200" aria-hidden />
+            <div className="space-y-3">
+              {historyEntries.map((h, i) => {
+                const meta = eventMeta(h)
+                const Icon = meta.Icon
+                return (
+                  <div key={i} className="relative border rounded-lg p-3 space-y-2 bg-gray-50 text-left">
+                    <span className={`absolute -left-[18px] top-3 h-5 w-5 rounded-full flex items-center justify-center ${meta.ring}`}>
+                      <Icon className={`h-3 w-3 ${meta.color}`} />
+                    </span>
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <span className={`text-xs font-semibold ${meta.color}`}>{meta.label}</span>
+                      <span className="text-[10px] font-mono text-gray-400">{h.timestamp}</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs flex-wrap">
+                      {h.oldStatus && (
+                        <span className="bg-red-100 text-red-700 px-2 py-0.5 rounded-full">{h.oldStatus}</span>
+                      )}
+                      {h.newStatus && h.newStatus !== h.oldStatus && (
+                        <>
+                          <span className="text-gray-400">→</span>
+                          <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded-full">{h.newStatus}</span>
+                        </>
+                      )}
+                      {h.amount && Number(h.amount) > 0 && (
+                        <span className="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-medium">₹{Number(h.amount).toLocaleString("en-IN")}</span>
+                      )}
+                      {h.oldOsd && (
+                        <span className="text-gray-500">OSD: ₹{Number(h.oldOsd).toLocaleString("en-IN")}</span>
+                      )}
+                      {h.eventDate && <span className="text-gray-400">on {h.eventDate}</span>}
+                    </div>
+                    {h.oldNotes && (
+                      <p className="text-xs text-gray-600 italic">Remarks: {h.oldNotes}</p>
+                    )}
+                    <div className="flex items-center justify-between">
+                      {h.oldImageUrl ? (
+                        <a
+                          href={getValidUrl(h.oldImageUrl)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center space-x-1.5 text-xs font-medium text-blue-600 hover:text-blue-800 hover:underline transition-colors cursor-pointer"
+                        >
+                          <ImageIcon className="h-3.5 w-3.5" />
+                          <span>View Uploaded Image</span>
+                        </a>
+                      ) : <span />}
+                      <span className="text-[10px] text-gray-400">by {h.changedBy}</span>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  )
+}
 
 export { ConsumerList }
