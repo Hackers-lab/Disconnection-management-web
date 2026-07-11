@@ -22,6 +22,7 @@ const NscList = dynamic(() => import("@/components/nsc-list").then(m => ({ defau
 const AgencyUpdatesReport = dynamic(() => import("@/components/agency-updates-report").then(m => ({ default: m.AgencyUpdatesReport })), { ssr: false })
 const ConsumerMaster = dynamic(() => import("@/components/consumer-master").then(m => ({ default: m.ConsumerMaster })), { ssr: false })
 const DTRList = dynamic(() => import("@/components/dtr-list").then(m => ({ default: m.DTRList })), { ssr: false })
+const DTRPaintingList = dynamic(() => import("@/components/dtr-painting-list").then(m => ({ default: m.DTRPaintingList })), { ssr: false })
 const MeterReplacementList = dynamic(() => import("@/components/meter-replacement-list").then(m => ({ default: m.MeterReplacementList })), { ssr: false })
 
 import { Loader2 } from "lucide-react"
@@ -1072,6 +1073,16 @@ export default function DashboardClient({ role, agencies }: DashboardClientProps
 
         {activeView === "dtr" && (
           <DTRList
+            userRole={role}
+            userAgencies={agencies}
+            username={(agencies[0] || role)}
+            agencies={agencies}
+            permissions={permissions}
+          />
+        )}
+
+        {activeView === "dtr-painting" && (
+          <DTRPaintingList
             userRole={role}
             userAgencies={agencies}
             username={(agencies[0] || role)}

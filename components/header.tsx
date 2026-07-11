@@ -28,6 +28,7 @@ import {
   ClipboardCheck,
   CalendarDays,
   BarChart3,
+  Upload,
 } from "lucide-react"
 import { useState, useEffect } from "react"
 import {
@@ -949,7 +950,7 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
                 <LayoutDashboard className="h-4 w-4" />
               </Button>
 
-              {showDownloadButton && (
+              {(showDownloadButton || activeView === "dtr" || activeView === "dtr-painting") && (
                 <div className="relative">
                   <Button 
                     variant="ghost" 
@@ -958,13 +959,71 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
                       if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
                       setShowDownloadMenu(!showDownloadMenu)
                     }}
-                    title="Download Options"
+                    title={activeView === "dtr" || activeView === "dtr-painting" ? "More Actions" : "Download Options"}
                   >
-                    <Download className="h-4 w-4" />
+                    {activeView === "dtr" || activeView === "dtr-painting" ? (
+                      <MoreVertical className="h-4 w-4" />
+                    ) : (
+                      <Download className="h-4 w-4" />
+                    )}
                   </Button>
 
                   {showDownloadMenu && (
                     <div className="absolute right-0 mt-2 w-56 bg-white border rounded-lg shadow-lg z-50 animate-in fade-in zoom-in-95 duration-200">
+                      {activeView === "dtr" && (
+                        <>
+                          <button
+                            type="button"
+                            className="block w-full text-left px-4 py-2 hover:bg-slate-50 text-sm font-semibold text-slate-800"
+                            onClick={() => {
+                              setShowDownloadMenu(false);
+                              window.dispatchEvent(new CustomEvent("dtr-action", { detail: { action: "refresh" } }))
+                            }}
+                          >
+                            Refresh List
+                          </button>
+                          {(userRole === "admin" || (permissions && permissions.dtr?.includes("create"))) && (
+                            <button
+                              type="button"
+                              className="block w-full text-left px-4 py-2 hover:bg-slate-50 text-sm font-semibold text-indigo-650 border-t"
+                              onClick={() => {
+                                setShowDownloadMenu(false);
+                                window.dispatchEvent(new CustomEvent("dtr-action", { detail: { action: "upload" } }))
+                              }}
+                            >
+                              Upload DTR List
+                            </button>
+                          )}
+                        </>
+                      )}
+
+                      {activeView === "dtr-painting" && (
+                        <>
+                          <button
+                            type="button"
+                            className="block w-full text-left px-4 py-2 hover:bg-slate-50 text-sm font-semibold text-slate-800"
+                            onClick={() => {
+                              setShowDownloadMenu(false);
+                              window.dispatchEvent(new CustomEvent("dtr-painting-action", { detail: { action: "refresh" } }))
+                            }}
+                          >
+                            Refresh Painting List
+                          </button>
+                          {userRole === "admin" && (
+                            <button
+                              type="button"
+                              className="block w-full text-left px-4 py-2 hover:bg-slate-50 text-sm font-semibold text-blue-650 border-t"
+                              onClick={() => {
+                                setShowDownloadMenu(false);
+                                window.dispatchEvent(new CustomEvent("dtr-painting-action", { detail: { action: "report" } }))
+                              }}
+                            >
+                              Agency Painting Report
+                            </button>
+                          )}
+                        </>
+                      )}
+
                       {isDisconnectionView && (
                         <>
                           <button
@@ -1134,6 +1193,48 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
                         <Clock className="mr-2 h-4 w-4 text-indigo-600" />
                         <span className="font-medium text-indigo-700">History Report</span>
                       </DropdownMenuItem>
+                    </>
+                  )}
+
+                  {activeView === "dtr" && (
+                    <>
+                      <DropdownMenuLabel>DTR Actions</DropdownMenuLabel>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onClick={() => {
+                        window.dispatchEvent(new CustomEvent("dtr-action", { detail: { action: "refresh" } }))
+                      }}>
+                        <RefreshCw className="mr-2 h-4 w-4" />
+                        <span>Refresh List</span>
+                      </DropdownMenuItem>
+                      {(userRole === "admin" || (permissions && permissions.dtr?.includes("create"))) && (
+                        <DropdownMenuItem onClick={() => {
+                          window.dispatchEvent(new CustomEvent("dtr-action", { detail: { action: "upload" } }))
+                        }}>
+                          <Upload className="mr-2 h-4 w-4 text-indigo-600" />
+                          <span className="text-indigo-700 font-medium">Upload DTR List</span>
+                        </DropdownMenuItem>
+                      )}
+                    </>
+                  )}
+
+                  {activeView === "dtr-painting" && (
+                    <>
+                      <DropdownMenuLabel>DTR Painting Actions</DropdownMenuLabel>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onClick={() => {
+                        window.dispatchEvent(new CustomEvent("dtr-painting-action", { detail: { action: "refresh" } }))
+                      }}>
+                        <RefreshCw className="mr-2 h-4 w-4" />
+                        <span>Refresh Painting List</span>
+                      </DropdownMenuItem>
+                      {userRole === "admin" && (
+                        <DropdownMenuItem onClick={() => {
+                          window.dispatchEvent(new CustomEvent("dtr-painting-action", { detail: { action: "report" } }))
+                        }}>
+                          <Building2 className="mr-2 h-4 w-4 text-blue-600" />
+                          <span className="text-blue-700 font-medium">Agency Painting Report</span>
+                        </DropdownMenuItem>
+                      )}
                     </>
                   )}
 

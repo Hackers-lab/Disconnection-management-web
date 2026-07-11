@@ -10,7 +10,8 @@ import {
   UserX,
   BarChart3,       // For Analysis
   Users,           // For Consumer Master
-  RadioTower       // For DTR Verification
+  RadioTower,      // For DTR Verification
+  Brush            // For DTR Painting
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from "@/components/ui/sheet"
@@ -20,7 +21,7 @@ import type { ConsumerData } from "@/lib/google-sheets"
 import { Badge } from "@/components/ui/badge"
 
 // Define the available views
-export type ViewType = "disconnection" | "reconnection" | "deemed" | "nsc" | "meter" | "admin" | "home" | "analysis" | "agency-updates" | "consumer-master" | "dtr" | "meter-replacement"
+export type ViewType = "disconnection" | "reconnection" | "deemed" | "nsc" | "meter" | "admin" | "home" | "analysis" | "agency-updates" | "consumer-master" | "dtr" | "meter-replacement" | "dtr-painting"
 
 interface AppSidebarProps {
   activeView: ViewType
@@ -108,6 +109,11 @@ export function AppSidebar({ activeView, setActiveView, userRole, isMobile = fal
       icon: RadioTower,
     },
     {
+      id: "dtr-painting",
+      label: "DTR Painting",
+      icon: Brush,
+    },
+    {
       id: "meter-replacement",
       label: "Replacement List",
       icon: ClipboardCheck,
@@ -129,7 +135,11 @@ export function AppSidebar({ activeView, setActiveView, userRole, isMobile = fal
     <div className="flex flex-col space-y-2 py-4">
       {menuItems.map((item) => {
         const permKey = item.id.replace(/-/g, "_")
-        const hasAccess = item.id === "home" || (permissions && (permissions[item.id]?.includes("read") || permissions[permKey]?.includes("read")))
+        const hasAccess = item.id === "home" || (permissions && (
+          permissions[item.id]?.includes("read") || 
+          permissions[permKey]?.includes("read") ||
+          (item.id === "dtr-painting" && (permissions["dtr"]?.includes("read") || permissions["dtr"]?.includes("update")))
+        ))
         if (!hasAccess) {
           return null
         }

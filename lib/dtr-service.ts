@@ -43,6 +43,9 @@ export interface DTRRecord {
   verifiedBy: string
   verifiedAt: string
   remarks: string
+  paintingAgency: string
+  auditAgency: string
+  paintingImage: string
 }
 
 export const DTR_HEADERS = [
@@ -50,7 +53,7 @@ export const DTR_HEADERS = [
   "ACTUAL FEEDER", "ACTUAL RATING", "ACTUAL LOCATION", "SUPPLY OFFICE", "LATLONG",
   "LONG", "IMAGE", "Painting", "Kiosk", "LA",
   "NE", "Load R", "Load Y", "Load B", "Load N",
-  "Verified By", "Verified At", "Remarks"
+  "Verified By", "Verified At", "Remarks", "Painting Agency", "Audit Agency", "Painting Image"
 ]
 
 function norm(s: string) {
@@ -139,6 +142,9 @@ function parseRow(r: string[]): DTRRecord {
     verifiedBy:     r[20] || "",
     verifiedAt:     r[21] || "",
     remarks:        r[22] || "",
+    paintingAgency: r[23] || "",
+    auditAgency:    r[24] || "",
+    paintingImage:  r[25] || "",
   }
 }
 
@@ -148,7 +154,7 @@ async function _fetchDTRDataRaw(): Promise<DTRRecord[]> {
   await ensureHeaders(spreadsheetId)
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId,
-    range: `'${TAB}'!A:W`,
+    range: `'${TAB}'!A:Z`,
   })
   const values = res.data.values || []
   if (values.length <= 1) return []
@@ -166,7 +172,7 @@ export function invalidateDTRCache() {
   revalidateTag(DTR_TAG)
 }
 
-export async function updateDTRRecord(record: DTRRecord): Promise<void> {
+export async function updateDTRRecord(record: DTRRecord, originalDtrCode?: string): Promise<void> {
   const spreadsheetId = getDtrSpreadsheetId()
   await ensureHeaders(spreadsheetId)
   
@@ -176,7 +182,8 @@ export async function updateDTRRecord(record: DTRRecord): Promise<void> {
     range: `'${TAB}'!A:A`,
   })
   const codes = (codesResp.data.values || []).map(r => String(r[0] || ""))
-  const rowIndex = codes.findIndex(code => code.toUpperCase().trim() === record.dtrCode.toUpperCase().trim())
+  const lookupCode = originalDtrCode || record.dtrCode
+  const rowIndex = codes.findIndex(code => code.toUpperCase().trim() === lookupCode.toUpperCase().trim())
   
   const rowNum = rowIndex !== -1 ? rowIndex + 1 : codes.length + 1
 
@@ -204,11 +211,14 @@ export async function updateDTRRecord(record: DTRRecord): Promise<void> {
     record.verifiedBy,
     record.verifiedAt,
     record.remarks,
+    record.paintingAgency || "",
+    record.auditAgency || "",
+    record.paintingImage || "",
   ]
 
   await sheets.spreadsheets.values.update({
     spreadsheetId,
-    range: `'${TAB}'!A${rowNum}:W${rowNum}`,
+    range: `'${TAB}'!A${rowNum}:Z${rowNum}`,
     valueInputOption: "USER_ENTERED",
     requestBody: { values: [values] },
   })
@@ -223,7 +233,7 @@ export async function uploadDTRData(rows: Omit<DTRRecord, "verifiedBy" | "verifi
   if (clearExisting) {
     await sheets.spreadsheets.values.clear({
       spreadsheetId,
-      range: `'${TAB}'!A2:W`,
+      range: `'${TAB}'!A2:Z`,
     })
   }
 
@@ -253,6 +263,9 @@ export async function uploadDTRData(rows: Omit<DTRRecord, "verifiedBy" | "verifi
     "", // verifiedBy
     "", // verifiedAt
     r.remarks || "",
+    r.paintingAgency || "",
+    r.auditAgency || "",
+    r.paintingImage || "",
   ])
 
   const res = await sheets.spreadsheets.values.append({
@@ -264,4 +277,56 @@ export async function uploadDTRData(rows: Omit<DTRRecord, "verifiedBy" | "verifi
 
   invalidateDTRCache()
   return res.data.updates?.updatedRows || rows.length
+}
+
+export async function updateDTRPainting(
+  dtrCode: string,
+  painting: string,
+  image: string,
+  remarks: string,
+  verifiedBy: string
+): Promise<void> {
+  const spreadsheetId = getDtrSpreadsheetId()
+  await ensureHeaders(spreadsheetId)
+
+  // Find row by reading DTR Code column
+  const codesResp = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range: `'${TAB}'!A:A`,
+  })
+  const codes = (codesResp.data.values || []).map(r => String(r[0] || ""))
+  const rowIndex = codes.findIndex(code => code.toUpperCase().trim() === dtrCode.toUpperCase().trim())
+  if (rowIndex === -1) throw new Error("DTR Code not found in sheet")
+
+  const rowNum = rowIndex + 1
+
+  // Format timestamp: DD-MM-YYYY HH:mm
+  const d = new Date()
+  const timestamp = `${String(d.getDate()).padStart(2,"0")}-${String(d.getMonth()+1).padStart(2,"0")}-${d.getFullYear()} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`
+
+  // Update Painting Status (col M/13)
+  await sheets.spreadsheets.values.update({
+    spreadsheetId,
+    range: `'${TAB}'!M${rowNum}`,
+    valueInputOption: "USER_ENTERED",
+    requestBody: { values: [[painting]] },
+  })
+
+  // Update Painting Image (col Z/26)
+  await sheets.spreadsheets.values.update({
+    spreadsheetId,
+    range: `'${TAB}'!Z${rowNum}`,
+    valueInputOption: "USER_ENTERED",
+    requestBody: { values: [[image]] },
+  })
+
+  // Update Verified By (col U/21), Verified At (col V/22), Remarks (col W/23)
+  await sheets.spreadsheets.values.update({
+    spreadsheetId,
+    range: `'${TAB}'!U${rowNum}:W${rowNum}`,
+    valueInputOption: "USER_ENTERED",
+    requestBody: { values: [[verifiedBy, timestamp, remarks]] },
+  })
+
+  invalidateDTRCache()
 }

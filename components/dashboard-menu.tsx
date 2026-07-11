@@ -15,9 +15,10 @@ import {
   RadioTower,
   Gauge,
   X,
-  Phone,
   Users,
-  RefreshCw
+  RefreshCw,
+  Brush,
+  Phone
 } from "lucide-react"
 import { ViewType } from "@/components/app-sidebar"
 import { getFromCache, saveToCache } from "@/lib/indexed-db"
@@ -37,12 +38,14 @@ export function DashboardMenu({ onSelect, userRole, userAgencies = [], permissio
   const [nscPendingCount, setNscPendingCount] = useState<number>(0)
   const [replacementPendingCount, setReplacementPendingCount] = useState<number>(0)
   const [dtrPendingCount, setDtrPendingCount] = useState<number>(0)
+  const [dtrPaintingPendingCount, setDtrPaintingPendingCount] = useState<number>(0)
   const [showDevModal, setShowDevModal] = useState(false)
   const [loadingModules, setLoadingModules] = useState<Record<string, boolean>>({
     disconnection: false,
     reconnection: false,
     deemed: false,
     dtr: false,
+    "dtr-painting": false,
     meter: false,
     nsc: false,
     "meter-replacement": false,
@@ -91,6 +94,17 @@ export function DashboardMenu({ onSelect, userRole, userAgencies = [], permissio
       bgColor: "bg-amber-50",
       borderColor: "hover:border-amber-400 hover:shadow-amber-500/10",
       allowed: ["admin", "executive", "agency"],
+      status: "live"
+    },
+    {
+      id: "dtr-painting",
+      title: "DTR Painting",
+      description: "Update DTR structural painting logs and photo proof",
+      icon: Brush,
+      color: "text-orange-600",
+      bgColor: "bg-orange-50",
+      borderColor: "hover:border-orange-400 hover:shadow-orange-500/10",
+      allowed: ["admin", "executive", "agency", "painter"],
       status: "live"
     },
     {
@@ -347,7 +361,7 @@ export function DashboardMenu({ onSelect, userRole, userAgencies = [], permissio
       try {
         let dtrCached = await getFromCache<any[]>("dtr_data_cache")
         if (!dtrCached || dtrCached.length === 0) {
-          setLoadingModules(prev => ({ ...prev, dtr: true }))
+          setLoadingModules(prev => ({ ...prev, dtr: true, "dtr-painting": true }))
           try {
             const res = await fetch("/api/dtr")
             if (res.ok) {
@@ -359,11 +373,19 @@ export function DashboardMenu({ onSelect, userRole, userAgencies = [], permissio
         if (dtrCached) {
           const count = dtrCached.filter(r => (r.status || "").toUpperCase() !== "EXIST").length
           setDtrPendingCount(count)
+
+          const upper = (userAgencies || []).map((a: string) => a.toUpperCase())
+          const paintingPending = dtrCached.filter(r => {
+            const isAssigned = userRole === "admin" || userRole === "viewer" || userRole === "executive" || 
+              (r.paintingAgency && upper.includes(r.paintingAgency.trim().toUpperCase()))
+            return isAssigned && (r.painting || "").toLowerCase() !== "done"
+          }).length
+          setDtrPaintingPendingCount(paintingPending)
         }
       } catch (e) {
         console.error(e)
       } finally {
-        setLoadingModules(prev => ({ ...prev, dtr: false }))
+        setLoadingModules(prev => ({ ...prev, dtr: false, "dtr-painting": false }))
       }
     }
     loadPendingCount()
@@ -376,7 +398,11 @@ export function DashboardMenu({ onSelect, userRole, userAgencies = [], permissio
           <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-6">
             {modules.map((module) => {
               const permKey = module.id.replace(/-/g, "_")
-              const hasAccess = module.id === "home" || (permissions && (permissions[module.id]?.includes("read") || permissions[permKey]?.includes("read")))
+              const hasAccess = module.id === "home" || (permissions && (
+                permissions[module.id]?.includes("read") || 
+                permissions[permKey]?.includes("read") ||
+                (module.id === "dtr-painting" && (permissions["dtr"]?.includes("read") || permissions["dtr"]?.includes("update")))
+              ))
               if (!hasAccess) return null
               const Icon = module.icon
               return (
@@ -428,6 +454,12 @@ export function DashboardMenu({ onSelect, userRole, userAgencies = [], permissio
                     <div className={`absolute top-2 right-2 md:top-4 md:right-4 z-20 flex items-center justify-center text-white text-[10px] md:text-xs font-bold min-w-[1.5rem] h-6 px-1.5 md:min-w-[2rem] md:h-8 md:px-2 rounded-full shadow-lg border-2 border-white ring-2 ring-teal-500/10 transition-all duration-300 group-hover:scale-105 ${loadingModules["dtr"] ? "bg-blue-500 animate-pulse" : dtrPendingCount > 0 ? "bg-teal-600" : "bg-gray-400"
                       }`}>
                       {loadingModules["dtr"] ? <RefreshCw className="h-3 w-3 animate-spin" /> : dtrPendingCount}
+                    </div>
+                  )}
+                  {module.id === "dtr-painting" && (
+                    <div className={`absolute top-2 right-2 md:top-4 md:right-4 z-20 flex items-center justify-center text-white text-[10px] md:text-xs font-bold min-w-[1.5rem] h-6 px-1.5 md:min-w-[2rem] md:h-8 md:px-2 rounded-full shadow-lg border-2 border-white ring-2 ring-orange-500/10 transition-all duration-300 group-hover:scale-105 ${loadingModules["dtr-painting"] ? "bg-blue-500 animate-pulse" : dtrPaintingPendingCount > 0 ? "bg-orange-600" : "bg-gray-400"
+                      }`}>
+                      {loadingModules["dtr-painting"] ? <RefreshCw className="h-3 w-3 animate-spin" /> : dtrPaintingPendingCount}
                     </div>
                   )}
 

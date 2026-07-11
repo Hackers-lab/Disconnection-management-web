@@ -2498,6 +2498,7 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
                     { id: "reconnection", name: "Reconnection" },
                     { id: "deemed", name: "Deemed Visit" },
                     { id: "dtr", name: "DTR Verification" },
+                    { id: "dtr_painting", name: "DTR Painting" },
                     { id: "meter", name: "Meter Management" },
                     { id: "nsc", name: "NSC Management" },
                     { id: "consumer_master", name: "Consumer Master" },

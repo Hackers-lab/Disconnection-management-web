@@ -5,10 +5,18 @@ import { checkApiPermission } from "@/lib/permissions"
 export const dynamic = "force-dynamic"
 import { fetchDTRData, updateDTRRecord, uploadDTRData, DTRRecord } from "@/lib/dtr-service"
 import { nowTs } from "@/lib/date-utils"
+import { appendDTRHistory } from "@/lib/dtr-history"
 
 export async function GET() {
-  const { authorized, error, status } = await checkApiPermission("dtr", "read")
-  if (!authorized) return NextResponse.json({ error }, { status })
+  let { authorized, error, status } = await checkApiPermission("dtr", "read")
+  if (!authorized) {
+    const fallback = await checkApiPermission("dtr_painting", "read")
+    if (fallback.authorized) {
+      authorized = true
+    } else {
+      return NextResponse.json({ error }, { status })
+    }
+  }
 
   try {
     const all = await fetchDTRData()
@@ -29,8 +37,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "DTR Code is required" }, { status: 400 })
     }
 
+    const originalDtrCode = body.originalDtrCode ? String(body.originalDtrCode).trim() : undefined
+    const newDtrCode = String(body.dtrCode).trim()
+
+    // Restrict changing DTR code to admin only
+    if (originalDtrCode && originalDtrCode.toUpperCase() !== newDtrCode.toUpperCase()) {
+      if (session.role !== "admin") {
+        return NextResponse.json({ error: "Only system admins are permitted to change DTR codes." }, { status: 403 })
+      }
+    }
+
     const record: DTRRecord = {
-      dtrCode:        String(body.dtrCode).trim(),
+      dtrCode:        newDtrCode,
       feederName:     String(body.feederName || "").trim(),
       locationName:   String(body.locationName || "").trim(),
       kvCapacity:     String(body.kvCapacity || "").trim(),
@@ -53,9 +71,29 @@ export async function POST(request: NextRequest) {
       verifiedBy:     session.username || "system",
       verifiedAt:     nowTs(),
       remarks:        String(body.remarks || "").trim(),
+      paintingAgency: String(body.paintingAgency || "").trim(),
+      auditAgency:    String(body.auditAgency || "").trim(),
+      paintingImage:  String(body.paintingImage || "").trim(),
     }
 
-    await updateDTRRecord(record)
+    await updateDTRRecord(record, originalDtrCode)
+
+    // Save update to DTR History sheet
+    await appendDTRHistory({
+      timestamp: nowTs(),
+      dtrCode: record.dtrCode,
+      feederName: record.actualFeeder || record.feederName,
+      painting: record.painting || "Pending",
+      kiosk: record.kiosk || "Good",
+      la: record.la || "Good",
+      ne: record.ne || "Good",
+      loadCurrents: `R:${record.loadR || 0}, Y:${record.loadY || 0}, B:${record.loadB || 0}, N:${record.loadN || 0}`,
+      verifiedBy: record.verifiedBy,
+      remarks: record.remarks || "",
+      imageUrl: record.image || "",
+      locationName: record.actualLocation || record.locationName
+    })
+
     return NextResponse.json({ success: true, record })
   } catch (e: any) {
     console.error("💥 DTR update error:", e)
@@ -96,6 +134,9 @@ export async function PUT(request: NextRequest) {
       loadB:          String(r.loadB || "").trim(),
       loadN:          String(r.loadN || "").trim(),
       remarks:        String(r.remarks || "").trim(),
+      paintingAgency: String(r.paintingAgency || r["Painting Agency"] || r["paintingagency"] || "").trim(),
+      auditAgency:    String(r.auditAgency || r["Audit Agency"] || r["auditagency"] || "").trim(),
+      paintingImage:  String(r.paintingImage || r["Painting Image"] || r["paintingimage"] || "").trim(),
     }))
 
     const count = await uploadDTRData(dtrRows, true)
