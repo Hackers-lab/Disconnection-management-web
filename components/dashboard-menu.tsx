@@ -16,7 +16,8 @@ import {
   Gauge,
   X,
   Phone,
-  Users
+  Users,
+  RefreshCw
 } from "lucide-react"
 import { ViewType } from "@/components/app-sidebar"
 import { getFromCache, saveToCache } from "@/lib/indexed-db"
@@ -37,6 +38,15 @@ export function DashboardMenu({ onSelect, userRole, userAgencies = [], permissio
   const [replacementPendingCount, setReplacementPendingCount] = useState<number>(0)
   const [dtrPendingCount, setDtrPendingCount] = useState<number>(0)
   const [showDevModal, setShowDevModal] = useState(false)
+  const [loadingModules, setLoadingModules] = useState<Record<string, boolean>>({
+    disconnection: false,
+    reconnection: false,
+    deemed: false,
+    dtr: false,
+    meter: false,
+    nsc: false,
+    "meter-replacement": false,
+  })
 
   const modules = [
     {
@@ -111,7 +121,7 @@ export function DashboardMenu({ onSelect, userRole, userAgencies = [], permissio
       description: userRole === "admin" ? "Upload & search 45k consumer database" : "Search consumer details by ID or name",
       icon: Users,
       color: "text-teal-600",
-      bgColor: "bg-teal-50",
+      bgColor: "bg-teal-55",
       borderColor: "hover:border-teal-200",
       allowed: ["admin", "executive", "agency"],
       status: "live"
@@ -142,9 +152,11 @@ export function DashboardMenu({ onSelect, userRole, userAgencies = [], permissio
 
   useEffect(() => {
     async function loadPendingCount() {
+      // Disconnection
       try {
         let data = await getFromCache<ConsumerData[]>("consumers_data_cache")
         if (!data || data.length === 0) {
+          setLoadingModules(prev => ({ ...prev, disconnection: true }))
           try {
             const res = await fetch("/api/consumers/base")
             if (res.ok) {
@@ -165,9 +177,17 @@ export function DashboardMenu({ onSelect, userRole, userAgencies = [], permissio
           return userAgenciesUpper.includes(consumerAgency)
         }).length
         setPendingCount(count)
+      } catch (e) {
+        console.error(e)
+      } finally {
+        setLoadingModules(prev => ({ ...prev, disconnection: false }))
+      }
 
+      // Deemed
+      try {
         let ddData = await getFromCache<DeemedVisitData[]>("dd_data_cache")
         if (!ddData || ddData.length === 0) {
+          setLoadingModules(prev => ({ ...prev, deemed: true }))
           try {
             const res = await fetch("/api/dd/base")
             if (res.ok) {
@@ -189,81 +209,162 @@ export function DashboardMenu({ onSelect, userRole, userAgencies = [], permissio
           }).length
           setDdPendingCount(ddCount)
         }
-        // Reconnection pending count — read from IndexedDB cache (populated by ReconnectionList)
-        try {
-          const rcCached = await getFromCache<any[]>("reconnection_data_cache")
-          if (rcCached) {
-            const upper = (userAgencies || []).map((a: string) => a.toUpperCase())
-            const rcPending = rcCached.filter((r: any) => {
-              if (r.status !== "pending") return false
-              if (userRole === "admin" || userRole === "viewer" || userRole === "executive") return true
-              return upper.includes((r.agency || "").toUpperCase())
-            }).length
-            setReconnectionPendingCount(rcPending)
-          }
-        } catch { /* non-critical */ }
+      } catch (e) {
+        console.error(e)
+      } finally {
+        setLoadingModules(prev => ({ ...prev, deemed: false }))
+      }
 
-        // Meter pending count
-        try {
-          const isAgency = userRole === "agency"
-          const cacheKey = isAgency ? "meter_issues_cache" : "meter_stock_cache"
-          const meterCached = await getFromCache<any>(cacheKey)
-          if (meterCached) {
-            const meterIssues: any[] = isAgency ? meterCached : (meterCached.issues || [])
-            const upper = (userAgencies || []).map((a: string) => a.toUpperCase())
-            const count = meterIssues.filter((i: any) => {
-              if (isAgency) {
-                // Agency sees issued meters (pending installation)
-                if (i.status !== "issued") return false
-                return upper.includes((i.agency || "").toUpperCase())
-              } else {
-                // Admin/exec sees installation_done (pending finalization)
-                return i.status === "installation_done"
+      // Reconnection
+      try {
+        let rcCached = await getFromCache<any[]>("reconnection_data_cache")
+        if (!rcCached || rcCached.length === 0) {
+          setLoadingModules(prev => ({ ...prev, reconnection: true }))
+          try {
+            const res = await fetch("/api/reconnection")
+            if (res.ok) {
+              rcCached = await res.json()
+              if (rcCached) await saveToCache("reconnection_data_cache", rcCached)
+            }
+          } catch (err) { console.error("Auto-fetch reconnection failed", err) }
+        }
+        if (rcCached) {
+          const upper = (userAgencies || []).map((a: string) => a.toUpperCase())
+          const rcPending = rcCached.filter((r: any) => {
+            if (r.status !== "pending") return false
+            if (userRole === "admin" || userRole === "viewer" || userRole === "executive") return true
+            return upper.includes((r.agency || "").toUpperCase())
+          }).length
+          setReconnectionPendingCount(rcPending)
+        }
+      } catch (e) {
+        console.error(e)
+      } finally {
+        setLoadingModules(prev => ({ ...prev, reconnection: false }))
+      }
+
+      // Meter
+      try {
+        const isAgency = userRole === "agency"
+        const cacheKey = isAgency ? "meter_issues_cache" : "meter_stock_cache"
+        let meterCached = await getFromCache<any>(cacheKey)
+        if (!meterCached || (isAgency && meterCached.length === 0) || (!isAgency && (!meterCached.issues || meterCached.issues.length === 0))) {
+          setLoadingModules(prev => ({ ...prev, meter: true }))
+          try {
+            const url = isAgency ? "/api/meters/issue" : "/api/meters/stock"
+            const res = await fetch(url)
+            if (res.ok) {
+              const freshData = await res.json()
+              if (freshData) {
+                if (isAgency) {
+                  meterCached = [...freshData].reverse()
+                } else {
+                  const sorted = [...(freshData.issues || [])].reverse()
+                  meterCached = { summary: freshData.summary || [], stock: freshData.stock || [], issues: sorted }
+                }
+                await saveToCache(cacheKey, meterCached)
               }
-            }).length
-            setMeterPendingCount(count)
-          }
-        } catch { /* non-critical */ }
+            }
+          } catch (err) { console.error("Auto-fetch meters failed", err) }
+        }
+        if (meterCached) {
+          const meterIssues: any[] = isAgency ? meterCached : (meterCached.issues || [])
+          const upper = (userAgencies || []).map((a: string) => a.toUpperCase())
+          const count = meterIssues.filter((i: any) => {
+            if (isAgency) {
+              if (i.status !== "issued") return false
+              return upper.includes((i.agency || "").toUpperCase())
+            } else {
+              return i.status === "installation_done"
+            }
+          }).length
+          setMeterPendingCount(count)
+        }
+      } catch (e) {
+        console.error(e)
+      } finally {
+        setLoadingModules(prev => ({ ...prev, meter: false }))
+      }
 
-        // NSC pending count
-        try {
-          const nscCached = await getFromCache<any[]>("nsc_data_cache")
-          if (nscCached) {
-            const upper = (userAgencies || []).map((a: string) => a.toUpperCase())
-            const nscCount = nscCached.filter((a: any) => {
-              if (userRole === "agency") {
-                return a.status === "pending" && upper.includes((a.agency || "").toUpperCase())
-              }
-              return a.status === "inspected"
-            }).length
-            setNscPendingCount(nscCount)
-          }
-        } catch { /* non-critical */ }
+      // NSC
+      try {
+        let nscCached = await getFromCache<any[]>("nsc_data_cache")
+        if (!nscCached || nscCached.length === 0) {
+          setLoadingModules(prev => ({ ...prev, nsc: true }))
+          try {
+            const res = await fetch("/api/nsc")
+            if (res.ok) {
+              nscCached = await res.json()
+              if (nscCached) await saveToCache("nsc_data_cache", nscCached)
+            }
+          } catch (err) { console.error("Auto-fetch NSC failed", err) }
+        }
+        if (nscCached) {
+          const upper = (userAgencies || []).map((a: string) => a.toUpperCase())
+          const nscCount = nscCached.filter((a: any) => {
+            if (userRole === "agency") {
+              return a.status === "pending" && upper.includes((a.agency || "").toUpperCase())
+            }
+            return a.status === "inspected"
+          }).length
+          setNscPendingCount(nscCount)
+        }
+      } catch (e) {
+        console.error(e)
+      } finally {
+        setLoadingModules(prev => ({ ...prev, nsc: false }))
+      }
 
-        // Proposed replacements pending count
-        try {
-          const mrCached = await getFromCache<any[]>("meter_replacement_data_cache")
-          if (mrCached) {
-            const upper = (userAgencies || []).map((a: string) => a.toUpperCase())
-            const count = mrCached.filter((r: any) => {
-              if (r.status !== "proposed") return false
-              if (userRole === "admin" || userRole === "executive") return true
-              return upper.includes((r.agency || "").toUpperCase())
-            }).length
-            setReplacementPendingCount(count)
-          }
-        } catch { /* non-critical */ }
+      // Meter Replacement
+      try {
+        let mrCached = await getFromCache<any[]>("meter_replacement_data_cache")
+        if (!mrCached || mrCached.length === 0) {
+          setLoadingModules(prev => ({ ...prev, "meter-replacement": true }))
+          try {
+            const res = await fetch("/api/meters/replacement")
+            if (res.ok) {
+              mrCached = await res.json()
+              if (mrCached) await saveToCache("meter_replacement_data_cache", mrCached)
+            }
+          } catch (err) { console.error("Auto-fetch meter replacement failed", err) }
+        }
+        if (mrCached) {
+          const upper = (userAgencies || []).map((a: string) => a.toUpperCase())
+          const count = mrCached.filter((r: any) => {
+            if (r.status !== "proposed") return false
+            if (userRole === "admin" || userRole === "executive") return true
+            return upper.includes((r.agency || "").toUpperCase())
+          }).length
+          setReplacementPendingCount(count)
+        }
+      } catch (e) {
+        console.error(e)
+      } finally {
+        setLoadingModules(prev => ({ ...prev, "meter-replacement": false }))
+      }
 
-        // DTR pending count
-        try {
-          const dtrCached = await getFromCache<any[]>("dtr_data_cache")
-          if (dtrCached) {
-            const count = dtrCached.filter(r => (r.status || "").toUpperCase() !== "EXIST").length
-            setDtrPendingCount(count)
-          }
-        } catch { /* non-critical */ }
-
-      } catch (e) { console.error("Failed to load pending count", e) }
+      // DTR
+      try {
+        let dtrCached = await getFromCache<any[]>("dtr_data_cache")
+        if (!dtrCached || dtrCached.length === 0) {
+          setLoadingModules(prev => ({ ...prev, dtr: true }))
+          try {
+            const res = await fetch("/api/dtr")
+            if (res.ok) {
+              dtrCached = await res.json()
+              if (dtrCached) await saveToCache("dtr_data_cache", dtrCached)
+            }
+          } catch (err) { console.error("Auto-fetch DTR failed", err) }
+        }
+        if (dtrCached) {
+          const count = dtrCached.filter(r => (r.status || "").toUpperCase() !== "EXIST").length
+          setDtrPendingCount(count)
+        }
+      } catch (e) {
+        console.error(e)
+      } finally {
+        setLoadingModules(prev => ({ ...prev, dtr: false }))
+      }
     }
     loadPendingCount()
   }, [userRole, userAgencies])
@@ -298,39 +399,53 @@ export function DashboardMenu({ onSelect, userRole, userAgencies = [], permissio
                   }}
                 >
                   {/* Badges and Card Content logic remains same... */}
-                  {module.id === "disconnection" && pendingCount > 0 && (
-                    <div className="absolute top-2 right-2 md:top-4 md:right-4 z-20 flex items-center justify-center bg-red-600 text-white text-[10px] md:text-xs font-bold px-1.5 py-0.5 md:px-3 md:py-1 rounded-full shadow-lg border-2 border-white">
-                      {pendingCount}
+                  {module.id === "disconnection" && (
+                    <div className={`absolute top-2 right-2 md:top-4 md:right-4 z-20 flex items-center justify-center text-white text-[10px] md:text-xs font-bold w-6 h-6 md:w-8 md:h-8 rounded-full shadow-lg border-2 border-white ${
+                      loadingModules["disconnection"] ? "bg-blue-500 animate-pulse" : pendingCount > 0 ? "bg-red-600" : "bg-gray-400"
+                    }`}>
+                      {loadingModules["disconnection"] ? <RefreshCw className="h-3 w-3 animate-spin" /> : pendingCount}
                     </div>
                   )}
-                  {module.id === "deemed" && ddPendingCount > 0 && (
-                    <div className="absolute top-2 right-2 md:top-4 md:right-4 z-20 flex items-center justify-center bg-red-600 text-white text-[10px] md:text-xs font-bold px-1.5 py-0.5 md:px-3 md:py-1 rounded-full shadow-lg border-2 border-white">
-                      {ddPendingCount}
+                  {module.id === "deemed" && (
+                    <div className={`absolute top-2 right-2 md:top-4 md:right-4 z-20 flex items-center justify-center text-white text-[10px] md:text-xs font-bold w-6 h-6 md:w-8 md:h-8 rounded-full shadow-lg border-2 border-white ${
+                      loadingModules["deemed"] ? "bg-blue-500 animate-pulse" : ddPendingCount > 0 ? "bg-red-600" : "bg-gray-400"
+                    }`}>
+                      {loadingModules["deemed"] ? <RefreshCw className="h-3 w-3 animate-spin" /> : ddPendingCount}
                     </div>
                   )}
                   {module.id === "reconnection" && (
-                    <div className={`absolute top-2 right-2 md:top-4 md:right-4 z-20 flex items-center justify-center text-white text-[10px] md:text-xs font-bold px-1.5 py-0.5 md:px-3 md:py-1 rounded-full shadow-lg border-2 border-white ${reconnectionPendingCount > 0 ? "bg-blue-600" : "bg-gray-400"}`}>
-                      {reconnectionPendingCount}
+                    <div className={`absolute top-2 right-2 md:top-4 md:right-4 z-20 flex items-center justify-center text-white text-[10px] md:text-xs font-bold w-6 h-6 md:w-8 md:h-8 rounded-full shadow-lg border-2 border-white ${
+                      loadingModules["reconnection"] ? "bg-blue-500 animate-pulse" : reconnectionPendingCount > 0 ? "bg-blue-600" : "bg-gray-400"
+                    }`}>
+                      {loadingModules["reconnection"] ? <RefreshCw className="h-3 w-3 animate-spin" /> : reconnectionPendingCount}
                     </div>
                   )}
-                  {module.id === "nsc" && nscPendingCount > 0 && (
-                    <div className="absolute top-2 right-2 md:top-4 md:right-4 z-20 flex items-center justify-center bg-green-600 text-white text-[10px] md:text-xs font-bold px-1.5 py-0.5 md:px-3 md:py-1 rounded-full shadow-lg border-2 border-white">
-                      {nscPendingCount}
+                  {module.id === "nsc" && (
+                    <div className={`absolute top-2 right-2 md:top-4 md:right-4 z-20 flex items-center justify-center text-white text-[10px] md:text-xs font-bold w-6 h-6 md:w-8 md:h-8 rounded-full shadow-lg border-2 border-white ${
+                      loadingModules["nsc"] ? "bg-blue-500 animate-pulse" : nscPendingCount > 0 ? "bg-green-600" : "bg-gray-400"
+                    }`}>
+                      {loadingModules["nsc"] ? <RefreshCw className="h-3 w-3 animate-spin" /> : nscPendingCount}
                     </div>
                   )}
-                  {module.id === "meter" && meterPendingCount > 0 && (
-                    <div className="absolute top-2 right-2 md:top-4 md:right-4 z-20 flex items-center justify-center bg-purple-600 text-white text-[10px] md:text-xs font-bold px-1.5 py-0.5 md:px-3 md:py-1 rounded-full shadow-lg border-2 border-white">
-                      {meterPendingCount}
+                  {module.id === "meter" && (
+                    <div className={`absolute top-2 right-2 md:top-4 md:right-4 z-20 flex items-center justify-center text-white text-[10px] md:text-xs font-bold w-6 h-6 md:w-8 md:h-8 rounded-full shadow-lg border-2 border-white ${
+                      loadingModules["meter"] ? "bg-blue-500 animate-pulse" : meterPendingCount > 0 ? "bg-purple-600" : "bg-gray-400"
+                    }`}>
+                      {loadingModules["meter"] ? <RefreshCw className="h-3 w-3 animate-spin" /> : meterPendingCount}
                     </div>
                   )}
-                  {module.id === "meter-replacement" && replacementPendingCount > 0 && (
-                    <div className="absolute top-2 right-2 md:top-4 md:right-4 z-20 flex items-center justify-center bg-indigo-600 text-white text-[10px] md:text-xs font-bold px-1.5 py-0.5 md:px-3 md:py-1 rounded-full shadow-lg border-2 border-white">
-                      {replacementPendingCount}
+                  {module.id === "meter-replacement" && (
+                    <div className={`absolute top-2 right-2 md:top-4 md:right-4 z-20 flex items-center justify-center text-white text-[10px] md:text-xs font-bold w-6 h-6 md:w-8 md:h-8 rounded-full shadow-lg border-2 border-white ${
+                      loadingModules["meter-replacement"] ? "bg-blue-500 animate-pulse" : replacementPendingCount > 0 ? "bg-indigo-600" : "bg-gray-400"
+                    }`}>
+                      {loadingModules["meter-replacement"] ? <RefreshCw className="h-3 w-3 animate-spin" /> : replacementPendingCount}
                     </div>
                   )}
-                  {module.id === "dtr" && dtrPendingCount > 0 && (
-                    <div className="absolute top-2 right-2 md:top-4 md:right-4 z-20 flex items-center justify-center bg-teal-600 text-white text-[10px] md:text-xs font-bold px-1.5 py-0.5 md:px-3 md:py-1 rounded-full shadow-lg border-2 border-white">
-                      {dtrPendingCount}
+                  {module.id === "dtr" && (
+                    <div className={`absolute top-2 right-2 md:top-4 md:right-4 z-20 flex items-center justify-center text-white text-[10px] md:text-xs font-bold w-6 h-6 md:w-8 md:h-8 rounded-full shadow-lg border-2 border-white ${
+                      loadingModules["dtr"] ? "bg-blue-500 animate-pulse" : dtrPendingCount > 0 ? "bg-teal-600" : "bg-gray-400"
+                    }`}>
+                      {loadingModules["dtr"] ? <RefreshCw className="h-3 w-3 animate-spin" /> : dtrPendingCount}
                     </div>
                   )}
 

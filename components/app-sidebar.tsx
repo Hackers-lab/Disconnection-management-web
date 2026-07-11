@@ -148,11 +148,15 @@ export function AppSidebar({ activeView, setActiveView, userRole, isMobile = fal
               <Icon className="mr-2 h-4 w-4" />
               {item.label}
             </div>
-            {item.id === "disconnection" && disconnectionPendingCount > 0 && (
-              <Badge variant="destructive" className="h-5 px-1.5 text-[10px]">{disconnectionPendingCount}</Badge>
+            {item.id === "disconnection" && (
+              <Badge variant={disconnectionPendingCount > 0 ? "destructive" : "secondary"} className="h-5 px-1.5 text-[10px]">
+                {disconnectionPendingCount}
+              </Badge>
             )}
-            {item.id === "deemed" && ddPendingCount > 0 && (
-              <Badge variant="destructive" className="h-5 px-1.5 text-[10px]">{ddPendingCount}</Badge>
+            {item.id === "deemed" && (
+              <Badge variant={ddPendingCount > 0 ? "destructive" : "secondary"} className="h-5 px-1.5 text-[10px]">
+                {ddPendingCount}
+              </Badge>
             )}
           </Button>
         )

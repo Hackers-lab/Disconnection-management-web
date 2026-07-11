@@ -22,7 +22,6 @@ import {
   KeyRound,
   Eye,
   EyeOff,
-  Bell,
   Zap,
   RotateCcw,
   Gauge,
@@ -138,64 +137,7 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
   const [changePwdSuccess, setChangePwdSuccess] = useState(false)
   const [changePwdLoading, setChangePwdLoading] = useState(false)
 
-  // ── Notifications ──────────────────────────────────────────────────────────
-  const [showNotifs,   setShowNotifs]   = useState(false)
-  const [notifLoading, setNotifLoading] = useState(false)
-  interface NotifGroup { label: string; count: number; color: string; bg: string; view: ViewType; icon: any }
-  const [notifGroups, setNotifGroups] = useState<NotifGroup[]>([])
-  const notifTotal = notifGroups.reduce((s, g) => s + g.count, 0)
 
-  const buildNotifGroups = (
-    d: { urgentDC: number; reconnectionPending: number; meterPending: number; nscPending: number },
-    isAdminExec: boolean,
-  ): NotifGroup[] => {
-    const gs: NotifGroup[] = []
-    if (d.urgentDC          > 0) gs.push({ label: "Urgent DC consumers",                                  count: d.urgentDC,          color: "text-red-600",    bg: "bg-red-50",    view: "disconnection", icon: Zap })
-    if (d.reconnectionPending > 0) gs.push({ label: "Reconnections pending",                              count: d.reconnectionPending, color: "text-blue-600",   bg: "bg-blue-50",   view: "reconnection",  icon: RotateCcw })
-    if (d.meterPending      > 0) gs.push({ label: isAdminExec ? "Meters awaiting finalization" : "Meters issued — install pending", count: d.meterPending, color: "text-purple-600", bg: "bg-purple-50", view: "meter", icon: Gauge })
-    if (d.nscPending        > 0) gs.push({ label: isAdminExec ? "NSC inspections awaiting processing" : "NSC inspections pending",   count: d.nscPending,   color: "text-green-600",  bg: "bg-green-50",  view: "nsc",   icon: ClipboardCheck })
-    return gs
-  }
-
-  useEffect(() => {
-    const isAdminExec = userRole === "admin" || userRole === "executive"
-
-    // 1. Instant display from IndexedDB cache
-    getFromCache<any>("notifications_cache").then(cached => {
-      if (cached && typeof cached.meterPending === "number") {
-        setNotifGroups(buildNotifGroups(cached, isAdminExec))
-      }
-    })
-
-    const fetchFresh = async () => {
-      setNotifLoading(true)
-      try {
-        const res = await fetch("/api/notifications", { cache: "no-store" })
-        if (res.ok) {
-          const data = await res.json()
-          setNotifGroups(buildNotifGroups(data, isAdminExec))
-          await saveToCache("notifications_cache", data)
-          sessionStorage.setItem("notif_fetched", "true")
-        }
-      } catch { /* keep current groups */ }
-      finally { setNotifLoading(false) }
-    }
-
-    // Call only if it hasn't been fetched in this session yet
-    if (sessionStorage.getItem("notif_fetched") !== "true") {
-      fetchFresh()
-    }
-
-    // Listen to custom refresh event
-    const onNotifRefresh = () => {
-      fetchFresh()
-    }
-    window.addEventListener("notif-refresh", onNotifRefresh)
-
-    return () => {
-      window.removeEventListener("notif-refresh", onNotifRefresh)
-    }
-  }, [userRole, userAgencies])
 
   const openChangePwdDialog = () => {
     setChangePwdCurrent("")
@@ -527,7 +469,6 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
     try {
       setLoggingOut(true);
       sessionStorage.removeItem("user_permissions");
-      sessionStorage.removeItem("notif_fetched");
       await logout();
     } catch (err) {
       setLoggingOut(false);
@@ -990,78 +931,6 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
             <div className="flex items-center space-x-2 text-sm text-gray-600 bg-gray-50 px-2 py-1.5 rounded-full border">
               <User className="h-4 w-4" />
               <span className="capitalize inline truncate max-w-[120px]">{displayAgencyName || userRole}</span>
-            </div>
-
-            {/* ── Notification bell ── */}
-            <div className="relative">
-              <button
-                onClick={() => setShowNotifs(v => !v)}
-                className="relative p-2 rounded-full hover:bg-gray-100 transition"
-                title="Notifications"
-              >
-                <Bell className={`h-5 w-5 ${notifLoading ? "text-gray-400" : "text-gray-600"}`} />
-                {notifLoading && (
-                  <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3">
-                    <RefreshCw className="h-3 w-3 text-blue-500 animate-spin" />
-                  </span>
-                )}
-                {notifTotal > 0 && !notifLoading && (
-                  <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] bg-red-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1 leading-none">
-                    {notifTotal > 99 ? "99+" : notifTotal}
-                  </span>
-                )}
-                {notifTotal > 0 && notifLoading && (
-                  <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] bg-red-400 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1 leading-none">
-                    {notifTotal > 99 ? "99+" : notifTotal}
-                  </span>
-                )}
-              </button>
-
-              {/* Dropdown panel */}
-              {showNotifs && (
-                <>
-                  {/* Click-away overlay */}
-                  <div className="fixed inset-0 z-40" onClick={() => setShowNotifs(false)} />
-                  <div className="absolute right-0 mt-2 w-72 bg-white border rounded-xl shadow-xl z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-                    <div className="px-4 py-3 border-b flex items-center justify-between">
-                      <p className="font-semibold text-sm text-gray-800">Notifications</p>
-                      {notifTotal > 0 && (
-                        <span className="text-xs bg-red-100 text-red-700 font-bold px-2 py-0.5 rounded-full">{notifTotal} pending</span>
-                      )}
-                    </div>
-                    {notifGroups.length === 0 ? (
-                      <div className="px-4 py-8 text-center text-gray-400 text-sm">
-                        <Bell className="h-8 w-8 mx-auto mb-2 opacity-30" />
-                        <p>All clear — no pending items</p>
-                      </div>
-                    ) : (
-                      <div className="divide-y">
-                        {notifGroups.map(g => {
-                          const Icon = g.icon
-                          return (
-                            <button
-                              key={g.label}
-                              className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition text-left`}
-                              onClick={() => { setShowNotifs(false); setActiveView(g.view) }}
-                            >
-                              <div className={`shrink-0 w-9 h-9 rounded-full ${g.bg} flex items-center justify-center`}>
-                                <Icon className={`h-4 w-4 ${g.color}`} />
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium text-gray-800 leading-tight">{g.label}</p>
-                              </div>
-                              <span className={`shrink-0 text-sm font-bold ${g.color}`}>{g.count}</span>
-                            </button>
-                          )
-                        })}
-                      </div>
-                    )}
-                    <div className="px-4 py-2 border-t bg-gray-50 text-center">
-                      <p className="text-[10px] text-gray-400">Refreshes every minute · tap to navigate</p>
-                    </div>
-                  </div>
-                </>
-              )}
             </div>
 
             {/* --- DESKTOP VIEW (Hidden on Mobile) --- */}
