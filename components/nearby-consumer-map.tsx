@@ -216,8 +216,13 @@ export function NearbyConsumerMap({ consumers, onClose, onGoToConsumer }: Props)
         })
       }).addTo(map)
 
-      // Escape consumer ID for HTML attribute safety
-      const safeId = consumer.consumerId.replace(/"/g, "&quot;")
+      // Escape consumer ID and address for HTML attribute safety
+      const safeId = (consumer.consumerId || "").replace(/"/g, "&quot;")
+      const safeAddress = (consumer.address || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
 
       marker.bindPopup(`
         <div style="font-family: system-ui, sans-serif; font-size: 12px; padding: 6px 8px; line-height: 1.6; color: #1e293b; min-width: 200px; max-width: 240px;">
@@ -226,6 +231,7 @@ export function NearbyConsumerMap({ consumers, onClose, onGoToConsumer }: Props)
           </p>
           <p style="margin: 2px 0; color: #475569;">OSD: <strong style="color:#dc2626;">₹${osd}</strong></p>
           <p style="margin: 2px 0; color: #475569;">Class: <strong style="color:#0f172a;">${consumer.baseClass || consumer.class || "—"}</strong></p>
+          <p style="margin: 2px 0; color: #475569;">Address: <strong style="color:#0f172a; font-weight:600;">${safeAddress}</strong></p>
           <p style="margin: 2px 0; color: #475569;">Status: <strong style="color:${color}; text-transform:capitalize;">${consumer.disconStatus || "—"}</strong></p>
           <p style="margin: 2px 0; color: #475569;">Distance: <strong style="color:#0f172a;">${Math.round(dist)} m</strong></p>
           ${consumer.mobileNumber ? `<p style="margin: 2px 0; color: #475569;">Mobile: <a href="tel:${consumer.mobileNumber}" style="color:#2563eb;">${consumer.mobileNumber}</a></p>` : ""}

@@ -964,14 +964,11 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
 
       {/* Admin/Executive warning banner when overdue reconnections exist */}
       {(userRole === "admin" || userRole === "executive") && blockedIds.size > 0 && (
-        <div className="flex items-start gap-3 bg-orange-50 border-l-4 border-orange-500 rounded-lg p-4">
+        <div className="flex items-center gap-3 bg-orange-50 border-l-4 border-orange-500 rounded-lg p-3">
           <AlertCircle className="h-5 w-5 text-orange-600 mt-0.5 shrink-0" />
           <div className="flex-1 min-w-0">
             <p className="font-semibold text-orange-800">
-              {blockedIds.size} overdue reconnection{blockedIds.size > 1 ? "s" : ""} (&gt;30 hours)
-            </p>
-            <p className="text-sm text-orange-700 mt-0.5">
-              Affected consumers are marked below. Agency access to this module is currently blocked.
+              {blockedIds.size} reconnection{blockedIds.size > 1 ? "s" : ""} pending
             </p>
           </div>
           {onGoToReconnection && (
