@@ -40,6 +40,22 @@ import {
   SlidersHorizontal
 } from "lucide-react"
 
+function getGoogleDriveDirectLink(url: string): string {
+  if (!url) return ""
+  if (url.includes("drive.google.com")) {
+    let fileId = ""
+    if (url.includes("/file/d/")) {
+      const parts = url.split("/file/d/")
+      if (parts[1]) fileId = parts[1].split("/")[0]
+    } else if (url.includes("id=")) {
+      const match = url.match(/[?&]id=([^&]+)/)
+      if (match && match[1]) fileId = match[1]
+    }
+    if (fileId) return `https://lh3.googleusercontent.com/d/${fileId}`
+  }
+  return url
+}
+
 interface Props {
   userRole: string
   userAgencies: string[]
@@ -652,7 +668,7 @@ export function DTRPaintingList({ userRole, userAgencies = [], username, agencie
                       {viewingDtr.paintingImage ? (
                         <div className="rounded-xl overflow-hidden border max-h-48 flex items-center justify-center bg-white shadow-sm">
                           <img 
-                            src={viewingDtr.paintingImage} 
+                            src={getGoogleDriveDirectLink(viewingDtr.paintingImage)} 
                             alt="DTR evidence" 
                             className="max-h-48 object-contain cursor-pointer" 
                             onClick={() => window.open(viewingDtr.paintingImage, "_blank")}

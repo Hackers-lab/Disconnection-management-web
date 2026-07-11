@@ -28,6 +28,22 @@ interface Props {
   onCancel: () => void
 }
 
+function getGoogleDriveDirectLink(url: string): string {
+  if (!url) return ""
+  if (url.includes("drive.google.com")) {
+    let fileId = ""
+    if (url.includes("/file/d/")) {
+      const parts = url.split("/file/d/")
+      if (parts[1]) fileId = parts[1].split("/")[0]
+    } else if (url.includes("id=")) {
+      const match = url.match(/[?&]id=([^&]+)/)
+      if (match && match[1]) fileId = match[1]
+    }
+    if (fileId) return `https://lh3.googleusercontent.com/d/${fileId}`
+  }
+  return url
+}
+
 export function DTRPaintingForm({ dtr, username, userRole, onSave, onCancel }: Props) {
   const [painting, setPainting] = useState<string>("Done")
   const [imageUrl, setImageUrl] = useState(dtr.paintingImage || "")
@@ -312,7 +328,7 @@ export function DTRPaintingForm({ dtr, username, userRole, onSave, onCancel }: P
             {(previewUrl || imageUrl) && !cameraOn && (
               <div className="relative rounded-2xl overflow-hidden border mt-3 max-h-64 bg-slate-100 flex items-center justify-center">
                 <img 
-                  src={previewUrl || imageUrl} 
+                  src={previewUrl || getGoogleDriveDirectLink(imageUrl)} 
                   alt="DTR painting" 
                   className={`max-h-64 object-contain ${uploading ? 'opacity-40' : ''}`} 
                 />

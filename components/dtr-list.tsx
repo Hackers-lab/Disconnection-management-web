@@ -64,6 +64,22 @@ interface Props {
   permissions?: Record<string, string[]>
 }
 
+function getGoogleDriveDirectLink(url: string): string {
+  if (!url) return ""
+  if (url.includes("drive.google.com")) {
+    let fileId = ""
+    if (url.includes("/file/d/")) {
+      const parts = url.split("/file/d/")
+      if (parts[1]) fileId = parts[1].split("/")[0]
+    } else if (url.includes("id=")) {
+      const match = url.match(/[?&]id=([^&]+)/)
+      if (match && match[1]) fileId = match[1]
+    }
+    if (fileId) return `https://lh3.googleusercontent.com/d/${fileId}`
+  }
+  return url
+}
+
 type TabType = "all" | "pending" | "completed"
 type SyncState = "idle" | "loading" | "updated"
 const CACHE_KEY = "dtr_data_cache"
@@ -902,9 +918,9 @@ export function DTRList({ userRole, userAgencies = [], username, agencies = [], 
                       {viewingDtr.image ? (
                         <div className="rounded-xl overflow-hidden border max-h-48 flex items-center justify-center bg-white shadow-sm">
                           <img 
-                            src={viewingDtr.image} 
+                            src={getGoogleDriveDirectLink(viewingDtr.image)} 
                             alt="DTR evidence" 
-                            className="max-h-48 object-contain" 
+                            className="max-h-48 object-contain cursor-pointer" 
                             onClick={() => window.open(viewingDtr.image, "_blank")}
                           />
                         </div>
