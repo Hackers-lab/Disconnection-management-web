@@ -43,7 +43,9 @@ export function DashboardShell({
         setActiveView={setActiveView}
         permissions={permissions}
       />
-      <main className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8 overflow-x-hidden">
+      <main className={`max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 overflow-x-hidden ${
+        activeView === "home" ? "py-6" : "pt-2 pb-6"
+      }`}>
         {/* Render whatever is passed as children (Menu, List, etc.) */}
         {children} 
       </main>
