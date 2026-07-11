@@ -87,6 +87,7 @@ export function NscList({ userRole, userAgencies, username, agencies }: Props) {
       await saveToCache(CACHE_KEY, sorted)
       setSyncState("updated")
       setTimeout(() => setSyncState("idle"), 3000)
+      window.dispatchEvent(new Event("notif-refresh"))
     } catch {
       setSyncState("idle")
       if (!silent) toast({ title: "Failed to load NSC data", variant: "destructive" })

@@ -55,7 +55,7 @@ interface AdminPanelProps {
   onClose: () => void
 }
 
-type ViewType = "menu" | "users" | "agencies" | "payments" | "dcList" | "zoneMap"
+type ViewType = "menu" | "users" | "agencies" | "payments" | "dcList" | "zoneMap" | "roles"
 
 interface User {
   id: string
@@ -302,6 +302,10 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
   const [view, setView] = useState<ViewType>("menu")
   const [users, setUsers] = useState<User[]>([])
   const [agencies, setAgencies] = useState<Agency[]>([])
+  const [roles, setRoles] = useState<any[]>([])
+  const [selectedRole, setSelectedRole] = useState<string>("agency")
+  const [newRoleName, setNewRoleName] = useState("")
+  const [showAddRole, setShowAddRole] = useState(false)
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
   const [showAddUser, setShowAddUser] = useState(false)
@@ -613,6 +617,101 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
       loadUsers()
     }
   }, [view])
+
+  const loadRoles = async () => {
+    try {
+      setLoading(true)
+      const res = await fetch("/api/admin/roles")
+      if (res.ok) {
+        const data = await res.json()
+        setRoles(data)
+      }
+    } catch (e) {
+      console.error("Failed to load roles:", e)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (view === "users" || view === "roles") {
+      loadRoles()
+    }
+  }, [view])
+
+  const saveRolePermissions = async (roleName: string, updatedPerms: Record<string, string[]>) => {
+    try {
+      setLoading(true)
+      const payload = {
+        role: roleName,
+        ...updatedPerms
+      }
+      const res = await fetch("/api/admin/roles", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      })
+      if (res.ok) {
+        await loadRoles()
+        setMessage({ type: "success", text: `Role permissions for '${roleName}' saved successfully.` })
+      } else {
+        throw new Error("Failed to save role permissions")
+      }
+    } catch (e: any) {
+      setMessage({ type: "error", text: e.message || "Failed to save permissions" })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const createNewRole = async () => {
+    const name = newRoleName.trim().toLowerCase()
+    if (!name) return
+    
+    // Check if already exists
+    if (roles.some(r => r.role.toLowerCase() === name)) {
+      setMessage({ type: "error", text: "Role already exists" })
+      return
+    }
+
+    const defaultPerms: Record<string, string[]> = {
+      disconnection: ["read"],
+      reconnection: ["read"],
+      deemed: ["read"],
+      dtr: ["read"],
+      meter: ["read"],
+      nsc: ["read"],
+      consumer_master: ["read"],
+      admin: []
+    }
+    
+    await saveRolePermissions(name, defaultPerms)
+    setSelectedRole(name)
+    setNewRoleName("")
+    setShowAddRole(false)
+  }
+
+  const deleteRole = async (roleName: string) => {
+    if (roleName.toLowerCase() === "admin") return
+    if (!confirm(`Are you sure you want to delete the role '${roleName}'?`)) return
+    try {
+      setLoading(true)
+      const res = await fetch(`/api/admin/roles?role=${roleName}`, {
+        method: "DELETE"
+      })
+      if (res.ok) {
+        await loadRoles()
+        setSelectedRole("agency")
+        setMessage({ type: "success", text: `Role '${roleName}' deleted successfully.` })
+      } else {
+        throw new Error("Failed to delete role")
+      }
+    } catch (e: any) {
+      setMessage({ type: "error", text: e.message || "Failed to delete role" })
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const handleBack = () => {
     if (view === "menu") {
@@ -1006,6 +1105,12 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
             description="Map zones to agencies for auto-assign"
             onClick={() => setView("zoneMap")}
           />
+          <DashboardCard
+            icon={<ShieldCheck className="h-12 w-12 text-rose-500" />}
+            title="Manage Roles"
+            description="Edit role permissions dynamically"
+            onClick={() => setView("roles")}
+          />
         </div>
       )}
 
@@ -1074,15 +1179,25 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="admin">Admin</SelectItem>
-                  <SelectItem value="agency">Agency</SelectItem>
-                  <SelectItem value="executive">Executive</SelectItem>
-                  <SelectItem value="viewer">Viewer</SelectItem>
+                  {roles.length > 0 ? (
+                    roles.map((r) => (
+                      <SelectItem key={r.role} value={r.role}>
+                        <span className="capitalize">{r.role}</span>
+                      </SelectItem>
+                    ))
+                  ) : (
+                    <>
+                      <SelectItem value="admin">Admin</SelectItem>
+                      <SelectItem value="agency">Agency</SelectItem>
+                      <SelectItem value="executive">Executive</SelectItem>
+                      <SelectItem value="viewer">Viewer</SelectItem>
+                    </>
+                  )}
                 </SelectContent>
               </Select>
             </div>
 
-            {(newUser.role === "agency" || newUser.role === "executive") && (
+            {newUser.role !== "admin" && newUser.role !== "viewer" && (
               <div className="space-y-2">
                 <Label>Assigned Agencies</Label>
                 {activeAgencies.length > 0 ? (
@@ -1177,16 +1292,26 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="admin">Admin</SelectItem>
-                            <SelectItem value="agency">Agency</SelectItem>
-                            <SelectItem value="executive">Executive</SelectItem>
-                            <SelectItem value="viewer">Viewer</SelectItem>
+                            {roles.length > 0 ? (
+                              roles.map((r) => (
+                                <SelectItem key={r.role} value={r.role}>
+                                  <span className="capitalize">{r.role}</span>
+                                </SelectItem>
+                              ))
+                            ) : (
+                              <>
+                                <SelectItem value="admin">Admin</SelectItem>
+                                <SelectItem value="agency">Agency</SelectItem>
+                                <SelectItem value="executive">Executive</SelectItem>
+                                <SelectItem value="viewer">Viewer</SelectItem>
+                              </>
+                            )}
                           </SelectContent>
                         </Select>
                       </div>
                     </div>
 
-                    {(editingUser.role === "agency" || editingUser.role === "executive") && (
+                    {editingUser.role !== "admin" && editingUser.role !== "viewer" && (
                       <div className="space-y-2">
                         <Label>Agencies</Label>
                         <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
@@ -2286,6 +2411,164 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
               })()}
             </CardContent>
           </Card>
+        </div>
+      )}
+      {view === "roles" && (
+        <div className="space-y-4">
+          <div className="flex justify-between items-center mb-4 flex-wrap gap-2">
+            <div>
+              <h2 className="text-xl font-bold">Manage Roles & Permissions</h2>
+              <p className="text-sm text-gray-500 mt-1">Configure module-level actions for roles</p>
+            </div>
+            <div className="flex gap-2">
+              <Input
+                placeholder="Role name..."
+                value={newRoleName}
+                onChange={(e) => setNewRoleName(e.target.value)}
+                className="h-9 w-40 text-xs"
+              />
+              <Button size="sm" onClick={createNewRole} disabled={!newRoleName.trim()}>
+                <Plus className="h-4 w-4 mr-1" /> Add Role
+              </Button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            {/* Sidebar roles list */}
+            <Card className="md:col-span-1">
+              <CardHeader className="py-3 px-4">
+                <CardTitle className="text-sm">Available Roles</CardTitle>
+              </CardHeader>
+              <CardContent className="p-2 space-y-1">
+                {roles.map((r) => (
+                  <div
+                    key={r.role}
+                    className={`flex items-center justify-between p-2 rounded-lg cursor-pointer transition text-xs font-semibold ${
+                      selectedRole === r.role
+                        ? "bg-blue-100 text-blue-800"
+                        : "hover:bg-gray-100 text-gray-700"
+                    }`}
+                    onClick={() => setSelectedRole(r.role)}
+                  >
+                    <span className="capitalize">{r.role}</span>
+                    {r.role !== "admin" && (
+                      <button
+                        className="text-gray-400 hover:text-red-500 p-0.5"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          deleteRole(r.role)
+                        }}
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+
+            {/* Permissions Checkbox Grid */}
+            <Card className="md:col-span-3">
+              <CardHeader className="py-3 px-4 flex flex-row items-center justify-between border-b">
+                <CardTitle className="text-sm">
+                  Permissions Grid for: <span className="capitalize font-bold text-blue-700">{selectedRole}</span>
+                </CardTitle>
+                {selectedRole !== "admin" && (
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      const r = roles.find((x) => x.role === selectedRole)
+                      if (r) {
+                        const { role, ...perms } = r
+                        saveRolePermissions(selectedRole, perms)
+                      }
+                    }}
+                  >
+                    <Save className="h-4 w-4 mr-1" /> Save Grid
+                  </Button>
+                )}
+              </CardHeader>
+              <CardContent className="p-0">
+                {(() => {
+                  const roleData = roles.find((x) => x.role === selectedRole)
+                  if (!roleData) return <div className="p-4 text-center text-xs text-gray-500">Select a role</div>
+
+                  const modulesList = [
+                    { id: "disconnection", name: "Disconnection" },
+                    { id: "reconnection", name: "Reconnection" },
+                    { id: "deemed", name: "Deemed Visit" },
+                    { id: "dtr", name: "DTR Verification" },
+                    { id: "meter", name: "Meter Management" },
+                    { id: "nsc", name: "NSC Management" },
+                    { id: "consumer_master", name: "Consumer Master" },
+                    { id: "admin", name: "Admin Panel" },
+                  ]
+
+                  const actions = [
+                    { id: "read", name: "Read" },
+                    { id: "create", name: "Create" },
+                    { id: "update", name: "Update" },
+                    { id: "delete", name: "Delete" },
+                  ]
+
+                  const togglePerm = (mod: string, act: string) => {
+                    if (selectedRole === "admin") return // admin is read-only all
+
+                    const cur = roleData[mod] || []
+                    const next = cur.includes(act)
+                      ? cur.filter((x: string) => x !== act)
+                      : [...cur, act]
+
+                    setRoles((prev) =>
+                      prev.map((x) =>
+                        x.role === selectedRole ? { ...x, [mod]: next } : x
+                      )
+                    )
+                  }
+
+                  return (
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="text-xs w-1/3">Module / Section</TableHead>
+                            {actions.map((act) => (
+                              <TableHead key={act.id} className="text-xs text-center">{act.name}</TableHead>
+                            ))}
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {modulesList.map((mod) => {
+                            const curPerms = roleData[mod.id] || []
+                            return (
+                              <TableRow key={mod.id}>
+                                <TableCell className="text-xs font-semibold text-gray-800">{mod.name}</TableCell>
+                                {actions.map((act) => {
+                                  const checked = curPerms.includes(act.id)
+                                  const disabled = selectedRole === "admin"
+                                  return (
+                                    <TableCell key={act.id} className="text-center py-2">
+                                      <input
+                                        type="checkbox"
+                                        checked={checked}
+                                        disabled={disabled}
+                                        onChange={() => togglePerm(mod.id, act.id)}
+                                        className="h-4 w-4 rounded text-blue-600 border-gray-300 focus:ring-blue-500 disabled:opacity-50 cursor-pointer"
+                                      />
+                                    </TableCell>
+                                  )
+                                })}
+                              </TableRow>
+                            )
+                          })}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  )
+                })()}
+              </CardContent>
+            </Card>
+          </div>
         </div>
       )}
 

@@ -27,21 +27,30 @@ interface Props {
   agencies: string[]
   onSave: (apiCall: () => Promise<string>) => void
   onCancel: () => void
+  prefill?: {
+    replacementId: string
+    consumerId: string
+    consumerName: string
+    address: string
+    mobile: string
+    purpose: IssuePurpose
+    agency: string
+  }
 }
 
-export function MeterIssueForm({ availableStock, agencies, onSave, onCancel }: Props) {
-  const [purpose, setPurpose]           = useState<IssuePurpose>("faulty_replacement")
-  const [consumerId, setConsumerId]     = useState("")
+export function MeterIssueForm({ availableStock, agencies, onSave, onCancel, prefill }: Props) {
+  const [purpose, setPurpose]           = useState<IssuePurpose>(prefill?.purpose || "faulty_replacement")
+  const [consumerId, setConsumerId]     = useState(prefill?.consumerId || "")
   const [nscReceiveNo, setNscReceiveNo] = useState("")
-  const [consumerName, setConsumerName] = useState("")
-  const [agency, setAgency]             = useState("")
-  const [consumerAddress, setConsumerAddress] = useState("")
-  const [consumerMobile, setConsumerMobile]   = useState("")
+  const [consumerName, setConsumerName] = useState(prefill?.consumerName || "")
+  const [agency, setAgency]             = useState(prefill?.agency || "")
+  const [consumerAddress, setConsumerAddress] = useState(prefill?.address || "")
+  const [consumerMobile, setConsumerMobile]   = useState(prefill?.mobile || "")
   const [consumerDevice, setConsumerDevice]   = useState("")
   const [serialNo, setSerialNo]           = useState("")
   const [typeFilter, setTypeFilter]       = useState("all")
   const [serialSearch, setSerialSearch]   = useState("")
-  const [consumerFoundInDC, setConsumerFoundInDC] = useState(false)
+  const [consumerFoundInDC, setConsumerFoundInDC] = useState(!!prefill)
   const [remarks, setRemarks]           = useState("")
   const [looking, setLooking]           = useState(false)
   const [lookupSource, setLookupSource] = useState<"dc" | "master">("dc")
@@ -186,7 +195,7 @@ export function MeterIssueForm({ availableStock, agencies, onSave, onCancel }: P
       const res = await fetch("/api/meters/issue", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ serialNo, purpose, consumerId: consumerId.trim(), nscReceiveNo: nscReceiveNo.trim(), consumerName, address: consumerAddress, mobile: consumerMobile, oldDevice: consumerDevice, agency, remarks }),
+        body: JSON.stringify({ serialNo, purpose, consumerId: consumerId.trim(), nscReceiveNo: nscReceiveNo.trim(), consumerName, address: consumerAddress, mobile: consumerMobile, oldDevice: consumerDevice, agency, remarks, replacementId: prefill?.replacementId || "" }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || "Failed")
@@ -205,7 +214,7 @@ export function MeterIssueForm({ availableStock, agencies, onSave, onCancel }: P
       <Card>
         <CardContent className="p-4 space-y-3">
           <Label>Purpose</Label>
-          <Select value={purpose} onValueChange={v => setPurpose(v as IssuePurpose)}>
+          <Select value={purpose} onValueChange={v => setPurpose(v as IssuePurpose)} disabled={!!prefill}>
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>
               {PURPOSE_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
@@ -218,7 +227,20 @@ export function MeterIssueForm({ availableStock, agencies, onSave, onCancel }: P
       <Card>
         <CardHeader className="pb-2 pt-4 px-4"><CardTitle className="text-sm">Reference</CardTitle></CardHeader>
         <CardContent className="px-4 pb-4 space-y-3">
-          {purpose === "nsc" ? (
+          {prefill ? (
+            <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-blue-900 text-xs">Proposed Replacement Link</span>
+                <span className="font-mono text-[10px] text-blue-700 font-bold bg-blue-100 px-2 py-0.5 rounded-full">{prefill.replacementId}</span>
+              </div>
+              <div className="bg-white border border-blue-200 rounded-lg px-3 py-2 space-y-1">
+                <p className="text-[10px] font-semibold text-blue-700 uppercase tracking-wide">Consumer Details</p>
+                <p className="text-sm text-gray-800 font-bold">{prefill.consumerName} <span className="font-mono font-normal text-xs text-gray-500">({prefill.consumerId})</span></p>
+                <p className="text-xs text-gray-600 font-medium">{prefill.address}</p>
+                <p className="text-xs font-mono text-blue-700 font-semibold">{prefill.mobile}</p>
+              </div>
+            </div>
+          ) : purpose === "nsc" ? (
             <div className="space-y-3">
               {nscSelected ? (
                 /* Selected NSC app details card */
@@ -353,8 +375,8 @@ export function MeterIssueForm({ availableStock, agencies, onSave, onCancel }: P
               )}
             </div>
           )}
-          {/* Consumer detail fields — hidden for NSC (shown in selection card above) */}
-          {purpose !== "nsc" && (() => {
+          {/* Consumer detail fields — hidden for NSC or when prefill is active */}
+          {purpose !== "nsc" && !prefill && (() => {
             const notInDC = !consumerFoundInDC
             return (
               <div className="space-y-2">
@@ -383,7 +405,7 @@ export function MeterIssueForm({ availableStock, agencies, onSave, onCancel }: P
           })()}
           <div className="space-y-2">
             <Label>Agency *</Label>
-            <Select value={agency} onValueChange={setAgency}>
+            <Select value={agency} onValueChange={setAgency} disabled={!!prefill?.agency}>
               <SelectTrigger><SelectValue placeholder="Select agency..." /></SelectTrigger>
               <SelectContent>
                 {agencyList.map(a => <SelectItem key={a} value={a}>{a}</SelectItem>)}

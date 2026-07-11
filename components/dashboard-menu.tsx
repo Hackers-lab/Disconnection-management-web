@@ -25,9 +25,10 @@ interface DashboardMenuProps {
   onSelect: (module: ViewType) => void
   userRole: string
   userAgencies?: string[]
+  permissions?: Record<string, string[]>
 }
 
-export function DashboardMenu({ onSelect, userRole, userAgencies = [] }: DashboardMenuProps) {
+export function DashboardMenu({ onSelect, userRole, userAgencies = [], permissions }: DashboardMenuProps) {
   const [pendingCount, setPendingCount] = useState<number>(0)
   const [ddPendingCount, setDdPendingCount] = useState<number>(0)
   const [reconnectionPendingCount, setReconnectionPendingCount] = useState<number>(0)
@@ -71,14 +72,14 @@ export function DashboardMenu({ onSelect, userRole, userAgencies = [] }: Dashboa
     },
     {
       id: "dtr",
-      title: "DTR Management",
-      description: "DTR inspections",
+      title: "DTR Verification",
+      description: "Verify transformer existence and record inspection parameters",
       icon: RadioTower,
       color: "text-orange-600",
       bgColor: "bg-orange-50",
       borderColor: "hover:border-orange-200",
-      allowed: ["admin", "executive"],
-      status: "soon"
+      allowed: ["admin", "executive", "agency"],
+      status: "live"
     },
     {
       id: "meter",
@@ -110,6 +111,17 @@ export function DashboardMenu({ onSelect, userRole, userAgencies = [] }: Dashboa
       color: "text-teal-600",
       bgColor: "bg-teal-50",
       borderColor: "hover:border-teal-200",
+      allowed: ["admin", "executive", "agency"],
+      status: "live"
+    },
+    {
+      id: "meter-replacement",
+      title: "Replacement List",
+      description: "Propose new meter replacements & track progress",
+      icon: ClipboardCheck,
+      color: "text-indigo-600",
+      bgColor: "bg-indigo-50",
+      borderColor: "hover:border-indigo-200",
       allowed: ["admin", "executive", "agency"],
       status: "live"
     },
@@ -247,7 +259,9 @@ export function DashboardMenu({ onSelect, userRole, userAgencies = [] }: Dashboa
 
           <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-6">
             {modules.map((module) => {
-              if (module.allowed[0] !== "all" && !module.allowed.includes(userRole)) return null
+              const permKey = module.id.replace(/-/g, "_")
+              const hasAccess = module.id === "home" || (permissions && (permissions[module.id]?.includes("read") || permissions[permKey]?.includes("read")))
+              if (!hasAccess) return null
               const Icon = module.icon
               return (
                 <Card 

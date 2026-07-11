@@ -14,6 +14,7 @@ interface DashboardShellProps {
   children: React.ReactNode
   onDownload?: () => void
   onDownloadDefaulters?: () => void
+  permissions?: Record<string, string[]>
 }
 
 export function DashboardShell({ 
@@ -26,7 +27,8 @@ export function DashboardShell({
   setActiveView,
   children,
   onDownload,
-  onDownloadDefaulters
+  onDownloadDefaulters,
+  permissions
 }: DashboardShellProps) {
   
   return (
@@ -34,11 +36,12 @@ export function DashboardShell({
       <Header 
         userRole={role} 
         userAgencies={agencies}
-        onAdminClick={role === "admin" ? openAdmin : undefined} 
+        onAdminClick={(role === "admin" || permissions?.admin?.includes("read")) ? openAdmin : undefined} 
         onDownload={onDownload} 
         onDownloadDefaulters={onDownloadDefaulters}
         activeView={activeView}
         setActiveView={setActiveView}
+        permissions={permissions}
       />
       <main className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8 overflow-x-hidden">
         {/* Render whatever is passed as children (Menu, List, etc.) */}

@@ -12,6 +12,7 @@ import {
   Search, X, Plus, RefreshCw, Loader2, Check, AlertCircle,
   Printer, ChevronLeft, ChevronRight, RotateCcw, Package,
   ArrowLeft, Upload, ChevronDown, ChevronUp, FileDown, ClipboardCheck,
+  MapPin, Phone, Building2,
 } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
 import type { MeterStock, MeterIssue, StockSummary, MeterTypeLabel } from "@/lib/meter-types"
@@ -26,7 +27,7 @@ const loadXLSX = () => import("xlsx")
 const ADMIN_CACHE_KEY  = "meter_stock_cache"
 const AGENCY_CACHE_KEY = "meter_issues_cache"
 
-type Tab = "stock" | "active" | "history" | "reports"
+type Tab = "stock" | "active" | "history" | "reports" | "proposed"
 type View = "list" | "issue" | "complete" | "addstock"
 type SyncState = "idle" | "loading" | "updated"
 
@@ -65,6 +66,21 @@ interface Props {
   agencies: string[]
 }
 
+interface MeterReplacement {
+  replacementId: string
+  consumerId: string
+  consumerName: string
+  address: string
+  mobile: string
+  agency: string
+  purpose: string
+  proposedDate: string
+  status: "proposed" | "issued" | "updated" | "replaced"
+  serialNo: string
+  issueId: string
+  remarks: string
+}
+
 export function MeterList({ userRole, userAgencies, username, agencies }: Props) {
   const { toast } = useToast()
   const isAdmin = userRole === "admin" || userRole === "executive"
@@ -86,6 +102,9 @@ export function MeterList({ userRole, userAgencies, username, agencies }: Props)
   const [finalizeRef, setFinalizeRef]                 = useState("")
   const [finalizeInstNo, setFinalizeInstNo]           = useState("")
   const [finalizing, setFinalizing]                   = useState(false)
+  const [prefill, setPrefill]                         = useState<any>(null)
+  const [replacements, setReplacements]               = useState<MeterReplacement[]>([])
+  const [loadingReplacements, setLoadingReplacements] = useState(false)
   const PAGE = 20
 
   // ── Load data ──────────────────────────────────────────────────────────────
@@ -127,13 +146,42 @@ export function MeterList({ userRole, userAgencies, username, agencies }: Props)
       }
       setSyncState("updated")
       setTimeout(() => setSyncState("idle"), 3000)
+      if (tab === "proposed") {
+        loadReplacements()
+      }
     } catch {
       setSyncState("idle")
       if (!silent) toast({ title: "Failed to load meter data", variant: "destructive" })
     }
   }
 
+  const loadReplacements = async () => {
+    setLoadingReplacements(true)
+    try {
+      const cached = await getFromCache<MeterReplacement[]>("meter_replacement_data_cache")
+      if (cached && cached.length > 0) {
+        setReplacements(cached)
+      }
+      const res = await fetch("/api/meters/replacement")
+      if (res.ok) {
+        const data = await res.json()
+        setReplacements(data)
+        await saveToCache("meter_replacement_data_cache", data)
+      }
+    } catch {
+      toast({ title: "Failed to load proposed replacements", variant: "destructive" })
+    } finally {
+      setLoadingReplacements(false)
+    }
+  }
+
   useEffect(() => { load() }, [])
+
+  useEffect(() => {
+    if (tab === "proposed" || view === "issue") {
+      loadReplacements()
+    }
+  }, [tab, view])
 
   // ── Filtering ─────────────────────────────────────────────────────────────
   const filteredIssues = useMemo(() => {
@@ -190,6 +238,7 @@ export function MeterList({ userRole, userAgencies, username, agencies }: Props)
       })
       if (!res.ok) throw new Error((await res.json()).error)
       toast({ title: "Meter returned to stock" })
+      window.dispatchEvent(new Event("notif-refresh"))
       load(true)
     } catch (e: any) { toast({ title: e.message, variant: "destructive" }) }
   }
@@ -227,6 +276,7 @@ export function MeterList({ userRole, userAgencies, username, agencies }: Props)
       setSelectedForFinalize(new Set())
       setFinalizeRef(""); setFinalizeInstNo("")
       setFinalizing(false)
+      window.dispatchEvent(new Event("notif-refresh"))
       load(true)
     }
   }
@@ -264,14 +314,16 @@ export function MeterList({ userRole, userAgencies, username, agencies }: Props)
     <MeterIssueForm
       availableStock={stock}
       agencies={agencies}
+      prefill={prefill}
       onSave={apiCall => {
         setView("list")
+        setPrefill(null)
         toast({ title: "Issuing meter...", description: "Processing in background" })
         apiCall()
           .then(id => { toast({ title: "Meter issued", description: `Issue ID: ${id}` }); load(true) })
           .catch(err => { toast({ title: "Issue failed — please retry", description: err.message, variant: "destructive" }); load(true) })
       }}
-      onCancel={() => setView("list")}
+      onCancel={() => { setView("list"); setPrefill(null) }}
     />
   )
 
@@ -344,7 +396,7 @@ export function MeterList({ userRole, userAgencies, username, agencies }: Props)
               <Printer className="h-4 w-4 mr-1" /> Print ({selectedForSlip.size})
             </Button>
           )}
-          {tab !== "stock" && (
+          {tab !== "stock" && tab !== "proposed" && (
             <Button size="sm" variant="ghost" onClick={exportIssues} className="shrink-0" title="Export to Excel">
               <FileDown className="h-4 w-4" />
             </Button>
@@ -355,19 +407,20 @@ export function MeterList({ userRole, userAgencies, username, agencies }: Props)
         </div>
 
         <div className="flex gap-1 overflow-x-auto pb-1">
-          {(isAdmin ? ["stock", "active", "history", "reports"] as Tab[] : ["active", "history"] as Tab[]).map(t => (
+          {(isAdmin ? ["stock", "active", "history", "proposed", "reports"] as Tab[] : ["active", "history", "proposed"] as Tab[]).map(t => (
             <button key={t} onClick={() => setTab(t)}
               className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap transition ${tab === t ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>
               {t === "stock" ? "All Stock"
-               : t === "active" ? `Active (${issues.filter(i => (i.status === "issued" || i.status === "installation_done") && (isAdmin || userAgencies.map(a=>a.toUpperCase()).includes(i.agency.toUpperCase()))).length})`
+               : t === "active" ? `Active (${issues.filter(i => (i.status === "issued" || i.status === "installation_done") && (isAdmin || userAgencies.map((a: string) => a.toUpperCase()).includes(i.agency.toUpperCase()))).length})`
                : t === "history" ? "History"
+               : t === "proposed" ? `Proposed (${replacements.filter((r: MeterReplacement) => r.status === "proposed" && (isAdmin || userAgencies.map((a: string) => a.toUpperCase()).includes(r.agency.toUpperCase()))).length})`
                : "Reports"}
             </button>
           ))}
         </div>
 
         {/* Purpose filter chips */}
-        {tab !== "stock" && tab !== "reports" && (
+        {tab !== "stock" && tab !== "reports" && tab !== "proposed" && (
           <div className="flex gap-1.5 overflow-x-auto pb-0.5">
             {[
               { value: "all",                label: "All Types",   active: "bg-blue-600 text-white border-blue-600",     inactive: "bg-white text-gray-600 border-gray-200 hover:border-blue-300 hover:text-blue-700" },
@@ -387,7 +440,7 @@ export function MeterList({ userRole, userAgencies, username, agencies }: Props)
         )}
 
         <div className="flex items-center gap-3 text-xs text-gray-500">
-          <span>{filteredIssues.length} records</span>
+          <span>{tab === "proposed" ? replacements.filter(r => r.status === "proposed" && (isAdmin || userAgencies.map(a=>a.toUpperCase()).includes(r.agency.toUpperCase()))).length : filteredIssues.length} records</span>
           {syncState === "updated" && <span className="flex items-center gap-1 text-green-600"><Check className="h-3 w-3" /> Updated</span>}
         </div>
 
@@ -413,7 +466,7 @@ export function MeterList({ userRole, userAgencies, username, agencies }: Props)
       </div>
 
       {/* Issue cards */}
-      {tab !== "stock" && tab !== "reports" && (
+      {tab !== "stock" && tab !== "reports" && tab !== "proposed" && (
         <div className="space-y-3">
           {paginated.length === 0 ? (
             <div className="text-center py-16 text-gray-400">
@@ -538,8 +591,66 @@ export function MeterList({ userRole, userAgencies, username, agencies }: Props)
         </div>
       )}
 
+      {/* Proposed replacements list */}
+      {tab === "proposed" && (
+        <div className="space-y-3">
+          {loadingReplacements ? (
+            <div className="flex justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-blue-600" /></div>
+          ) : replacements.filter((r: MeterReplacement) => r.status === "proposed" && (isAdmin || userAgencies.map((a: string) => a.toUpperCase()).includes(r.agency.toUpperCase()))).length === 0 ? (
+            <div className="bg-white text-center py-16 text-gray-400 border rounded-2xl">
+              <Package className="h-10 w-10 mx-auto mb-3 opacity-30" />
+              <p>No proposed replacements found</p>
+            </div>
+          ) : replacements.filter((r: MeterReplacement) => r.status === "proposed" && (isAdmin || userAgencies.map((a: string) => a.toUpperCase()).includes(r.agency.toUpperCase()))).map(rep => (
+            <Card key={rep.replacementId} className="overflow-hidden">
+              <CardContent className="p-4">
+                <div className="flex justify-between items-start gap-2">
+                  <div className="min-w-0 flex-1 space-y-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-mono text-xs text-gray-400 font-bold">{rep.replacementId}</span>
+                      <span className="text-xs text-gray-400">•</span>
+                      <span className="text-xs text-gray-500 font-medium">Proposed: {rep.proposedDate}</span>
+                      <span className="text-xs text-gray-400">•</span>
+                      <span className={`text-xs font-semibold ${PURPOSE_COLORS[rep.purpose] || "text-blue-700"}`}>
+                        {PURPOSE_LABELS[rep.purpose] || rep.purpose}
+                      </span>
+                    </div>
+                    <h4 className="font-bold text-gray-900 text-sm md:text-base leading-tight mt-1">
+                      {rep.consumerName} <span className="font-mono font-normal text-xs text-gray-500">({rep.consumerId})</span>
+                    </h4>
+                    <div className="bg-slate-50 border rounded-lg p-2 mt-2 space-y-1">
+                      {rep.address && <p className="text-xs text-gray-600 flex items-center gap-1"><MapPin className="h-3 w-3 shrink-0 text-gray-400" /> {rep.address}</p>}
+                      {rep.mobile && <p className="text-xs text-gray-600 flex items-center gap-1"><Phone className="h-3 w-3 shrink-0 text-gray-400" /> <span className="font-mono">{rep.mobile}</span></p>}
+                      {rep.agency && <p className="text-xs text-gray-600 flex items-center gap-1"><Building2 className="h-3 w-3 shrink-0 text-gray-400" /> Agency: <strong>{rep.agency}</strong></p>}
+                    </div>
+                    {rep.remarks && <p className="text-xs text-gray-500 italic mt-1">Remarks: "{rep.remarks}"</p>}
+                  </div>
+                  <div className="flex flex-col items-end gap-2 shrink-0">
+                    <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white mt-2"
+                      onClick={() => {
+                        setPrefill({
+                          replacementId: rep.replacementId,
+                          consumerId: rep.consumerId,
+                          consumerName: rep.consumerName,
+                          address: rep.address,
+                          mobile: rep.mobile,
+                          purpose: rep.purpose,
+                          agency: rep.agency,
+                        })
+                        setView("issue")
+                      }}>
+                      Issue Meter
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
       {/* Pagination */}
-      {totalPages > 1 && (
+      {tab !== "proposed" && totalPages > 1 && (
         <div className="flex items-center justify-between bg-white p-4 rounded-lg shadow-sm border">
           <Button variant="outline" size="sm" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>
             <ChevronLeft className="h-4 w-4 mr-1" /> Previous

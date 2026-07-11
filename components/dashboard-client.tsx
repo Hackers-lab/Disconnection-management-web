@@ -21,6 +21,10 @@ const MeterList = dynamic(() => import("@/components/meter-list").then(m => ({ d
 const NscList = dynamic(() => import("@/components/nsc-list").then(m => ({ default: m.NscList })), { ssr: false })
 const AgencyUpdatesReport = dynamic(() => import("@/components/agency-updates-report").then(m => ({ default: m.AgencyUpdatesReport })), { ssr: false })
 const ConsumerMaster = dynamic(() => import("@/components/consumer-master").then(m => ({ default: m.ConsumerMaster })), { ssr: false })
+const DTRList = dynamic(() => import("@/components/dtr-list").then(m => ({ default: m.DTRList })), { ssr: false })
+const MeterReplacementList = dynamic(() => import("@/components/meter-replacement-list").then(m => ({ default: m.MeterReplacementList })), { ssr: false })
+
+import { Loader2 } from "lucide-react"
 
 // UI Components for the Dialog
 import { Button } from "@/components/ui/button"
@@ -47,6 +51,47 @@ interface DashboardClientProps {
 export default function DashboardClient({ role, agencies }: DashboardClientProps) {
   const [showAdminPanel, setShowAdminPanel] = useState(false)
   const [activeView, setActiveView] = useState<ViewType | "home">("home")
+  const [permissions, setPermissions] = useState<Record<string, string[]>>({})
+  const [permsLoaded, setPermsLoaded] = useState(false)
+
+  // Fetch dynamic permissions map
+  useEffect(() => {
+    let active = true
+
+    // Load cached permissions from sessionStorage
+    try {
+      const cached = sessionStorage.getItem("user_permissions")
+      if (cached) {
+        const parsed = JSON.parse(cached)
+        if (parsed) {
+          setPermissions(parsed)
+          setPermsLoaded(true)
+        }
+      }
+    } catch (e) {
+      console.error("Failed to read permissions from sessionStorage", e)
+    }
+
+    fetch("/api/auth/permissions")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (active && data?.permissions) {
+          setPermissions(data.permissions)
+          try {
+            sessionStorage.setItem("user_permissions", JSON.stringify(data.permissions))
+          } catch (e) {
+            console.error("Failed to save permissions to sessionStorage", e)
+          }
+        }
+      })
+      .catch((e) => console.error("Failed to load permissions", e))
+      .finally(() => {
+        if (active) setPermsLoaded(true)
+      })
+    return () => {
+      active = false
+    }
+  }, [])
   
   // --- DOWNLOAD DIALOG STATE ---
   const [isDownloadDialogOpen, setIsDownloadDialogOpen] = useState(false)
@@ -875,6 +920,17 @@ export default function DashboardClient({ role, agencies }: DashboardClientProps
     if (activeView === "admin") setActiveView("home");
   }
 
+  if (!permsLoaded) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-slate-50">
+        <div className="flex flex-col items-center gap-2">
+          <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+          <p className="text-sm font-medium text-gray-500">Loading permissions...</p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <DashboardProvider value={{ activeView, setActiveView }}>
       <DashboardShell
@@ -887,6 +943,7 @@ export default function DashboardClient({ role, agencies }: DashboardClientProps
         setActiveView={setActiveView}
         onDownload={downloadPDF}
         onDownloadDefaulters={openDownloadDialog}
+        permissions={permissions}
       >
         {/* DOWNLOAD DIALOG */}
         <Dialog open={isDownloadDialogOpen} onOpenChange={setIsDownloadDialogOpen}>
@@ -987,7 +1044,7 @@ export default function DashboardClient({ role, agencies }: DashboardClientProps
         {/* VIEW SWITCHING LOGIC */}
         
         {activeView === "home" && (
-          <DashboardMenu onSelect={setActiveView} userRole={role} userAgencies={agencies} />
+          <DashboardMenu onSelect={setActiveView} userRole={role} userAgencies={agencies} permissions={permissions} />
         )}
 
         {activeView === "disconnection" && (
@@ -1010,6 +1067,16 @@ export default function DashboardClient({ role, agencies }: DashboardClientProps
             userAgencies={agencies}
             username={(agencies[0] || role)}
             agencies={agencies}
+          />
+        )}
+
+        {activeView === "dtr" && (
+          <DTRList
+            userRole={role}
+            userAgencies={agencies}
+            username={(agencies[0] || role)}
+            agencies={agencies}
+            permissions={permissions}
           />
         )}
 
@@ -1041,6 +1108,16 @@ export default function DashboardClient({ role, agencies }: DashboardClientProps
 
         {activeView === "consumer-master" && (role === "admin" || role === "executive" || role === "agency") && (
           <ConsumerMaster role={role} />
+        )}
+
+        {activeView === "meter-replacement" && (
+          <MeterReplacementList
+            userRole={role}
+            userAgencies={agencies}
+            username={agencies[0] || role}
+            agencies={agencies}
+            permissions={permissions}
+          />
         )}
 
         {activeView === "analysis" && role === "admin" && (

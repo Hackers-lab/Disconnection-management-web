@@ -134,6 +134,7 @@ export function MeterCompleteForm({ issue, onSave, onCancel }: Props) {
         }),
       })
       if (!res.ok) throw new Error((await res.json()).error || "Failed")
+      window.dispatchEvent(new Event("notif-refresh"))
       onSave()
     } catch (e: any) { alert(e.message) }
     finally { setSubmitting(false) }

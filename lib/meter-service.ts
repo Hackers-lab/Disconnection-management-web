@@ -7,6 +7,7 @@ import { getSpreadsheetId } from "./google-sheets-api"
 import { METER_TYPES } from "./meter-types"
 import { updateNSCMeterIssued, updateNSCConnectionEffected, updateNSCMeterReturned } from "./nsc-service"
 import { nowDate } from "./date-utils"
+import { issueReplacement, syncStatusFromIssue } from "./meter-replacement-service"
 import type {
   MeterStock, MeterIssue, StockSummary,
   MeterTypeLabel, MeterCondition, IssuePurpose, IssueStatus,
@@ -189,6 +190,7 @@ export async function issueMeter(req: {
   remarks?:     string
   address?:     string
   mobile?:      string
+  replacementId?: string
 }): Promise<string> {
   const id = getSpreadsheetId()
   await ensureTabs(id)
@@ -220,6 +222,9 @@ export async function issueMeter(req: {
   invalidateMeterCache()
   if (req.purpose === "nsc" && req.nscReceiveNo) {
     await updateNSCMeterIssued(req.nscReceiveNo, req.serialNo, req.agency)
+  }
+  if (req.replacementId) {
+    await issueReplacement(req.replacementId, req.serialNo, issueId)
   }
   return issueId
 }
@@ -258,6 +263,7 @@ export async function completeMeterInstallation(req: {
     },
   })
   invalidateMeterCache()
+  await syncStatusFromIssue(req.issueId, "installation_done")
 }
 
 // ─── Admin/Executive: finalize with completionRef ────────────────────────────
@@ -307,6 +313,7 @@ export async function finalizeMeterInstallation(req: {
   if (issue.purpose === "nsc" && issue.nscReceiveNo) {
     await updateNSCConnectionEffected(issue.nscReceiveNo)
   }
+  await syncStatusFromIssue(req.issueId, "installed")
 }
 
 // ─── Bulk finalize: one fetch, two batchUpdates total ────────────────────────
@@ -368,6 +375,7 @@ export async function bulkFinalizeMeterInstallations(req: {
   if (nscReceiveNos.length > 0) {
     await Promise.all(nscReceiveNos.map(rcvNo => updateNSCConnectionEffected(rcvNo)))
   }
+  await Promise.all(req.issueIds.map(issueId => syncStatusFromIssue(issueId, "installed")))
   return { succeeded: req.issueIds.length - failed.length, failed }
 }
 
@@ -415,6 +423,7 @@ export async function returnMeterToStock(req: {
   if (issue.purpose === "nsc" && issue.nscReceiveNo) {
     await updateNSCMeterReturned(issue.nscReceiveNo)
   }
+  await syncStatusFromIssue(req.issueId, "returned")
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

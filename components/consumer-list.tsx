@@ -743,6 +743,7 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
 
         if (!response.ok) throw new Error("Update failed");
 
+        window.dispatchEvent(new Event("notif-refresh"));
         // Success: Clear sync status but keep _localEditedAt so a stale
         // CDN-cached patch fetch in the next ~30s can't clobber this row.
         setConsumers((prev) => {

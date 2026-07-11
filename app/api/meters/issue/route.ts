@@ -32,6 +32,7 @@ export async function POST(request: NextRequest) {
       remarks:      body.remarks || "",
       address:      body.address || "",
       mobile:       body.mobile  || "",
+      replacementId: body.replacementId || "",
     })
     return NextResponse.json({ success: true, issueId })
   } catch (e: any) {

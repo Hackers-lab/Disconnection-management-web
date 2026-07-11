@@ -1,9 +1,12 @@
 // app/api/consumers/update/route.ts
 import { type NextRequest, NextResponse } from "next/server"
 import { updateConsumerInGoogleSheet } from "@/lib/google-sheets-api" // Changed import
-import { invalidateConsumerCache, type ConsumerData } from "@/lib/google-sheets"
+import { invalidateConsumerCache, fetchConsumerData, type ConsumerData } from "@/lib/google-sheets"
 import { appendHistory, nowTimestamp, invalidateHistoryCache } from "@/lib/consumer-history"
 import { verifySession } from "@/lib/session"
+import { checkApiPermission, isAgencyScopeRestricted } from "@/lib/permissions"
+
+export const dynamic = "force-dynamic"
 
 // Previous-state fields the client sends so we can log old→new history
 // without an extra sheet read.
@@ -15,7 +18,26 @@ type UpdatePayload = ConsumerData & {
 
 export async function POST(request: NextRequest) {
   try {
+    const { authorized, error, status, session } = await checkApiPermission("disconnection", "update")
+    if (!authorized) {
+      return NextResponse.json({ error }, { status })
+    }
+
     const consumer: UpdatePayload = await request.json()
+
+    // Scoping check for agency/executive roles
+    const allConsumers = await fetchConsumerData()
+    const existing = allConsumers.find((c) => c.consumerId === consumer.consumerId)
+    
+    if (
+      isAgencyScopeRestricted(session, existing?.agency) ||
+      isAgencyScopeRestricted(session, consumer.agency)
+    ) {
+      return NextResponse.json(
+        { error: "Forbidden: This consumer is not assigned to your agency scope" },
+        { status: 403 }
+      )
+    }
 
     console.log(`🔄 Updating consumer ${consumer.consumerId}...`)
 

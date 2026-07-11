@@ -1,25 +1,27 @@
 import { NextRequest, NextResponse } from "next/server"
 import { verifySession } from "@/lib/session"
 import { fetchApplications, createApplication } from "@/lib/nsc-service"
+import { checkApiPermission, isAgencyScopeRestricted } from "@/lib/permissions"
+
+export const dynamic = "force-dynamic"
 
 export async function GET() {
-  const session = await verifySession()
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  const { authorized, error, status, session } = await checkApiPermission("nsc", "read")
+  if (!authorized) return NextResponse.json({ error }, { status })
 
   const all = await fetchApplications()
 
-  if (session.role === "agency") {
-    const upper = (session.agencies || []).map((a: string) => a.toUpperCase())
-    return NextResponse.json(all.filter(a => upper.includes(a.agency.toUpperCase())))
+  if (session.agencies && session.agencies.length > 0) {
+    const upper = session.agencies.map((a: string) => a.toUpperCase())
+    return NextResponse.json(all.filter(a => upper.includes((a.agency || "").toUpperCase())))
   }
   return NextResponse.json(all)
 }
 
 export async function POST(request: NextRequest) {
-  const session = await verifySession()
-  if (!session || !["admin", "executive"].includes(session.role)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  }
+  const { authorized, error, status, session } = await checkApiPermission("nsc", "create")
+  if (!authorized) return NextResponse.json({ error }, { status })
+
   try {
     const body = await request.json()
     if (!body.applicantName) return NextResponse.json({ error: "Applicant name required" }, { status: 400 })
@@ -28,6 +30,10 @@ export async function POST(request: NextRequest) {
     if (!body.appliedClass)  return NextResponse.json({ error: "Applied class required" }, { status: 400 })
     if (!body.phase)         return NextResponse.json({ error: "Phase required" }, { status: 400 })
     if (!body.agency)        return NextResponse.json({ error: "Agency required" }, { status: 400 })
+
+    if (isAgencyScopeRestricted(session, body.agency)) {
+      return NextResponse.json({ error: "Forbidden: Target agency is outside your scope" }, { status: 403 })
+    }
 
     const receiveNo = await createApplication({
       applicantName: body.applicantName,
@@ -46,3 +52,4 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: e.message || "Failed" }, { status: 500 })
   }
 }
+

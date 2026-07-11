@@ -82,12 +82,12 @@ export function ReconnectionCreateForm({ agencies, onSave, onCancel }: Props) {
 
         // 3. If not found in local cache, perform a live force-refresh from the server
         if (!masterMatch) {
-          setLookupStatus("Fetching master data from Google Sheet...")
+          setLookupStatus("Fetching consumer master data...")
           try {
             const res = await fetch("/api/consumer-master?refresh=true")
             if (res.ok) {
               const fresh: ConsumerMasterRow[] = await res.json()
-              setLookupStatus("We will save that for you...")
+              setLookupStatus("Saving fetched data...")
               // Subtle delay so the user can read the friendly message
               await new Promise(resolve => setTimeout(resolve, 800))
               await saveToCache("consumer_master_cache", fresh)
@@ -214,6 +214,7 @@ export function ReconnectionCreateForm({ agencies, onSave, onCancel }: Props) {
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || "Failed")
+      window.dispatchEvent(new Event("notif-refresh"))
       onSave(data.requestId)
     } catch (e: any) {
       alert(e.message || "Failed to create request")

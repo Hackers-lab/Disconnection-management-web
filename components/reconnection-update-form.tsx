@@ -129,6 +129,7 @@ export function ReconnectionUpdateForm({ request, userRole, username, onSave, on
         }),
       })
       if (!res.ok) throw new Error((await res.json()).error || "Failed")
+      window.dispatchEvent(new Event("notif-refresh"))
       onSave()
     } catch (e: any) {
       alert(e.message || "Failed to update")

@@ -1,32 +1,50 @@
 import { NextRequest, NextResponse } from "next/server"
 import { verifySession } from "@/lib/session"
-import { updateReconnectionStatus } from "@/lib/reconnection-service"
+import { updateReconnectionStatus, fetchReconnectionData } from "@/lib/reconnection-service"
+import { checkApiPermission, isAgencyScopeRestricted } from "@/lib/permissions"
+import { roleStorage } from "@/lib/role-storage"
+
+export const dynamic = "force-dynamic"
 
 export async function POST(request: NextRequest) {
-  const session = await verifySession()
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  const { authorized, error, status, session } = await checkApiPermission("reconnection", "update")
+  if (!authorized) return NextResponse.json({ error }, { status })
 
   try {
     const body = await request.json()
-    const { requestId, status, imageUrl, reading, remarks } = body
+    const { requestId, status: newStatus, imageUrl, reading, remarks } = body
 
-    if (!requestId || !status) {
+    if (!requestId || !newStatus) {
       return NextResponse.json({ error: "requestId and status required" }, { status: 400 })
     }
 
     const validStatuses = ["reconnected", "door_locked", "cancelled"]
-    if (!validStatuses.includes(status)) {
+    if (!validStatuses.includes(newStatus)) {
       return NextResponse.json({ error: "Invalid status" }, { status: 400 })
     }
 
-    // Cancelled only by admin/executive
-    if (status === "cancelled" && !["admin", "executive"].includes(session.role)) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    // Load the request details to verify agency scoping
+    const allReqs = await fetchReconnectionData()
+    const req = allReqs.find((r) => r.id === requestId)
+    if (!req) {
+      return NextResponse.json({ error: "Reconnection request not found" }, { status: 404 })
+    }
+
+    if (isAgencyScopeRestricted(session, req.agency)) {
+      return NextResponse.json({ error: "Forbidden: Request is outside your agency scope" }, { status: 403 })
+    }
+
+    // Cancelled only if user has delete/cancel permission
+    if (newStatus === "cancelled") {
+      const isDeleteAllowed = session.role === "admin" || (await roleStorage.getPermissionsForRole(session.role))?.reconnection?.includes("delete")
+      if (!isDeleteAllowed) {
+        return NextResponse.json({ error: "Forbidden: No permission to cancel reconnection requests" }, { status: 403 })
+      }
     }
 
     await updateReconnectionStatus({
       requestId,
-      status,
+      status: newStatus,
       updatedBy: `${session.role}:${session.username}`,
       imageUrl,
       reading,
@@ -39,3 +57,4 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: e.message || "Failed" }, { status: 500 })
   }
 }
+

@@ -1,13 +1,15 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { verifySession } from "@/lib/session"
 import { userStorage } from "@/lib/user-storage"
+import { checkApiPermission } from "@/lib/permissions"
+
+export const dynamic = "force-dynamic"
 
 // GET - List all users
 export async function GET() {
-  const session = await verifySession()
-
-  if (!session || session.role !== "admin") {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  const { authorized, error, status } = await checkApiPermission("admin", "read")
+  if (!authorized) {
+    return NextResponse.json({ error }, { status })
   }
 
   const users = await userStorage.getUsers()
@@ -16,10 +18,9 @@ export async function GET() {
 
 // POST - Add new user
 export async function POST(request: NextRequest) {
-  const session = await verifySession()
-
-  if (!session || session.role !== "admin") {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  const { authorized, error, status } = await checkApiPermission("admin", "update")
+  if (!authorized) {
+    return NextResponse.json({ error }, { status })
   }
 
   try {
@@ -55,10 +56,9 @@ export async function POST(request: NextRequest) {
 
 // PUT - Update user
 export async function PUT(request: NextRequest) {
-  const session = await verifySession()
-
-  if (!session || session.role !== "admin") {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  const { authorized, error, status } = await checkApiPermission("admin", "update")
+  if (!authorized) {
+    return NextResponse.json({ error }, { status })
   }
 
   try {
@@ -97,10 +97,9 @@ export async function PUT(request: NextRequest) {
 
 // DELETE - Delete user
 export async function DELETE(request: NextRequest) {
-  const session = await verifySession()
-
-  if (!session || session.role !== "admin") {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  const { authorized, error, status } = await checkApiPermission("admin", "update")
+  if (!authorized) {
+    return NextResponse.json({ error }, { status })
   }
 
   try {

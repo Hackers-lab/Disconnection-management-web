@@ -1,33 +1,40 @@
 import { NextRequest, NextResponse } from "next/server"
 import { verifySession } from "@/lib/session"
+import { checkApiPermission, isAgencyScopeRestricted } from "@/lib/permissions"
+
+export const dynamic = "force-dynamic"
 import {
   fetchReconnectionData,
   createReconnectionRequest,
 } from "@/lib/reconnection-service"
 
 export async function GET() {
-  const session = await verifySession()
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  const { authorized, error, status, session } = await checkApiPermission("reconnection", "read")
+  if (!authorized) return NextResponse.json({ error }, { status })
 
   const all = await fetchReconnectionData()
 
-  // Agency: only their own
-  if (session.role === "agency") {
+  // Filter by assigned agencies if user is restricted
+  if (session.agencies && session.agencies.length > 0) {
     const upper = session.agencies.map((a: string) => a.toUpperCase())
-    return NextResponse.json(all.filter(r => upper.includes(r.agency.toUpperCase())))
+    return NextResponse.json(all.filter(r => upper.includes((r.agency || "").toUpperCase())))
   }
 
   return NextResponse.json(all)
 }
 
 export async function POST(request: NextRequest) {
-  const session = await verifySession()
-  if (!session || !["admin", "executive"].includes(session.role)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  }
+  const { authorized, error, status, session } = await checkApiPermission("reconnection", "create")
+  if (!authorized) return NextResponse.json({ error }, { status })
 
   try {
     const body = await request.json()
+
+    // Scoping check for creating reconnection requests
+    if (isAgencyScopeRestricted(session, body.agency)) {
+      return NextResponse.json({ error: "Forbidden: Target agency is outside your scope" }, { status: 403 })
+    }
+
     const requestId = await createReconnectionRequest({
       consumerId:      body.consumerId || "",
       name:            body.name || "",
@@ -45,3 +52,4 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: e.message || "Failed" }, { status: 500 })
   }
 }
+

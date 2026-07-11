@@ -107,9 +107,10 @@ interface HeaderProps {
   onDownloadDefaulters?: () => void
   activeView: ViewType | "home"
   setActiveView: (view: ViewType | "home") => void
+  permissions?: Record<string, string[]>
 }
 
-export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, onDownloadDefaulters, activeView: propsActiveView, setActiveView: propsSetActiveView }: HeaderProps) {
+export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, onDownloadDefaulters, activeView: propsActiveView, setActiveView: propsSetActiveView, permissions }: HeaderProps) {
   const dashboard = useDashboard()
   const setActiveView = dashboard?.setActiveView || propsSetActiveView || (() => {})
   const activeView = dashboard?.activeView || propsActiveView
@@ -166,11 +167,7 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
       }
     })
 
-    // 2. Fetch fresh from API (shared server-side Data Cache makes this cheap).
-    let lastFetch = 0
-    const MIN_GAP_MS = 120_000 // don't re-hit the server more often than this
     const fetchFresh = async () => {
-      lastFetch = Date.now()
       setNotifLoading(true)
       try {
         const res = await fetch("/api/notifications", { cache: "no-store" })
@@ -178,22 +175,26 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
           const data = await res.json()
           setNotifGroups(buildNotifGroups(data, isAdminExec))
           await saveToCache("notifications_cache", data)
+          sessionStorage.setItem("notif_fetched", "true")
         }
       } catch { /* keep current groups */ }
       finally { setNotifLoading(false) }
     }
 
-    fetchFresh()
-    const id = setInterval(() => {
-      if (!document.hidden) fetchFresh()
-    }, 180_000)
+    // Call only if it hasn't been fetched in this session yet
+    if (sessionStorage.getItem("notif_fetched") !== "true") {
+      fetchFresh()
+    }
 
-    // Refresh when tab regains focus — but debounce so rapid tab-switching
-    // doesn't spam the server; only refetch if it's been a while.
-    const onFocus = () => { if (Date.now() - lastFetch > MIN_GAP_MS) fetchFresh() }
-    window.addEventListener("focus", onFocus)
+    // Listen to custom refresh event
+    const onNotifRefresh = () => {
+      fetchFresh()
+    }
+    window.addEventListener("notif-refresh", onNotifRefresh)
 
-    return () => { clearInterval(id); window.removeEventListener("focus", onFocus) }
+    return () => {
+      window.removeEventListener("notif-refresh", onNotifRefresh)
+    }
   }, [userRole, userAgencies])
 
   const openChangePwdDialog = () => {
@@ -525,6 +526,8 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
     if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
     try {
       setLoggingOut(true);
+      sessionStorage.removeItem("user_permissions");
+      sessionStorage.removeItem("notif_fetched");
       await logout();
     } catch (err) {
       setLoggingOut(false);
@@ -947,7 +950,8 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
   }
 
   // Helper variables for permissions
-  const canSeeAgencyUpdates = userRole === "admin" || userRole === "executive" || userRole === "viewer" || userRole === "agency";
+  const isAdminUser = userRole === "admin" || !!(permissions && permissions.admin?.includes("read"));
+  const canSeeAgencyUpdates = userRole === "admin" || userRole === "executive" || userRole === "viewer" || userRole === "agency" || !!(permissions && permissions.disconnection?.includes("read"));
   const canDownloadDefaulters = canSeeAgencyUpdates;
   const displayAgencyName = (userAgencies && userAgencies.length > 0)
     ? (userAgencies.length === 1 ? userAgencies[0] : `${userAgencies[0]} (+${userAgencies.length - 1})`)
@@ -965,6 +969,7 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
               activeView={activeView} 
               setActiveView={setActiveView} 
               userRole={userRole} 
+              permissions={permissions}
             />
             <div 
               className="flex items-center space-x-2 cursor-pointer hover:opacity-80 transition-opacity"
@@ -1152,12 +1157,12 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
                       <CalendarDays className="h-4 w-4" />
                     </Button>
                   )}
-                  {userRole === "admin" && (
+                  {isAdminUser && (
                     <Button variant="ghost" size="sm" onClick={() => setActiveView("analysis")} title="Analysis Dashboard">
                       <BarChart3 className="h-4 w-4" />
                     </Button>
                   )}
-                  {userRole === "admin" && (
+                  {isAdminUser && (
                     <Button variant="ghost" size="sm" onClick={() => window.open("/api/sheet-redirect", "_blank")} title="Edit DC List">
                       <FileSpreadsheet className="h-4 w-4" />
                     </Button>
@@ -1167,7 +1172,7 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
 
               {isDDView && (
                  <>
-                  {userRole === "admin" && (
+                  {isAdminUser && (
                     <Button variant="ghost" size="sm" onClick={() => window.open("/api/dd-sheet-redirect", "_blank")} title="Edit DD List">
                       <FileText className="h-4 w-4" />
                     </Button>
@@ -1176,13 +1181,13 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
               )}
               
               {/* Global Admin Buttons */}
-              {userRole === "admin" && onAdminClick && (
+              {isAdminUser && onAdminClick && (
                 <Button variant="ghost" size="sm" onClick={onAdminClick} title="Admin Panel">
                   <Settings className="h-4 w-4" />
                 </Button>
               )}
 
-              {userRole === "admin" && (
+              {isAdminUser && (
                  <Button variant="ghost" size="sm" onClick={handleGlobalRefresh} title="Sync Fresh Data">
                    <RefreshCw className="h-4 w-4" />
                  </Button>
@@ -1269,7 +1274,7 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
                     </>
                   )}
 
-                  {isDisconnectionView && userRole === "admin" && (
+                  {isDisconnectionView && isAdminUser && (
                     <>
                       <DropdownMenuSeparator />
                       <DropdownMenuLabel>Analysis</DropdownMenuLabel>
@@ -1281,7 +1286,7 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
                     </>
                   )}
 
-                  {userRole === "admin" && (
+                  {isAdminUser && (
                     <>
                       <DropdownMenuSeparator />
                       <DropdownMenuLabel>Admin</DropdownMenuLabel>
@@ -1423,7 +1428,7 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
                 <DialogTitle>Generate Daily Report</DialogTitle>
             </DialogHeader>
             <div className="grid gap-4 py-4">
-                {userRole === "admin" && (
+                {isAdminUser && (
                   <div className="space-y-2">
                     <Label>Select Agency</Label>
                     <Select value={reportAgency} onValueChange={setReportAgency}>

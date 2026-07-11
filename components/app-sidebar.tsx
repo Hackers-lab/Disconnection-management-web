@@ -9,7 +9,8 @@ import {
   Settings,
   UserX,
   BarChart3,       // For Analysis
-  Users            // For Consumer Master
+  Users,           // For Consumer Master
+  RadioTower       // For DTR Verification
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from "@/components/ui/sheet"
@@ -19,7 +20,7 @@ import type { ConsumerData } from "@/lib/google-sheets"
 import { Badge } from "@/components/ui/badge"
 
 // Define the available views
-export type ViewType = "disconnection" | "reconnection" | "deemed" | "nsc" | "meter" | "admin" | "home" | "analysis" | "agency-updates" | "consumer-master"
+export type ViewType = "disconnection" | "reconnection" | "deemed" | "nsc" | "meter" | "admin" | "home" | "analysis" | "agency-updates" | "consumer-master" | "dtr" | "meter-replacement"
 
 interface AppSidebarProps {
   activeView: ViewType
@@ -27,9 +28,10 @@ interface AppSidebarProps {
   userRole: string
   isMobile?: boolean
   agencies?: string[]
+  permissions?: Record<string, string[]>
 }
 
-export function AppSidebar({ activeView, setActiveView, userRole, isMobile = false, agencies = [] }: AppSidebarProps) {
+export function AppSidebar({ activeView, setActiveView, userRole, isMobile = false, agencies = [], permissions }: AppSidebarProps) {
   const [open, setOpen] = useState(false)
   const [ddPendingCount, setDdPendingCount] = useState(0)
   const [disconnectionPendingCount, setDisconnectionPendingCount] = useState(0)
@@ -74,44 +76,47 @@ export function AppSidebar({ activeView, setActiveView, userRole, isMobile = fal
       id: "home", 
       label: "Dashboard Home", 
       icon: LayoutDashboard,
-      allowedRoles: ["all"] 
     },
     { 
       id: "disconnection", 
       label: "Disconnection List", 
       icon: Zap,
-      allowedRoles: ["all"] 
     },
     { 
       id: "reconnection", 
       label: "Reconnection", 
       icon: RotateCcw,
-      allowedRoles: ["admin", "executive", "agency"] // Example roles
     },
     { 
       id: "deemed", 
       label: "Deemed Visit", 
       icon: UserX, 
-      allowedRoles: ["admin", "executive", "agency"]
     },
     {
       id: "nsc",
       label: "NSC Inspection",
       icon: ClipboardCheck,
-      allowedRoles: ["admin", "executive", "agency"]
     },
     {
       id: "consumer-master",
       label: "Consumer Master",
       icon: Users,
-      allowedRoles: ["admin", "executive", "agency"]
+    },
+    {
+      id: "dtr",
+      label: "DTR Verification",
+      icon: RadioTower,
+    },
+    {
+      id: "meter-replacement",
+      label: "Replacement List",
+      icon: ClipboardCheck,
     },
     // Only show Admin Panel button here if you want it in the menu
     {
       id: "admin",
       label: "Admin Settings",
       icon: Settings,
-      allowedRoles: ["admin"]
     }
   ]
 
@@ -123,8 +128,9 @@ export function AppSidebar({ activeView, setActiveView, userRole, isMobile = fal
   const MenuList = () => (
     <div className="flex flex-col space-y-2 py-4">
       {menuItems.map((item) => {
-        // Filter based on roles
-        if (item.allowedRoles[0] !== "all" && !item.allowedRoles.includes(userRole)) {
+        const permKey = item.id.replace(/-/g, "_")
+        const hasAccess = item.id === "home" || (permissions && (permissions[item.id]?.includes("read") || permissions[permKey]?.includes("read")))
+        if (!hasAccess) {
           return null
         }
 
