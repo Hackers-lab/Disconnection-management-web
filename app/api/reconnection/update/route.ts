@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
 
     // Load the request details to verify agency scoping
     const allReqs = await fetchReconnectionData()
-    const req = allReqs.find((r) => r.id === requestId)
+    const req = allReqs.find((r) => r.requestId === requestId)
     if (!req) {
       return NextResponse.json({ error: "Reconnection request not found" }, { status: 404 })
     }
