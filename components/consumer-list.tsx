@@ -63,6 +63,7 @@ import {
   PowerOff,
   Footprints,
   PlusCircle,
+  Navigation,
 } from "lucide-react"
 import { DashboardStats } from "./dashboard-stats"
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -70,11 +71,14 @@ import type { ConsumerData } from "@/lib/google-sheets"
 import { getFromCache, saveToCache, clearAllCache, getCacheAgeMs } from "@/lib/indexed-db"
 import { useToast } from "@/components/ui/use-toast"
 
-// Dynamically import heavy components to reduce initial bundle size
 const ConsumerForm = dynamic(() => import("./consumer-form").then((mod) => mod.ConsumerForm), {
   loading: () => <div className="flex justify-center p-10"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div></div>
 })
 const AdminPanel = dynamic(() => import("./admin-panel").then((mod) => mod.AdminPanel))
+const NearbyConsumerMap = dynamic(
+  () => import("./nearby-consumer-map").then((mod) => mod.NearbyConsumerMap),
+  { ssr: false }
+)
 
 interface ConsumerListProps {
   userRole: string
@@ -174,6 +178,7 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
   const [previewConsumer, setPreviewConsumer] = useState<ConsumerData | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
   const [activeHistoryConsumer, setActiveHistoryConsumer] = useState<ConsumerData | null>(null)
+  const [showNearbyMap, setShowNearbyMap] = useState(false)
 
   // Handle back button navigation for modals/overlays
   useBackNavigation(isFilterOpen, () => setIsFilterOpen(false))
@@ -181,6 +186,7 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
   useBackNavigation(!!previewConsumer, () => setPreviewConsumer(null))
   useBackNavigation(!!activeHistoryConsumer, () => setActiveHistoryConsumer(null))
   useBackNavigation(showAdminPanel, onCloseAdminPanel)
+  useBackNavigation(showNearbyMap, () => setShowNearbyMap(false))
 
   useEffect(() => {
     const savedMode = localStorage.getItem("consumerListViewMode") as "card" | "list"
@@ -925,6 +931,22 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
 
   return (
     <div className="space-y-6">
+      {/* Nearby Consumer Radar overlay */}
+      {showNearbyMap && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-3 sm:p-6">
+          <div className="w-full max-w-4xl h-full max-h-[90vh]">
+            <NearbyConsumerMap
+              consumers={consumers}
+              onClose={() => setShowNearbyMap(false)}
+              onGoToConsumer={(consumer) => {
+                setShowNearbyMap(false)
+                setSelectedConsumer(consumer)
+              }}
+            />
+          </div>
+        </div>
+      )}
+
       {/* Admin/Executive warning banner when overdue reconnections exist */}
       {(userRole === "admin" || userRole === "executive") && blockedIds.size > 0 && (
         <div className="flex items-start gap-3 bg-orange-50 border-l-4 border-orange-500 rounded-lg p-4">
@@ -1261,6 +1283,22 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
               <List className="h-4 w-4" />
             </Button>
           </div>
+
+          {/* Nearby Consumer Radar button — only shows when lat/long data exists */}
+          {consumers.some(c => c.latitude && c.longitude) && (
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-9 w-9 shrink-0 border-blue-200 text-blue-600 hover:bg-blue-50 hover:border-blue-400"
+              title="Nearby Consumer Radar — find consumers close to your GPS location"
+              onClick={() => {
+                if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
+                setShowNearbyMap(true)
+              }}
+            >
+              <Navigation className="h-4 w-4" />
+            </Button>
+          )}
 
         </div>
 

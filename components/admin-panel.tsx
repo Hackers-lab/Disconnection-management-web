@@ -162,6 +162,26 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
         }
     };
 
+    // Refresh lat/long in DC list from Consumer Master (VLOOKUP-style)
+    const refreshLatLong = async () => {
+        if (!confirm(
+            "This will look up each consumer in the DC list against the Consumer Master and fill in their latitude/longitude.\n\nOnly consumers missing both lat & long will be updated. Continue?"
+        )) return;
+        setLatLongRefreshing(true);
+        setLatLongResult(null);
+        try {
+            const resp = await fetch("/api/consumers/refresh-latlong", { method: "POST" });
+            const data = await resp.json();
+            if (!resp.ok || !data.success) throw new Error(data?.error || "Refresh failed");
+            setLatLongResult(data.summary);
+            setMessage({ type: "success", text: `✅ Lat/Long refresh complete: ${data.summary.updated} consumers updated from Consumer Master.` });
+        } catch (err: any) {
+            setMessage({ type: "error", text: err?.message || "Failed to refresh lat/long" });
+        } finally {
+            setLatLongRefreshing(false);
+        }
+    };
+
   const columnRegexMap: Record<string, RegExp> = {
     "off_code": /^\d{7}$/,
     "MRU": /^[A-Z0-9]{6}MR$/,
@@ -182,6 +202,8 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
     const [dcUploadResult, setDcUploadResult] = useState<{ total: number; inserted: number; updated: number; protectedStatusSkipped: number; autoAssigned: number; deletedNotInUpload: number } | null>(null);
     const [newCycleUpload, setNewCycleUpload] = useState(false);
     const [backupDownloading, setBackupDownloading] = useState(false);
+    const [latLongRefreshing, setLatLongRefreshing] = useState(false);
+    const [latLongResult, setLatLongResult] = useState<{ matched: number; updated: number; alreadyHad: number; noMaster: number } | null>(null);
 
     // --- DC upload: smart mapping + filters + conflict resolution ---
     const [rawHeaders, setRawHeaders] = useState<string[]>([]);
@@ -1738,6 +1760,19 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
               >
                 {backupDownloading ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" />Preparing…</> : "⬇ Backup Current List"}
               </Button>
+              {/* Refresh Lat/Long from Consumer Master — VLOOKUP style */}
+              <Button
+                size="sm"
+                variant="outline"
+                className="border-blue-300 text-blue-700 hover:bg-blue-50"
+                onClick={refreshLatLong}
+                disabled={latLongRefreshing}
+                title="Match Consumer IDs in DC list with Consumer Master and copy lat/long coordinates"
+              >
+                {latLongRefreshing
+                  ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" />Refreshing…</>
+                  : "📍 Refresh Lat/Long from Master"}
+              </Button>
               <Button size="sm" variant="outline" onClick={async () => {
                 const XLSX = await import("xlsx")
                 const wb = XLSX.utils.book_new()
@@ -2119,6 +2154,17 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
               )}
             </CardContent>
           </Card>
+
+          {/* Lat/Long Refresh Result */}
+          {latLongResult && (
+            <div className="rounded-md border border-blue-200 bg-blue-50 p-3 text-xs text-blue-800 flex flex-wrap gap-4 items-center">
+              <span className="font-semibold">📍 Lat/Long Refresh Result:</span>
+              <span className="text-green-700">✓ {latLongResult.updated} updated</span>
+              <span className="text-gray-600">↩ {latLongResult.alreadyHad} already had coordinates</span>
+              <span className="text-gray-500">✗ {latLongResult.noMaster} not in Consumer Master</span>
+              <span className="text-blue-700">{latLongResult.matched} matched total</span>
+            </div>
+          )}
         </div>
       )}
 

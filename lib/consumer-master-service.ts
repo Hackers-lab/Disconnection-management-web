@@ -64,7 +64,8 @@ function parseRow(r: string[]): ConsumerMasterRow {
 }
 
 // ── Raw fetch (used by write paths so they see live data) ─────────────────────
-async function _fetchMasterRaw(): Promise<ConsumerMasterRow[]> {
+// Exported so the refresh-latlong API can bypass the 30-day cache.
+export async function _fetchMasterRaw(): Promise<ConsumerMasterRow[]> {
   const id = getSpreadsheetId()
   await ensureTab(id)
   const res = await sheets.spreadsheets.values.get({ spreadsheetId: id, range: `${MASTER_TAB}!A:J` })
