@@ -104,6 +104,16 @@ export async function getHistoryForConsumer(consumerId: string): Promise<History
     .sort((a, b) => b.timestamp.localeCompare(a.timestamp)) // newest first
 }
 
+// Public read — retrieves full history memoized
+export async function getFullHistory(): Promise<HistoryEntry[]> {
+  const now = Date.now()
+  if (!historyMemo || now - historyMemo.at > HISTORY_MEMO_TTL_MS) {
+    const all = await fetchAllHistory()
+    historyMemo = { at: now, data: all }
+  }
+  return historyMemo.data.sort((a, b) => b.timestamp.localeCompare(a.timestamp))
+}
+
 // Append history rows. Called from update route and bulk-upsert.
 // Batches multiple entries into a single append call.
 export async function appendHistory(entries: HistoryEntry[]): Promise<void> {

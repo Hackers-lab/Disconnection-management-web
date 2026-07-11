@@ -49,6 +49,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { AppSidebar, ViewType } from "@/components/app-sidebar"
+import { HistoryReportsDialog } from "@/components/history-reports-dialog"
 import { useDashboard } from "@/components/dashboard-context"
 import { getAgencyDescription } from "@/app/actions/agency-details"
 
@@ -136,6 +137,7 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
   const [changePwdError, setChangePwdError] = useState<string | null>(null)
   const [changePwdSuccess, setChangePwdSuccess] = useState(false)
   const [changePwdLoading, setChangePwdLoading] = useState(false)
+  const [showHistoryReportDialog, setShowHistoryReportDialog] = useState(false)
 
 
 
@@ -998,6 +1000,17 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
                           >
                             Download Report
                           </button>
+                          <button
+                            type="button"
+                            className="block w-full text-left px-4 py-2 hover:bg-blue-50 text-sm font-medium text-indigo-700 border-t border-slate-100"
+                            onClick={() => {
+                              if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
+                              setShowDownloadMenu(false);
+                              setShowHistoryReportDialog(true);
+                            }}
+                          >
+                            History Report
+                          </button>
                         </>
                       )}
                       {isDDView && (
@@ -1116,6 +1129,10 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
                       <DropdownMenuItem onClick={() => onDownloadDefaulters && onDownloadDefaulters()}>
                         <Download className="mr-2 h-4 w-4 text-blue-600" />
                         <span className="font-medium text-blue-700">Download Report</span>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setShowHistoryReportDialog(true)}>
+                        <Clock className="mr-2 h-4 w-4 text-indigo-600" />
+                        <span className="font-medium text-indigo-700">History Report</span>
                       </DropdownMenuItem>
                     </>
                   )}
@@ -1437,6 +1454,14 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Dynamic History reports Dialog */}
+      <HistoryReportsDialog
+        open={showHistoryReportDialog}
+        onOpenChange={setShowHistoryReportDialog}
+        userRole={userRole}
+        userAgencies={userAgencies}
+      />
     </header>
   )
 }
