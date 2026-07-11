@@ -34,6 +34,8 @@ export function DashboardMenu({ onSelect, userRole, userAgencies = [], permissio
   const [reconnectionPendingCount, setReconnectionPendingCount] = useState<number>(0)
   const [meterPendingCount, setMeterPendingCount] = useState<number>(0)
   const [nscPendingCount, setNscPendingCount]     = useState<number>(0)
+  const [replacementPendingCount, setReplacementPendingCount] = useState<number>(0)
+  const [dtrPendingCount, setDtrPendingCount] = useState<number>(0)
   const [showDevModal, setShowDevModal] = useState(false)
 
   const modules = [
@@ -238,6 +240,29 @@ export function DashboardMenu({ onSelect, userRole, userAgencies = [], permissio
           }
         } catch { /* non-critical */ }
 
+        // Proposed replacements pending count
+        try {
+          const mrCached = await getFromCache<any[]>("meter_replacement_data_cache")
+          if (mrCached) {
+            const upper = (userAgencies || []).map((a: string) => a.toUpperCase())
+            const count = mrCached.filter((r: any) => {
+              if (r.status !== "proposed") return false
+              if (userRole === "admin" || userRole === "executive") return true
+              return upper.includes((r.agency || "").toUpperCase())
+            }).length
+            setReplacementPendingCount(count)
+          }
+        } catch { /* non-critical */ }
+
+        // DTR pending count
+        try {
+          const dtrCached = await getFromCache<any[]>("dtr_data_cache")
+          if (dtrCached) {
+            const count = dtrCached.filter(r => (r.status || "").toUpperCase() !== "EXIST").length
+            setDtrPendingCount(count)
+          }
+        } catch { /* non-critical */ }
+
       } catch (e) { console.error("Failed to load pending count", e) }
     }
     loadPendingCount()
@@ -296,6 +321,16 @@ export function DashboardMenu({ onSelect, userRole, userAgencies = [], permissio
                   {module.id === "meter" && meterPendingCount > 0 && (
                     <div className="absolute top-2 right-2 md:top-4 md:right-4 z-20 flex items-center justify-center bg-purple-600 text-white text-[10px] md:text-xs font-bold px-1.5 py-0.5 md:px-3 md:py-1 rounded-full shadow-lg border-2 border-white">
                       {meterPendingCount}
+                    </div>
+                  )}
+                  {module.id === "meter-replacement" && replacementPendingCount > 0 && (
+                    <div className="absolute top-2 right-2 md:top-4 md:right-4 z-20 flex items-center justify-center bg-indigo-600 text-white text-[10px] md:text-xs font-bold px-1.5 py-0.5 md:px-3 md:py-1 rounded-full shadow-lg border-2 border-white">
+                      {replacementPendingCount}
+                    </div>
+                  )}
+                  {module.id === "dtr" && dtrPendingCount > 0 && (
+                    <div className="absolute top-2 right-2 md:top-4 md:right-4 z-20 flex items-center justify-center bg-teal-600 text-white text-[10px] md:text-xs font-bold px-1.5 py-0.5 md:px-3 md:py-1 rounded-full shadow-lg border-2 border-white">
+                      {dtrPendingCount}
                     </div>
                   )}
 
