@@ -34,7 +34,7 @@ export function DashboardMenu({ onSelect, userRole, userAgencies = [], permissio
   const [ddPendingCount, setDdPendingCount] = useState<number>(0)
   const [reconnectionPendingCount, setReconnectionPendingCount] = useState<number>(0)
   const [meterPendingCount, setMeterPendingCount] = useState<number>(0)
-  const [nscPendingCount, setNscPendingCount]     = useState<number>(0)
+  const [nscPendingCount, setNscPendingCount] = useState<number>(0)
   const [replacementPendingCount, setReplacementPendingCount] = useState<number>(0)
   const [dtrPendingCount, setDtrPendingCount] = useState<number>(0)
   const [showDevModal, setShowDevModal] = useState(false)
@@ -380,8 +380,8 @@ export function DashboardMenu({ onSelect, userRole, userAgencies = [], permissio
               if (!hasAccess) return null
               const Icon = module.icon
               return (
-                <Card 
-                  key={module.id} 
+                <Card
+                  key={module.id}
                   className={`group relative cursor-pointer transition-all duration-500 hover:shadow-2xl hover:-translate-y-1.5 border border-gray-200/80 bg-white/70 backdrop-blur-md rounded-2xl ${module.borderColor} overflow-hidden`}
                   onClick={() => {
                     if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
@@ -389,57 +389,50 @@ export function DashboardMenu({ onSelect, userRole, userAgencies = [], permissio
                   }}
                 >
                   {module.id === "disconnection" && (
-                    <div className={`absolute top-2 right-2 md:top-4 md:right-4 z-20 flex items-center justify-center text-white text-[10px] md:text-xs font-bold min-w-[1.5rem] h-6 px-1.5 md:min-w-[2rem] md:h-8 md:px-2 rounded-full shadow-lg border-2 border-white ring-2 ring-red-500/10 transition-all duration-300 group-hover:scale-105 ${
-                      loadingModules["disconnection"] ? "bg-blue-500 animate-pulse" : pendingCount > 0 ? "bg-red-600 shadow-red-500/20" : "bg-gray-400 shadow-gray-400/20"
-                    }`}>
+                    <div className={`absolute top-2 right-2 md:top-4 md:right-4 z-20 flex items-center justify-center text-white text-[10px] md:text-xs font-bold min-w-[1.5rem] h-6 px-1.5 md:min-w-[2rem] md:h-8 md:px-2 rounded-full shadow-lg border-2 border-white ring-2 ring-red-500/10 transition-all duration-300 group-hover:scale-105 ${loadingModules["disconnection"] ? "bg-blue-500 animate-pulse" : pendingCount > 0 ? "bg-red-600 shadow-red-500/20" : "bg-gray-400 shadow-gray-400/20"
+                      }`}>
                       {loadingModules["disconnection"] ? <RefreshCw className="h-3 w-3 animate-spin" /> : pendingCount}
                     </div>
                   )}
                   {module.id === "deemed" && (
-                    <div className={`absolute top-2 right-2 md:top-4 md:right-4 z-20 flex items-center justify-center text-white text-[10px] md:text-xs font-bold min-w-[1.5rem] h-6 px-1.5 md:min-w-[2rem] md:h-8 md:px-2 rounded-full shadow-lg border-2 border-white ring-2 ring-orange-500/10 transition-all duration-300 group-hover:scale-105 ${
-                      loadingModules["deemed"] ? "bg-blue-500 animate-pulse" : ddPendingCount > 0 ? "bg-orange-600 shadow-orange-500/20" : "bg-gray-400 shadow-gray-400/20"
-                    }`}>
+                    <div className={`absolute top-2 right-2 md:top-4 md:right-4 z-20 flex items-center justify-center text-white text-[10px] md:text-xs font-bold min-w-[1.5rem] h-6 px-1.5 md:min-w-[2rem] md:h-8 md:px-2 rounded-full shadow-lg border-2 border-white ring-2 ring-orange-500/10 transition-all duration-300 group-hover:scale-105 ${loadingModules["deemed"] ? "bg-blue-500 animate-pulse" : ddPendingCount > 0 ? "bg-orange-600 shadow-orange-500/20" : "bg-gray-400 shadow-gray-400/20"
+                      }`}>
                       {loadingModules["deemed"] ? <RefreshCw className="h-3 w-3 animate-spin" /> : ddPendingCount}
                     </div>
                   )}
                   {module.id === "reconnection" && (
-                    <div className={`absolute top-2 right-2 md:top-4 md:right-4 z-20 flex items-center justify-center text-white text-[10px] md:text-xs font-bold min-w-[1.5rem] h-6 px-1.5 md:min-w-[2rem] md:h-8 md:px-2 rounded-full shadow-lg border-2 border-white ring-2 ring-blue-500/10 transition-all duration-300 group-hover:scale-105 ${
-                      loadingModules["reconnection"] ? "bg-blue-500 animate-pulse" : reconnectionPendingCount > 0 ? "bg-blue-600 shadow-blue-500/20" : "bg-gray-400 shadow-gray-400/20"
-                    }`}>
+                    <div className={`absolute top-2 right-2 md:top-4 md:right-4 z-20 flex items-center justify-center text-white text-[10px] md:text-xs font-bold min-w-[1.5rem] h-6 px-1.5 md:min-w-[2rem] md:h-8 md:px-2 rounded-full shadow-lg border-2 border-white ring-2 ring-blue-500/10 transition-all duration-300 group-hover:scale-105 ${loadingModules["reconnection"] ? "bg-blue-500 animate-pulse" : reconnectionPendingCount > 0 ? "bg-blue-600 shadow-blue-500/20" : "bg-gray-400 shadow-gray-400/20"
+                      }`}>
                       {loadingModules["reconnection"] ? <RefreshCw className="h-3 w-3 animate-spin" /> : reconnectionPendingCount}
                     </div>
                   )}
                   {module.id === "nsc" && (
-                    <div className={`absolute top-2 right-2 md:top-4 md:right-4 z-20 flex items-center justify-center text-white text-[10px] md:text-xs font-bold min-w-[1.5rem] h-6 px-1.5 md:min-w-[2rem] md:h-8 md:px-2 rounded-full shadow-lg border-2 border-white ring-2 ring-green-500/10 transition-all duration-300 group-hover:scale-105 ${
-                      loadingModules["nsc"] ? "bg-blue-500 animate-pulse" : nscPendingCount > 0 ? "bg-green-600" : "bg-gray-400"
-                    }`}>
+                    <div className={`absolute top-2 right-2 md:top-4 md:right-4 z-20 flex items-center justify-center text-white text-[10px] md:text-xs font-bold min-w-[1.5rem] h-6 px-1.5 md:min-w-[2rem] md:h-8 md:px-2 rounded-full shadow-lg border-2 border-white ring-2 ring-green-500/10 transition-all duration-300 group-hover:scale-105 ${loadingModules["nsc"] ? "bg-blue-500 animate-pulse" : nscPendingCount > 0 ? "bg-green-600" : "bg-gray-400"
+                      }`}>
                       {loadingModules["nsc"] ? <RefreshCw className="h-3 w-3 animate-spin" /> : nscPendingCount}
                     </div>
                   )}
                   {module.id === "meter" && (
-                    <div className={`absolute top-2 right-2 md:top-4 md:right-4 z-20 flex items-center justify-center text-white text-[10px] md:text-xs font-bold min-w-[1.5rem] h-6 px-1.5 md:min-w-[2rem] md:h-8 md:px-2 rounded-full shadow-lg border-2 border-white ring-2 ring-purple-500/10 transition-all duration-300 group-hover:scale-105 ${
-                      loadingModules["meter"] ? "bg-blue-500 animate-pulse" : meterPendingCount > 0 ? "bg-purple-600" : "bg-gray-400"
-                    }`}>
+                    <div className={`absolute top-2 right-2 md:top-4 md:right-4 z-20 flex items-center justify-center text-white text-[10px] md:text-xs font-bold min-w-[1.5rem] h-6 px-1.5 md:min-w-[2rem] md:h-8 md:px-2 rounded-full shadow-lg border-2 border-white ring-2 ring-purple-500/10 transition-all duration-300 group-hover:scale-105 ${loadingModules["meter"] ? "bg-blue-500 animate-pulse" : meterPendingCount > 0 ? "bg-purple-600" : "bg-gray-400"
+                      }`}>
                       {loadingModules["meter"] ? <RefreshCw className="h-3 w-3 animate-spin" /> : meterPendingCount}
                     </div>
                   )}
                   {module.id === "meter-replacement" && (
-                    <div className={`absolute top-2 right-2 md:top-4 md:right-4 z-20 flex items-center justify-center text-white text-[10px] md:text-xs font-bold min-w-[1.5rem] h-6 px-1.5 md:min-w-[2rem] md:h-8 md:px-2 rounded-full shadow-lg border-2 border-white ring-2 ring-indigo-500/10 transition-all duration-300 group-hover:scale-105 ${
-                      loadingModules["meter-replacement"] ? "bg-blue-500 animate-pulse" : replacementPendingCount > 0 ? "bg-indigo-600" : "bg-gray-400"
-                    }`}>
+                    <div className={`absolute top-2 right-2 md:top-4 md:right-4 z-20 flex items-center justify-center text-white text-[10px] md:text-xs font-bold min-w-[1.5rem] h-6 px-1.5 md:min-w-[2rem] md:h-8 md:px-2 rounded-full shadow-lg border-2 border-white ring-2 ring-indigo-500/10 transition-all duration-300 group-hover:scale-105 ${loadingModules["meter-replacement"] ? "bg-blue-500 animate-pulse" : replacementPendingCount > 0 ? "bg-indigo-600" : "bg-gray-400"
+                      }`}>
                       {loadingModules["meter-replacement"] ? <RefreshCw className="h-3 w-3 animate-spin" /> : replacementPendingCount}
                     </div>
                   )}
                   {module.id === "dtr" && (
-                    <div className={`absolute top-2 right-2 md:top-4 md:right-4 z-20 flex items-center justify-center text-white text-[10px] md:text-xs font-bold min-w-[1.5rem] h-6 px-1.5 md:min-w-[2rem] md:h-8 md:px-2 rounded-full shadow-lg border-2 border-white ring-2 ring-teal-500/10 transition-all duration-300 group-hover:scale-105 ${
-                      loadingModules["dtr"] ? "bg-blue-500 animate-pulse" : dtrPendingCount > 0 ? "bg-teal-600" : "bg-gray-400"
-                    }`}>
+                    <div className={`absolute top-2 right-2 md:top-4 md:right-4 z-20 flex items-center justify-center text-white text-[10px] md:text-xs font-bold min-w-[1.5rem] h-6 px-1.5 md:min-w-[2rem] md:h-8 md:px-2 rounded-full shadow-lg border-2 border-white ring-2 ring-teal-500/10 transition-all duration-300 group-hover:scale-105 ${loadingModules["dtr"] ? "bg-blue-500 animate-pulse" : dtrPendingCount > 0 ? "bg-teal-600" : "bg-gray-400"
+                      }`}>
                       {loadingModules["dtr"] ? <RefreshCw className="h-3 w-3 animate-spin" /> : dtrPendingCount}
                     </div>
                   )}
 
                   <div className={`absolute top-0 right-0 p-2 md:p-4 opacity-5 group-hover:opacity-10 transition-opacity duration-500`}>
-                     <Icon className={`h-16 w-16 md:h-24 md:w-24 ${module.color} transition-transform duration-500 group-hover:scale-110`} />
+                    <Icon className={`h-16 w-16 md:h-24 md:w-24 ${module.color} transition-transform duration-500 group-hover:scale-110`} />
                   </div>
 
                   <CardHeader className="relative pb-2 p-3 md:p-6">
@@ -465,7 +458,7 @@ export function DashboardMenu({ onSelect, userRole, userAgencies = [], permissio
         <div className="mt-12 py-6 border-t border-gray-100 text-center">
           <p className="text-sm font-medium text-gray-400">
             Developed by{" "}
-            <button 
+            <button
               onClick={() => setShowDevModal(true)}
               className="font-bold bg-gradient-to-r from-pink-500 via-purple-500 to-indigo-500 bg-clip-text text-transparent hover:opacity-80 transition-opacity cursor-pointer text-base"
             >
@@ -479,29 +472,29 @@ export function DashboardMenu({ onSelect, userRole, userAgencies = [], permissio
       {showDevModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-md animate-in fade-in duration-200">
           <div className="relative w-full max-w-sm bg-white rounded-3xl shadow-2xl p-8 text-center animate-in zoom-in-95 duration-200 border border-gray-100">
-            <button 
+            <button
               onClick={() => setShowDevModal(false)}
               className="absolute top-4 right-4 p-2 rounded-full hover:bg-gray-100 transition-colors"
             >
               <X className="h-5 w-5 text-gray-400" />
             </button>
-            
+
             <div className="w-16 h-16 bg-indigo-50 rounded-full flex items-center justify-center mx-auto mb-4">
               <Phone className="h-8 w-8 text-indigo-600" />
             </div>
-            
+
             <h3 className="text-xl font-bold text-gray-900 mb-2">Contact Developer</h3>
             <p className="text-gray-600 mb-6">
               To add your supply or for technical assistance, please contact:
             </p>
-            
-            <a 
-              href="tel:8092273459" 
+
+            <a
+              href="tel:8092273459"
               className="inline-block w-full py-4 px-6 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-2xl font-bold text-lg hover:shadow-lg transition-all active:scale-95"
             >
               8092273459
             </a>
-            
+
             <p className="mt-4 text-[10px] text-gray-400 uppercase tracking-widest font-bold">Pramod Verma • System Support</p>
           </div>
         </div>
