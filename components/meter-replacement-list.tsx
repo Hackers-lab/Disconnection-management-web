@@ -211,7 +211,7 @@ export function MeterReplacementList({ userRole, userAgencies, username, agencie
             <p>No replacement proposals found</p>
           </div>
         ) : paginated.map(r => (
-          <Card key={r.replacementId} className="overflow-hidden">
+          <Card key={r.replacementId} className="hover:shadow-md transition-all duration-200 overflow-hidden border border-gray-200 hover:border-blue-200">
             <CardContent className="p-4">
               <div className="flex justify-between items-start gap-2">
                 <div className="min-w-0 flex-1 space-y-1">

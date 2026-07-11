@@ -474,7 +474,7 @@ export function MeterList({ userRole, userAgencies, username, agencies }: Props)
               <p>No meter issues found</p>
             </div>
           ) : paginated.map(issue => (
-            <Card key={issue.issueId} className={`overflow-hidden ${issue.status === "issued" && isAdmin ? "cursor-pointer" : ""}`}>
+            <Card key={issue.issueId} className={`hover:shadow-md transition-all duration-200 overflow-hidden border border-gray-200 hover:border-blue-200 ${issue.status === "issued" && isAdmin ? "cursor-pointer" : ""}`}>
               <CardContent className="p-4">
                 <div className="flex justify-between items-start gap-2">
                   <div className="min-w-0 flex-1">
@@ -519,7 +519,7 @@ export function MeterList({ userRole, userAgencies, username, agencies }: Props)
                   <div className="flex gap-2 mt-3 pt-3 border-t">
                     {/* Agency: complete installation */}
                     {!isAdmin && (
-                      <Button size="sm" className="flex-1 bg-green-600 hover:bg-green-700 text-white h-8"
+                      <Button size="sm" className="flex-1 bg-slate-950 hover:bg-slate-900 text-white text-xs font-semibold h-9 rounded-lg shadow-sm transition-colors"
                         onClick={() => { setSelected(issue); setView("complete") }}>
                         Mark Installed
                       </Button>
@@ -527,11 +527,11 @@ export function MeterList({ userRole, userAgencies, username, agencies }: Props)
                     {/* Admin: return to stock + print */}
                     {isAdmin && (
                       <>
-                        <Button size="sm" variant="outline" className="flex-1 h-8 text-orange-700 border-orange-200"
+                        <Button size="sm" variant="outline" className="flex-1 h-9 text-orange-700 border-orange-200 text-xs font-semibold rounded-lg shadow-sm transition-colors"
                           onClick={() => handleReturn(issue)}>
                           <RotateCcw className="h-3 w-3 mr-1" /> Return
                         </Button>
-                        <Button size="sm" variant="outline" className="h-8 px-2"
+                        <Button size="sm" variant="outline" className="h-9 px-2 text-xs font-semibold rounded-lg shadow-sm transition-colors"
                           onClick={() => { setSelectedForSlip(new Set([issue.issueId])); printMeterSlip([issue]) }}>
                           <Printer className="h-3 w-3" />
                         </Button>
@@ -560,7 +560,7 @@ export function MeterList({ userRole, userAgencies, username, agencies }: Props)
                       {issue.beforeImage && <a href={issue.beforeImage} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 underline">Before ↗</a>}
                     </div>
                     {issue.newReading && <p className="text-xs text-gray-500">New reading: <strong>{issue.newReading}</strong></p>}
-                    <Button size="sm" className="w-full h-8 bg-teal-600 hover:bg-teal-700 text-white"
+                    <Button size="sm" className="w-full h-9 bg-slate-950 hover:bg-slate-900 text-white text-xs font-semibold rounded-lg shadow-sm transition-colors"
                       onClick={() => {
                         setSelectedForFinalize(new Set([issue.issueId]))
                         setFinalizeRef(""); setFinalizeInstNo("")
@@ -602,7 +602,7 @@ export function MeterList({ userRole, userAgencies, username, agencies }: Props)
               <p>No proposed replacements found</p>
             </div>
           ) : replacements.filter((r: MeterReplacement) => r.status === "proposed" && (isAdmin || userAgencies.map((a: string) => a.toUpperCase()).includes(r.agency.toUpperCase()))).map(rep => (
-            <Card key={rep.replacementId} className="overflow-hidden">
+            <Card key={rep.replacementId} className="hover:shadow-md transition-all duration-200 overflow-hidden border border-gray-200 hover:border-blue-200">
               <CardContent className="p-4">
                 <div className="flex justify-between items-start gap-2">
                   <div className="min-w-0 flex-1 space-y-1">

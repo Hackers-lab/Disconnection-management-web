@@ -48,10 +48,10 @@ function hoursAgo(ts: string): number {
 
 function StatusBadge({ status, effectiveStatus }: { status: ReconnectionRequest["status"], effectiveStatus: string }) {
   const styles: Record<string, string> = {
-    pending:     "bg-amber-50 text-amber-700 border border-amber-200",
+    pending: "bg-amber-50 text-amber-700 border border-amber-200",
     reconnected: "bg-emerald-50 text-emerald-700 border border-emerald-200",
     door_locked: "bg-orange-50 text-orange-700 border border-orange-200",
-    cancelled:   "bg-gray-50 text-gray-500 border border-gray-200",
+    cancelled: "bg-gray-50 text-gray-500 border border-gray-200",
     pending_reattempt: "bg-pink-50 text-pink-700 border border-pink-200 animate-pulse",
   }
   const labels: Record<string, string> = {
@@ -236,11 +236,11 @@ export function ReconnectionList({ userRole, userAgencies, username, agencies }:
   }
 
   // ── Stats calculation ─────────────────────────────────────────────────────
-  const pendingCount    = processedRecords.filter(r => r.effectiveStatus === "pending").length
+  const pendingCount = processedRecords.filter(r => r.effectiveStatus === "pending").length
   const reconnectedCount = processedRecords.filter(r => r.effectiveStatus === "reconnected").length
   const doorLockedCount = processedRecords.filter(r => r.effectiveStatus === "door_locked").length
-  const overdueCount    = processedRecords.filter(r => r.isOverdue).length
-  const allCount        = records.length
+  const overdueCount = processedRecords.filter(r => r.isOverdue).length
+  const allCount = records.length
 
   return (
     <div className={`space-y-4 ${isAdmin ? "pb-24" : ""}`}>
@@ -280,13 +280,12 @@ export function ReconnectionList({ userRole, userAgencies, username, agencies }:
             <button
               onClick={() => load()}
               disabled={syncState === "loading"}
-              className={`flex items-center gap-1 rounded-full px-2 py-0.5 border transition-colors disabled:cursor-not-allowed ${
-                syncState === "loading"
+              className={`flex items-center gap-1 rounded-full px-2 py-0.5 border transition-colors disabled:cursor-not-allowed ${syncState === "loading"
                   ? "border-blue-400 bg-blue-50 text-blue-500"
                   : syncState === "updated"
-                  ? "border-green-500 bg-green-50 text-green-600"
-                  : "border-blue-300 bg-blue-50 text-blue-500 hover:border-blue-500 hover:bg-blue-100 hover:text-blue-700 active:scale-95 cursor-pointer"
-              }`}
+                    ? "border-green-500 bg-green-50 text-green-600"
+                    : "border-blue-300 bg-blue-50 text-blue-500 hover:border-blue-500 hover:bg-blue-100 hover:text-blue-700 active:scale-95 cursor-pointer"
+                }`}
               title={syncState === "loading" ? "Loading data..." : "Tap to refresh"}
             >
               {syncState === "loading" ? (
@@ -321,9 +320,8 @@ export function ReconnectionList({ userRole, userAgencies, username, agencies }:
           const overdueFlag = r.isOverdue
           const hrs = r.overdueHours
           return (
-            <Card key={r.requestId} className={`hover:shadow-md transition-all duration-200 overflow-hidden max-w-full ${
-              overdueFlag ? "ring-2 ring-red-500 border-red-300" : "hover:border-blue-200"
-            }`}>
+            <Card key={r.requestId} className={`hover:shadow-md transition-all duration-200 overflow-hidden max-w-full ${overdueFlag ? "ring-2 ring-red-500 border-red-300" : "hover:border-blue-200"
+              }`}>
               <CardHeader className="pb-3 break-words whitespace-normal">
                 <div className="flex items-start justify-between w-full gap-2">
                   <div className="min-w-0 flex-1">
@@ -336,11 +334,10 @@ export function ReconnectionList({ userRole, userAgencies, username, agencies }:
                     <p className="text-sm text-gray-600 font-mono mt-1">ID: {r.consumerId}</p>
                     <div className="flex items-center gap-1.5 flex-wrap mt-2">
                       <span className="font-mono text-[10px] text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">{r.requestId}</span>
-                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
-                        r.source === "dc_list"
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${r.source === "dc_list"
                           ? "bg-blue-50 text-blue-600 border border-blue-100"
                           : "bg-purple-50 text-purple-600 border border-purple-100"
-                      }`}>
+                        }`}>
                         {r.source === "dc_list" ? "DC List" : "Manual"}
                       </span>
                       {overdueFlag && (
@@ -375,7 +372,7 @@ export function ReconnectionList({ userRole, userAgencies, username, agencies }:
                   <div className="flex items-center space-x-2">
                     <Monitor className="h-4 w-4 text-gray-400" />
                     <div className="flex-1">
-                      <p className="text-sm text-gray-600 font-mono">{r.device}</p>
+                      <p className="text-sm font-bold text-indigo-600 font-mono">{r.device}</p>
                       <p className="text-[10px] text-gray-500">Meter / Device</p>
                     </div>
                   </div>

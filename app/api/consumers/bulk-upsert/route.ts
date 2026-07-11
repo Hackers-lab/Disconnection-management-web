@@ -42,7 +42,17 @@ async function loadAgencyZoneMap(spreadsheetId: string): Promise<Map<string, str
 async function getSheetTabId(spreadsheetId: string, sheetName: string): Promise<number> {
   const sheets = google.sheets({ version: "v4", auth })
   const meta = await sheets.spreadsheets.get({ spreadsheetId })
-  return meta.data.sheets?.find(s => s.properties?.title === sheetName)?.properties?.sheetId ?? 0
+  const cleanName = sheetName.trim().toLowerCase()
+  const found = meta.data.sheets?.find(s => s.properties?.title?.trim().toLowerCase() === cleanName)
+  if (!found) {
+    const available = meta.data.sheets?.map(s => s.properties?.title || "").join(", ") || "none"
+    throw new Error(`Sheet tab named "${sheetName}" not found in spreadsheet. Available tabs: ${available}`)
+  }
+  const id = found.properties?.sheetId
+  if (id === undefined || id === null) {
+    throw new Error(`Sheet tab named "${sheetName}" does not have a valid sheetId.`)
+  }
+  return id
 }
 
 async function ensureHistoryTab(spreadsheetId: string) {

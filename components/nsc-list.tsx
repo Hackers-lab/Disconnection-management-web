@@ -331,7 +331,7 @@ export function NscList({ userRole, userAgencies, username, agencies }: Props) {
               <p>No NSC applications found</p>
             </div>
           ) : paginated.map(app => (
-            <Card key={app.receiveNo} className="overflow-hidden">
+            <Card key={app.receiveNo} className="hover:shadow-md transition-all duration-200 overflow-hidden border border-gray-200 hover:border-blue-200">
               <CardContent className="p-4">
                 <div className="flex justify-between items-start gap-2">
                   <div className="min-w-0 flex-1">
@@ -399,7 +399,7 @@ export function NscList({ userRole, userAgencies, username, agencies }: Props) {
                 <div className="flex gap-2 mt-3 pt-3 border-t">
                   {/* Agency: inspect pending apps */}
                   {isAgency && app.status === "pending" && (
-                    <Button size="sm" className="flex-1 bg-blue-600 hover:bg-blue-700 text-white h-8"
+                    <Button size="sm" className="flex-1 bg-slate-950 hover:bg-slate-900 text-white text-xs font-semibold h-9 rounded-lg shadow-sm transition-colors"
                       onClick={() => { setSelected(app); setView("inspect") }}>
                       Start Inspection
                     </Button>
@@ -412,35 +412,35 @@ export function NscList({ userRole, userAgencies, username, agencies }: Props) {
                   )}
                   {/* Admin: process inspected apps */}
                   {isAdmin && app.status === "inspected" && (
-                    <Button size="sm" className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white h-8"
+                    <Button size="sm" className="flex-1 bg-slate-950 hover:bg-slate-900 text-white text-xs font-semibold h-9 rounded-lg shadow-sm transition-colors"
                       onClick={() => { setSelected(app); setView("process") }}>
                       Process
                     </Button>
                   )}
                   {/* Admin: view / reprocess quotation or dispute */}
                   {isAdmin && (app.status === "quotation_issued" || app.status === "dispute_issued") && (
-                    <Button size="sm" variant="outline" className="flex-1 h-8"
+                    <Button size="sm" variant="outline" className="flex-1 h-9 text-xs font-semibold rounded-lg shadow-sm transition-colors"
                       onClick={() => { setSelected(app); setView("process") }}>
                       View / Override
                     </Button>
                   )}
                   {/* Admin: create project from quotation_issued app */}
                   {isAdmin && app.status === "quotation_issued" && !app.projectId && (
-                    <Button size="sm" variant="outline" className="h-8 text-orange-700 border-orange-200"
+                    <Button size="sm" variant="outline" className="h-9 text-orange-700 border-orange-200 text-xs font-semibold rounded-lg shadow-sm transition-colors"
                       onClick={() => setProjectDialogApp(app)}>
                       <FolderOpen className="h-3 w-3 mr-1" /> Create Project
                     </Button>
                   )}
                   {/* Admin: project statuses — view linked project */}
                   {isAdmin && ["project_required", "project_ongoing", "project_done"].includes(app.status) && (
-                    <Button size="sm" variant="outline" className="flex-1 h-8 text-orange-700 border-orange-200"
+                    <Button size="sm" variant="outline" className="flex-1 h-9 text-orange-700 border-orange-200 text-xs font-semibold rounded-lg shadow-sm transition-colors"
                       onClick={() => { setTab("projects") }}>
                       <FolderOpen className="h-3 w-3 mr-1" /> View Projects
                     </Button>
                   )}
                   {/* Admin: approve project if it's done */}
                   {isAdmin && app.status === "project_ongoing" && projectMap[app.receiveNo]?.status === "done" && (
-                    <Button size="sm" className="h-8 bg-green-600 hover:bg-green-700 text-white"
+                    <Button size="sm" className="h-9 bg-slate-950 hover:bg-slate-900 text-white text-xs font-semibold rounded-lg shadow-sm transition-colors"
                       onClick={() => { setSelectedProject(projectMap[app.receiveNo]); setProjectAction("approve") }}>
                       Approve Project
                     </Button>
@@ -448,14 +448,14 @@ export function NscList({ userRole, userAgencies, username, agencies }: Props) {
                   {/* Agency: mark project complete */}
                   {isAgency && ["project_required", "project_ongoing"].includes(app.status) && app.projectId &&
                     projectMap[app.receiveNo]?.status === "ongoing" && projectMap[app.receiveNo]?.poNumber && (
-                    <Button size="sm" className="h-8 bg-amber-600 hover:bg-amber-700 text-white"
+                    <Button size="sm" className="h-9 bg-slate-950 hover:bg-slate-900 text-white text-xs font-semibold rounded-lg shadow-sm transition-colors"
                       onClick={() => { setSelectedProject(projectMap[app.receiveNo]); setProjectAction("complete") }}>
                       Mark Work Done
                     </Button>
                   )}
                   {/* Admin: pending — can reassign */}
                   {isAdmin && app.status === "pending" && (
-                    <Button size="sm" variant="outline" className="flex-1 h-8 text-purple-700 border-purple-200"
+                    <Button size="sm" variant="outline" className="flex-1 h-9 text-purple-700 border-purple-200 text-xs font-semibold rounded-lg shadow-sm transition-colors"
                       onClick={() => { setSelected(app); setView("process") }}>
                       Reassign
                     </Button>
