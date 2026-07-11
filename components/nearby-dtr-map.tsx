@@ -32,28 +32,19 @@ export function NearbyDtrMap({ records, onClose }: Props) {
   const [loadingLocation, setLoadingLocation] = useState(true)
   const [filterPending, setFilterPending] = useState(true) // Toggle to show all or pending
 
-  // ── Load Leaflet dynamically from CDN ──────────────────────────────────────
+  // ── Load Leaflet once using shared loader (keeps scripts/styles for reuse) ─
   useEffect(() => {
-    // 1. Add Leaflet CSS
-    const link = document.createElement("link")
-    link.rel = "stylesheet"
-    link.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-    document.head.appendChild(link)
-
-    // 2. Add Leaflet JS script
-    const script = document.createElement("script")
-    script.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-    script.async = true
-    document.body.appendChild(script)
-
-    script.onload = () => {
-      setLeafletLoaded(true)
-    }
-
-    return () => {
-      document.head.removeChild(link)
-      document.body.removeChild(script)
-    }
+    let mounted = true
+    ;(async () => {
+      try {
+        const mod = await import("@/lib/leaflet-loader")
+        await mod.ensureLeafletLoaded()
+        if (mounted) setLeafletLoaded(true)
+      } catch (err) {
+        console.error("Failed to load Leaflet:", err)
+      }
+    })()
+    return () => { mounted = false }
   }, [])
 
   // ── Retrieve User Geolocation ──────────────────────────────────────────────

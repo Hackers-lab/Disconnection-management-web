@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useMemo, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Loader2, MapPin, Navigation, ArrowLeft, RefreshCw, X } from "lucide-react"
 import type { ConsumerData } from "@/lib/google-sheets"
@@ -36,6 +36,20 @@ function getStatusColor(status: string): string {
   return "#64748b"                                  // slate default
 }
 
+function formatOsdValue(value: string | number | undefined): string {
+  const numeric = typeof value === "number" ? value : Number.parseFloat(String(value ?? "0"))
+  if (!Number.isFinite(numeric)) return "₹0"
+  return `₹${numeric.toLocaleString("en-IN")}`
+}
+
+function formatOsdMarkerLabel(value: string | number | undefined): string {
+  const numeric = typeof value === "number" ? value : Number.parseFloat(String(value ?? "0"))
+  if (!Number.isFinite(numeric)) return "₹0"
+  if (numeric >= 100000) return `₹${(numeric / 100000).toFixed(1)}L`
+  if (numeric >= 1000) return `₹${(numeric / 1000).toFixed(1)}k`
+  return `₹${Math.round(numeric)}`
+}
+
 export function NearbyConsumerMap({ consumers, onClose, onGoToConsumer }: Props) {
   const [range, setRange] = useState<number>(500)
   const [leafletLoaded, setLeafletLoaded] = useState(false)
@@ -47,32 +61,35 @@ export function NearbyConsumerMap({ consumers, onClose, onGoToConsumer }: Props)
   const goToRef = useRef(onGoToConsumer)
   useEffect(() => { goToRef.current = onGoToConsumer }, [onGoToConsumer])
 
-  // Expose a global bridge so Leaflet popup buttons can trigger the navigation
+  // Expose global bridges so Leaflet popup buttons can trigger navigation or directions
   useEffect(() => {
     ;(window as any).__nearbyConsumerGo = (consumerId: string) => {
       const consumer = consumers.find(c => c.consumerId === consumerId)
       if (consumer) goToRef.current(consumer)
     }
-    return () => { delete (window as any).__nearbyConsumerGo }
+    ;(window as any).__nearbyConsumerOpenDirections = (lat: number, lng: number) => {
+      const url = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`
+      window.open(url, "_blank", "noopener,noreferrer")
+    }
+    return () => {
+      delete (window as any).__nearbyConsumerGo
+      delete (window as any).__nearbyConsumerOpenDirections
+    }
   }, [consumers])
 
-  // ── Load Leaflet dynamically from CDN ─────────────────────────────────────
+  // ── Load Leaflet once using shared loader (keeps scripts/styles for reuse) ─
   useEffect(() => {
-    const link = document.createElement("link")
-    link.rel = "stylesheet"
-    link.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-    document.head.appendChild(link)
-
-    const script = document.createElement("script")
-    script.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-    script.async = true
-    document.body.appendChild(script)
-    script.onload = () => setLeafletLoaded(true)
-
-    return () => {
-      if (document.head.contains(link)) document.head.removeChild(link)
-      if (document.body.contains(script)) document.body.removeChild(script)
-    }
+    let mounted = true
+    ;(async () => {
+      try {
+        const mod = await import("@/lib/leaflet-loader")
+        await mod.ensureLeafletLoaded()
+        if (mounted) setLeafletLoaded(true)
+      } catch (err) {
+        console.error("Failed to load Leaflet:", err)
+      }
+    })()
+    return () => { mounted = false }
   }, [])
 
   // ── GPS Location ──────────────────────────────────────────────────────────
@@ -101,6 +118,27 @@ export function NearbyConsumerMap({ consumers, onClose, onGoToConsumer }: Props)
   useEffect(() => {
     if (leafletLoaded) fetchLocation()
   }, [leafletLoaded])
+
+  const nearbyConsumers = useMemo(() => {
+    if (!userCoords) return [] as Array<{ consumer: ConsumerData; lat: number; lng: number; dist: number }>
+
+    return consumers
+      .map((consumer) => {
+        const lat = Number.parseFloat(consumer.latitude || "")
+        const lng = Number.parseFloat(consumer.longitude || "")
+        if (Number.isNaN(lat) || Number.isNaN(lng) || lat === 0 || lng === 0) return null
+
+        const dist = getDistanceMeters(userCoords[0], userCoords[1], lat, lng)
+        if (dist > range) return null
+
+        const status = (consumer.disconStatus || "").toLowerCase()
+        const isPending = ["connected", "visited", "not found"].includes(status)
+        if (filterPending && !isPending) return null
+
+        return { consumer, lat, lng, dist }
+      })
+      .filter(Boolean) as Array<{ consumer: ConsumerData; lat: number; lng: number; dist: number }>
+  }, [consumers, userCoords, range, filterPending])
 
   // ── Map Render ────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -145,32 +183,14 @@ export function NearbyConsumerMap({ consumers, onClose, onGoToConsumer }: Props)
 
     let nearestConsumer: { consumer: ConsumerData; lat: number; lng: number; dist: number } | null = null
 
-    // Filter consumers with valid lat/long
-    const withCoords = consumers.filter(c => {
-      const lat = parseFloat(c.latitude || "")
-      const lng = parseFloat(c.longitude || "")
-      return !isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0
-    })
-
-    withCoords.forEach(consumer => {
-      const lat = parseFloat(consumer.latitude!)
-      const lng = parseFloat(consumer.longitude!)
-      const distance = getDistanceMeters(userCoords[0], userCoords[1], lat, lng)
-
-      if (distance > range) return
-
-      const status = (consumer.disconStatus || "").toLowerCase()
-      const isPending = ["connected", "visited", "not found"].includes(status)
-
-      // "Pending Only" mode hides paid/disconnected consumers
-      if (filterPending && !isPending) return
-
-      if (!nearestConsumer || distance < nearestConsumer.dist) {
-        nearestConsumer = { consumer, lat, lng, dist: distance }
+    nearbyConsumers.forEach(({ consumer, lat, lng, dist }) => {
+      if (!nearestConsumer || dist < nearestConsumer.dist) {
+        nearestConsumer = { consumer, lat, lng, dist }
       }
 
       const color = getStatusColor(consumer.disconStatus)
       const osd = Number.parseFloat(consumer.d2NetOS || "0").toLocaleString()
+      const markerLabel = formatOsdMarkerLabel(consumer.d2NetOS)
 
       const marker = L.marker([lat, lng], {
         icon: L.divIcon({
@@ -189,7 +209,7 @@ export function NearbyConsumerMap({ consumers, onClose, onGoToConsumer }: Props)
               box-shadow: 0 1px 4px rgba(0,0,0,0.25);
               letter-spacing: 0.03em;
             ">
-              ${consumer.consumerId}
+              ${markerLabel}
             </div>
           `,
           iconAnchor: [20, 10]
@@ -204,19 +224,27 @@ export function NearbyConsumerMap({ consumers, onClose, onGoToConsumer }: Props)
           <p style="margin: 0 0 6px 0; font-weight: 800; font-size: 13px; color: #0f172a; border-bottom: 1px solid #e2e8f0; padding-bottom: 5px;">
             ${consumer.name}
           </p>
-          <p style="margin: 2px 0; color: #475569;">ID: <strong style="color:#0f172a; font-family:monospace;">${consumer.consumerId}</strong></p>
           <p style="margin: 2px 0; color: #475569;">OSD: <strong style="color:#dc2626;">₹${osd}</strong></p>
           <p style="margin: 2px 0; color: #475569;">Class: <strong style="color:#0f172a;">${consumer.baseClass || consumer.class || "—"}</strong></p>
           <p style="margin: 2px 0; color: #475569;">Status: <strong style="color:${color}; text-transform:capitalize;">${consumer.disconStatus || "—"}</strong></p>
-          <p style="margin: 2px 0; color: #475569;">Distance: <strong style="color:#0f172a;">${Math.round(distance)} m</strong></p>
+          <p style="margin: 2px 0; color: #475569;">Distance: <strong style="color:#0f172a;">${Math.round(dist)} m</strong></p>
           ${consumer.mobileNumber ? `<p style="margin: 2px 0; color: #475569;">Mobile: <a href="tel:${consumer.mobileNumber}" style="color:#2563eb;">${consumer.mobileNumber}</a></p>` : ""}
-          <button
-            type="button"
-            style="margin-top: 10px; width: 100%; padding: 7px 0; background: #2563eb; color: #fff; font-weight: 700; font-size: 11px; border-radius: 8px; border: none; cursor: pointer;"
-            onclick="window.__nearbyConsumerGo && window.__nearbyConsumerGo('${safeId}')"
-          >
-            Go to Card Update →
-          </button>
+          <div style="display: flex; gap: 8px; margin-top: 10px;">
+            <button
+              type="button"
+              style="flex: 1; padding: 7px 0; background: #0f766e; color: #fff; font-weight: 700; font-size: 11px; border-radius: 8px; border: none; cursor: pointer;"
+              onclick="window.__nearbyConsumerOpenDirections && window.__nearbyConsumerOpenDirections(${lat}, ${lng})"
+            >
+              Directions
+            </button>
+            <button
+              type="button"
+              style="flex: 1; padding: 7px 0; background: #2563eb; color: #fff; font-weight: 700; font-size: 11px; border-radius: 8px; border: none; cursor: pointer;"
+              onclick="window.__nearbyConsumerGo && window.__nearbyConsumerGo('${safeId}')"
+            >
+              Update
+            </button>
+          </div>
         </div>
       `, { maxWidth: 260 })
     })
@@ -242,13 +270,13 @@ export function NearbyConsumerMap({ consumers, onClose, onGoToConsumer }: Props)
           iconAnchor: [10, 10]
         })
       }).addTo(map).bindTooltip(
-        `Nearest: ${nc.consumer.consumerId} (${Math.round(nc.dist)}m)`,
+        `Nearest: ${formatOsdMarkerLabel(nc.consumer.d2NetOS)} (${Math.round(nc.dist)}m)`,
         { permanent: true, direction: "top", className: "px-2 py-0.5 rounded bg-red-600 text-white font-mono text-[9px] font-bold border-none shadow-md" }
       )
     }
 
     return () => { map.remove() }
-  }, [userCoords, range, consumers, leafletLoaded, filterPending])
+  }, [userCoords, range, nearbyConsumers, leafletLoaded, filterPending])
 
   return (
     <div className="flex flex-col h-[80vh] w-full border border-slate-200 rounded-3xl overflow-hidden bg-white shadow-xl relative animate-in fade-in duration-300">
@@ -330,7 +358,7 @@ export function NearbyConsumerMap({ consumers, onClose, onGoToConsumer }: Props)
       </div>
 
       {/* Range footer */}
-      <div className="bg-slate-50 border-t px-4 py-3 flex items-center justify-between gap-4 z-40 w-full shrink-0">
+      <div className="bg-slate-50 border-t px-4 py-3 flex flex-wrap items-center justify-between gap-3 z-40 w-full shrink-0">
         <div className="flex items-center gap-2 shrink-0">
           <MapPin className="h-4 w-4 text-red-500" />
           <span className="text-xs font-bold text-slate-700">
@@ -338,6 +366,11 @@ export function NearbyConsumerMap({ consumers, onClose, onGoToConsumer }: Props)
               {range >= 1000 ? `${(range / 1000).toFixed(1)} km` : `${range}m`}
             </span>
           </span>
+        </div>
+        <div className="flex items-center gap-2 text-[11px] font-semibold text-slate-600">
+          <span>Nearby: {nearbyConsumers.length}</span>
+          <span className="text-slate-400">•</span>
+          <span>OSD: {formatOsdValue(nearbyConsumers.reduce((sum, item) => sum + (Number.parseFloat(item.consumer.d2NetOS || "0") || 0), 0))}</span>
         </div>
         <div className="flex-grow max-w-xs sm:max-w-md">
           <input

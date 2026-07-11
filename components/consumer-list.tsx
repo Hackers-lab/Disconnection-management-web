@@ -939,8 +939,23 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
               consumers={consumers}
               onClose={() => setShowNearbyMap(false)}
               onGoToConsumer={(consumer) => {
+                // Close radar, ensure card view and navigate to the consumer's page/card
                 setShowNearbyMap(false)
-                setSelectedConsumer(consumer)
+                setViewMode("card")
+                // Find index in the current sorted list and compute page
+                const idx = sortedConsumers.findIndex((c) => c.consumerId === consumer.consumerId)
+                if (idx >= 0) {
+                  const page = Math.floor(idx / itemsPerPage) + 1
+                  setCurrentPage(page)
+                  // Wait for the UI to render the target card, then scroll and open update
+                  setTimeout(() => {
+                    const el = document.getElementById(`consumer-card-${consumer.consumerId}`)
+                    if (el) el.scrollIntoView({ behavior: "smooth", block: "center" })
+                    setSelectedConsumer(consumer)
+                  }, 300)
+                } else {
+                  setSelectedConsumer(consumer)
+                }
               }}
             />
           </div>
@@ -975,35 +990,36 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
 
       {/* Search and Filter Controls */}
       <div className="bg-white p-4 rounded-lg shadow-sm border sticky top-[64px] z-30">
-        <div className="flex items-center gap-2">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-            <Input
-              placeholder="Search id, name, address..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 pr-8"
-            />
-            {searchTerm && (
-              <X
-                className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-red-500 cursor-pointer hover:text-red-700"
-                onClick={() => setSearchTerm("")}
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+              <Input
+                placeholder="Search id, name, address..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10 pr-8"
               />
-            )}
-          </div>
+              {searchTerm && (
+                <X
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-red-500 cursor-pointer hover:text-red-700"
+                  onClick={() => setSearchTerm("")}
+                />
+              )}
+            </div>
 
-          <Sheet open={isFilterOpen} onOpenChange={setIsFilterOpen}>
-            <SheetTrigger asChild>
-              <Button variant="outline" size="icon" className="relative shrink-0">
-                <Filter className="h-4 w-4" />
-                {(Object.values(filters).some((f) => f !== "All Agencies" && f !== "All Status" && f !== "All Classes" && f !== "All MRUs" && f !== "") ||
-                  minOsd > 0 ||
-                  dateFilter.isActive ||
-                  sortByOSD !== "desc" || sortByMRU) && (
-                  <span className="absolute -top-1 -right-1 h-3 w-3 bg-blue-600 rounded-full border-2 border-white" />
-                )}
-              </Button>
-            </SheetTrigger>
+            <Sheet open={isFilterOpen} onOpenChange={setIsFilterOpen}>
+              <SheetTrigger asChild>
+                <Button variant="outline" size="icon" className="relative shrink-0">
+                  <Filter className="h-4 w-4" />
+                  {(Object.values(filters).some((f) => f !== "All Agencies" && f !== "All Status" && f !== "All Classes" && f !== "All MRUs" && f !== "") ||
+                    minOsd > 0 ||
+                    dateFilter.isActive ||
+                    sortByOSD !== "desc" || sortByMRU) && (
+                    <span className="absolute -top-1 -right-1 h-3 w-3 bg-blue-600 rounded-full border-2 border-white" />
+                  )}
+                </Button>
+              </SheetTrigger>
             <SheetContent
               className="w-[300px] sm:w-[400px] overflow-y-auto"
               onOpenAutoFocus={(e) => e.preventDefault()}
@@ -1254,52 +1270,51 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
             </SheetContent>
           </Sheet>
 
-          <div className="flex items-center border rounded-md bg-white ml-2 shrink-0">
-            <Button
-              variant="ghost"
-              size="icon"
-              className={`h-9 w-9 rounded-none rounded-l-md ${viewMode === "card" ? "bg-gray-100 text-blue-600" : "text-gray-500"}`}
-              onClick={() => {
-                if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
-                setViewMode("card")
-                localStorage.setItem("consumerListViewMode", "card")
-              }}
-              title="Card View"
-            >
-              <LayoutGrid className="h-4 w-4" />
-            </Button>
-            <div className="w-px h-5 bg-gray-200" />
-            <Button
-              variant="ghost"
-              size="icon"
-              className={`h-9 w-9 rounded-none rounded-r-md ${viewMode === "list" ? "bg-gray-100 text-blue-600" : "text-gray-500"}`}
-              onClick={() => {
-                if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
-                setViewMode("list")
-                localStorage.setItem("consumerListViewMode", "list")
-              }}
-              title="List View"
-            >
-              <List className="h-4 w-4" />
-            </Button>
+            <div className="flex items-center border rounded-md bg-white ml-2 shrink-0">
+              <Button
+                variant="ghost"
+                size="icon"
+                className={`h-9 w-9 rounded-none rounded-l-md ${viewMode === "card" ? "bg-gray-100 text-blue-600" : "text-gray-500"}`}
+                onClick={() => {
+                  if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
+                  setViewMode("card")
+                  localStorage.setItem("consumerListViewMode", "card")
+                }}
+                title="Card View"
+              >
+                <LayoutGrid className="h-4 w-4" />
+              </Button>
+              <div className="w-px h-5 bg-gray-200" />
+              <Button
+                variant="ghost"
+                size="icon"
+                className={`h-9 w-9 rounded-none rounded-r-md ${viewMode === "list" ? "bg-gray-100 text-blue-600" : "text-gray-500"}`}
+                onClick={() => {
+                  if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
+                  setViewMode("list")
+                  localStorage.setItem("consumerListViewMode", "list")
+                }}
+                title="List View"
+              >
+                <List className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
 
-          {/* Nearby Consumer Radar button — only shows when lat/long data exists */}
-          {consumers.some(c => c.latitude && c.longitude) && (
+          {/* Nearby Consumer Radar button — full width below search row */}
+          {
             <Button
-              variant="outline"
-              size="icon"
-              className="h-9 w-9 shrink-0 border-blue-200 text-blue-600 hover:bg-blue-50 hover:border-blue-400"
-              title="Nearby Consumer Radar — find consumers close to your GPS location"
+              type="button"
               onClick={() => {
                 if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
-                setShowNearbyMap(true)
+                setShowNearbyMap(v => !v)
               }}
+              className={`w-full h-12 rounded-xl font-extrabold flex items-center justify-center gap-2 text-sm shadow-md transition-all duration-300 transform hover:scale-[1.01] bg-gradient-to-r from-blue-600 to-indigo-650 hover:from-blue-700 hover:to-indigo-750 text-white`}
             >
-              <Navigation className="h-4 w-4" />
+              <MapPin className="h-4.5 w-4.5 animate-bounce" />
+              {showNearbyMap ? "Hide Navigation Radar" : "Locate Nearby Consumers"}
             </Button>
-          )}
-
+          }
         </div>
 
         {/* Summary Footer in Sticky Header */}
@@ -1356,7 +1371,7 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
       {viewMode === "card" ? (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {paginatedConsumers.map((consumer) => (
-            <Card key={consumer.consumerId} className={`hover:shadow-md transition-shadow overflow-hidden max-w-full ${(consumer.priority || "").toLowerCase() === "urgent" ? "ring-2 ring-red-500 border-red-300" : ""}`}>
+            <Card id={`consumer-card-${consumer.consumerId}`} key={consumer.consumerId} className={`hover:shadow-md transition-shadow overflow-hidden max-w-full ${(consumer.priority || "").toLowerCase() === "urgent" ? "ring-2 ring-red-500 border-red-300" : ""}`}>
               <CardHeader className="pb-3 break-words whitespace-normal">
                 <div className="flex items-start justify-between w-full gap-2">
                   <div className="min-w-0 flex-1">
@@ -1507,7 +1522,7 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
                 </thead>
                 <tbody className="divide-y">
                   {paginatedConsumers.map((consumer) => (
-                    <tr key={consumer.consumerId} className={`hover:bg-gray-50 transition-colors ${(consumer.priority || "").toLowerCase() === "urgent" ? "bg-red-50 border-l-4 border-red-500" : ""}`}>
+                    <tr id={`consumer-row-${consumer.consumerId}`} key={consumer.consumerId} className={`hover:bg-gray-50 transition-colors ${(consumer.priority || "").toLowerCase() === "urgent" ? "bg-red-50 border-l-4 border-red-500" : ""}`}>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1.5">
                           <span className="font-medium text-gray-900 font-mono">{consumer.consumerId}</span>
@@ -1580,6 +1595,7 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
           <div className="md:hidden space-y-2">
             {paginatedConsumers.map((consumer) => (
               <div 
+                id={`consumer-item-${consumer.consumerId}`}
                 key={consumer.consumerId} 
                 onClick={() => {
                     if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
