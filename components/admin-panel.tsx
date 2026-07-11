@@ -2500,6 +2500,7 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
                     { id: "dtr", name: "DTR Verification" },
                     { id: "dtr_painting", name: "DTR Painting" },
                     { id: "meter", name: "Meter Management" },
+                    { id: "meter_replacement", name: "Replacement List" },
                     { id: "nsc", name: "NSC Management" },
                     { id: "consumer_master", name: "Consumer Master" },
                     { id: "admin", name: "Admin Panel" },
