@@ -305,6 +305,29 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
     setFormData((prev) => ({ ...prev, disconStatus: status, disconDate: formattedDate }));
     setStatusChanged(true);
   }
+  const getStatusChipStyle = (status: string, isActive: boolean) => {
+    const base = "h-11 rounded-xl text-xs font-bold transition-all duration-200 border-2 flex items-center justify-center gap-1.5 flex-1"
+    if (!isActive) {
+      return `${base} bg-white text-slate-650 border-slate-200 hover:border-slate-350 hover:bg-slate-50/50`
+    }
+    
+    switch (status) {
+      case "agency paid":
+        return `${base} bg-emerald-50 text-emerald-700 border-emerald-500 shadow-sm`
+      case "disconnected":
+        return `${base} bg-red-50 text-red-700 border-red-500 shadow-sm`
+      case "bill dispute":
+        return `${base} bg-blue-50 text-blue-700 border-blue-500 shadow-sm`
+      case "office team":
+        return `${base} bg-sky-50 text-sky-700 border-sky-500 shadow-sm`
+      case "not found":
+        return `${base} bg-slate-100 text-slate-750 border-slate-500 shadow-sm`
+      case "connected":
+        return `${base} bg-purple-50 text-purple-700 border-purple-500 shadow-sm`
+      default:
+        return `${base} bg-blue-50 text-blue-700 border-blue-500 shadow-sm`
+    }
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
@@ -338,19 +361,19 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
   }
 
   return (
-    <div className="max-w-3xl mx-auto space-y-4 pb-28 min-w-0 overflow-x-hidden"> {/* min-w-0 + overflow-x-hidden prevent long text from forcing horizontal scroll on mobile */}
+    <div className="max-w-3xl mx-auto px-4 py-4 md:px-6 space-y-5 pb-28 min-w-0 overflow-x-hidden bg-[#F8FAFC]">
       
       {/* Header */}
       <div className="flex items-center gap-2 mb-2">
         <Button variant="ghost" size="icon" onClick={() => {
           if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
           onCancel()
-        }}>
-          <ArrowLeft className="h-5 w-5" />
+        }} className="rounded-full hover:bg-slate-100 h-9 w-9">
+          <ArrowLeft className="h-5 w-5 text-slate-700" />
         </Button>
-        <h1 className="text-xl font-bold text-gray-900 flex-1">Update Consumer</h1>
+        <h1 className="text-xl font-bold text-slate-900 flex-1">Update Consumer</h1>
         <Button type="button" variant="outline" size="sm" onClick={loadHistory}
-          className="flex items-center gap-1 text-xs">
+          className="flex items-center gap-1.5 text-xs font-bold rounded-xl border-slate-200 hover:bg-slate-50">
           <History className="h-3.5 w-3.5" />
           History
         </Button>
@@ -358,13 +381,13 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
 
       {/* --- HISTORY DIALOG --- */}
       <Dialog open={historyOpen} onOpenChange={setHistoryOpen}>
-        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto rounded-2xl">
           <DialogHeader>
-            <DialogTitle>Consumer History — {consumer.consumerId}</DialogTitle>
+            <DialogTitle className="text-slate-900 font-bold">Consumer History — {consumer.consumerId}</DialogTitle>
           </DialogHeader>
           {historyLoading && (
             <div className="flex items-center justify-center py-8 gap-2 text-sm text-gray-500">
-              <Loader2 className="h-4 w-4 animate-spin" /> Loading history…
+              <Loader2 className="h-4 w-4 animate-spin text-blue-600" /> Loading history…
             </div>
           )}
           {!historyLoading && historyEntries.length === 0 && (
@@ -379,14 +402,14 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
                   const meta = eventMeta(h)
                   const Icon = meta.Icon
                   return (
-                    <div key={i} className="relative border rounded-lg p-3 space-y-2 bg-gray-50">
+                    <div key={i} className="relative border rounded-lg p-3 space-y-2 bg-gray-50 text-slate-800">
                       {/* timeline node */}
                       <span className={`absolute -left-[18px] top-3 h-5 w-5 rounded-full flex items-center justify-center ${meta.ring}`}>
                         <Icon className={`h-3 w-3 ${meta.color}`} />
                       </span>
                       <div className="flex items-center justify-between gap-2 flex-wrap">
                         <span className={`text-xs font-semibold ${meta.color}`}>{meta.label}</span>
-                        <span className="text-[10px] font-mono text-gray-400">{h.timestamp}</span>
+                        <span className="text-[10px] font-mono text-slate-400">{h.timestamp}</span>
                       </div>
                       <div className="flex items-center gap-2 text-xs flex-wrap">
                         {h.oldStatus && (
@@ -402,26 +425,26 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
                           <span className="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-medium">₹{Number(h.amount).toLocaleString("en-IN")}</span>
                         )}
                         {h.oldOsd && (
-                          <span className="text-gray-500">OSD: ₹{Number(h.oldOsd).toLocaleString("en-IN")}</span>
+                          <span className="text-slate-500 font-medium">OSD: ₹{Number(h.oldOsd).toLocaleString("en-IN")}</span>
                         )}
-                        {h.eventDate && <span className="text-gray-400">on {h.eventDate}</span>}
+                        {h.eventDate && <span className="text-slate-455">on {h.eventDate}</span>}
                       </div>
                       {h.oldNotes && (
-                        <p className="text-xs text-gray-600 italic">Remarks: {h.oldNotes}</p>
+                        <p className="text-xs text-slate-600 italic">Remarks: {h.oldNotes}</p>
                       )}
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-center justify-between mt-1">
                         {h.oldImageUrl ? (
                           <a
                             href={getValidUrl(h.oldImageUrl)}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="inline-flex items-center space-x-1.5 text-xs font-medium text-blue-600 hover:text-blue-800 hover:underline transition-colors cursor-pointer"
+                            className="inline-flex items-center space-x-1.5 text-xs font-semibold text-blue-600 hover:text-blue-800 hover:underline transition-colors cursor-pointer"
                           >
                             <ImageIcon className="h-3.5 w-3.5" />
                             <span>View Uploaded Image</span>
                           </a>
                         ) : <span />}
-                        <span className="text-[10px] text-gray-400">by {h.changedBy}</span>
+                        <span className="text-[10px] text-slate-450 font-medium">by {h.changedBy}</span>
                       </div>
                     </div>
                   )
@@ -432,89 +455,103 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
         </DialogContent>
       </Dialog>
 
-      {/* --- 1. SINGLE DETAILS CARD --- */}
-      <Card className="bg-slate-50 border-slate-200 shadow-sm">
-        <CardContent className="p-4 space-y-3">
-            <div className="flex justify-between items-start border-b border-slate-200 pb-3">
-                <div>
-                    <h2 className="text-lg font-bold text-gray-900">{consumer.name}</h2>
-                    <p className="text-xs text-gray-500 font-mono">ID: {consumer.consumerId}</p>
-                    {consumer.mru ? (
-                      <p className="text-xs text-gray-500 uppercase tracking-[0.08em] mt-1">MRU: {consumer.mru}</p>
-                    ) : null}
-                </div>
-                <div className="text-right">
-                    <div className="text-xl font-bold text-red-600 flex items-center justify-end">
-                        <IndianRupee className="h-5 w-5" />
-                        {Number(consumer.d2NetOS).toLocaleString()}
-                    </div>
-                    <span className="text-[10px] text-gray-500 uppercase tracking-wide">Outstanding</span>
-                </div>
+      {/* --- 1. DETAILS CARD --- */}
+      <Card className="bg-white border-slate-100 shadow-sm rounded-2xl overflow-hidden">
+        <CardContent className="p-5 space-y-4">
+          <div className="flex justify-between items-start gap-4">
+            <div className="space-y-1 min-w-0">
+              <h2 className="text-lg font-extrabold text-slate-900 leading-tight truncate" title={consumer.name}>{consumer.name}</h2>
+              <div className="flex items-start gap-1.5 text-xs text-slate-500 mt-1.5 max-w-md">
+                <MapPin className="h-3.5 w-3.5 mt-0.5 text-blue-500 shrink-0" />
+                <span className="leading-snug break-words">{consumer.address}</span>
+              </div>
             </div>
+            <div className="shrink-0 flex flex-col items-end">
+              <span className="bg-red-50 text-red-700 border border-red-100 rounded-full px-3 py-1 font-extrabold text-sm flex items-center gap-0.5 shadow-sm">
+                <IndianRupee className="h-4 w-4 shrink-0" />
+                {Number(consumer.d2NetOS).toLocaleString("en-IN")}
+              </span>
+              <span className="text-[9px] font-bold text-red-500 uppercase tracking-widest mt-1 mr-1">Outstanding</span>
+            </div>
+          </div>
 
-            <div className="flex items-start gap-2 text-sm text-gray-700 min-w-0">
-                <MapPin className="h-4 w-4 mt-0.5 text-blue-500 shrink-0" />
-                <span className="leading-snug min-w-0 flex-1 break-words">{consumer.address}</span>
-            </div>
+          <div className="h-px bg-slate-100 w-full" />
 
-            <div className="grid grid-cols-2 gap-y-2 gap-x-4 text-xs text-gray-600 pt-1">
-                <div className="flex items-center gap-2">
-                    <Smartphone className="h-4 w-4 text-gray-400" />
-                    <a href={`tel:${consumer.mobileNumber}`} className="font-medium text-blue-600 underline">
-                        {consumer.mobileNumber || "N/A"}
-                    </a>
-                </div>
-                <div className="flex items-center gap-2 justify-end">
-                    <Calendar className="h-4 w-4 text-gray-400" />
-                    <span>Due: <strong>{consumer.osDuedateRange}</strong></span>
-                </div>
-                <div className="flex items-center gap-2">
-                    <Box className="h-4 w-4 text-gray-400" />
-                    <span>Class: {consumer.baseClass}</span>
-                </div>
-                <div className="flex items-center gap-2 justify-end">
-                    <Monitor className="h-4 w-4 text-gray-400" />
-                    <span>Device: {consumer.device}</span>
-                </div>
+          {/* Metadata Grid */}
+          <div className="grid grid-cols-2 gap-4 pt-1">
+            <div className="space-y-0.5">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Consumer ID</span>
+              <span className="text-sm font-semibold text-slate-800 font-mono">{consumer.consumerId}</span>
             </div>
+            <div className="space-y-0.5">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">MRU Section</span>
+              <span className="text-sm font-semibold text-slate-800 uppercase font-mono">{consumer.mru || "—"}</span>
+            </div>
+            <div className="space-y-0.5">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Base Class</span>
+              <span className="text-sm font-semibold text-slate-800">{consumer.baseClass || "—"}</span>
+            </div>
+            <div className="space-y-0.5">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Device Type</span>
+              <span className="text-sm font-semibold text-slate-800">{consumer.device || "—"}</span>
+            </div>
+            <div className="space-y-0.5">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Mobile Number</span>
+              {consumer.mobileNumber ? (
+                <a href={`tel:${consumer.mobileNumber}`} className="text-sm font-semibold text-blue-600 hover:underline flex items-center gap-1">
+                  <Smartphone className="h-3.5 w-3.5 text-slate-400" />
+                  {consumer.mobileNumber}
+                </a>
+              ) : (
+                <span className="text-sm text-slate-400 font-semibold">N/A</span>
+              )}
+            </div>
+            <div className="space-y-0.5">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Due Date Range</span>
+              <span className="text-sm font-semibold text-slate-800 flex items-center gap-1">
+                <Calendar className="h-3.5 w-3.5 text-slate-400" />
+                {consumer.osDuedateRange || "—"}
+              </span>
+            </div>
+          </div>
         </CardContent>
       </Card>
 
-      {/* --- PAYMENT INFO (visible only if any payment data exists) --- */}
+      {/* --- PAYMENT INFO --- */}
       {(consumer.paidAmount || consumer.paidDate || consumer.outstandingAfter || consumer.paymentSource) && (
-        <Card className="border-emerald-200 bg-emerald-50 shadow-sm">
+        <Card className="border-emerald-150 bg-emerald-50/30 shadow-sm rounded-2xl overflow-hidden">
           <CardContent className="p-4 space-y-2 text-sm">
             <div className="flex items-center gap-2 text-emerald-800 font-semibold">
               <IndianRupee className="h-4 w-4" />
               Payment on Record
               {consumer.paidType && (
-                <span className="ml-auto text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full bg-emerald-200 text-emerald-900">
+                <span className="ml-auto text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-900">
                   {consumer.paidType}
                 </span>
               )}
             </div>
-            <div className="grid grid-cols-2 gap-y-1 gap-x-4 text-xs text-emerald-900">
+            <div className="grid grid-cols-2 gap-y-1.5 gap-x-4 text-xs text-emerald-900">
               {consumer.paidAmount && (
-                <div><span className="text-emerald-700">Amount:</span> <strong>₹{Number(consumer.paidAmount).toLocaleString("en-IN")}</strong></div>
+                <div><span className="text-emerald-700 font-semibold">Amount:</span> <strong>₹{Number(consumer.paidAmount).toLocaleString("en-IN")}</strong></div>
               )}
               {consumer.paidDate && (
-                <div><span className="text-emerald-700">Paid on:</span> <strong>{consumer.paidDate}</strong></div>
+                <div><span className="text-emerald-700 font-semibold">Paid on:</span> <strong>{consumer.paidDate}</strong></div>
               )}
               {consumer.outstandingAfter && Number(consumer.outstandingAfter) > 0 && (
-                <div className="col-span-2"><span className="text-emerald-700">Outstanding after:</span> <strong className="text-red-700">₹{Number(consumer.outstandingAfter).toLocaleString("en-IN")}</strong></div>
+                <div className="col-span-2"><span className="text-emerald-700 font-semibold">Outstanding after:</span> <strong className="text-red-750">₹{Number(consumer.outstandingAfter).toLocaleString("en-IN")}</strong></div>
               )}
               {consumer.paymentSource && (
-                <div className="col-span-2"><span className="text-emerald-700">Source:</span> <strong>{consumer.paymentSource}</strong></div>
+                <div className="col-span-2"><span className="text-emerald-700 font-semibold">Source:</span> <strong>{consumer.paymentSource}</strong></div>
               )}
               {(userRole === "admin" || userRole === "viewer" || userRole === "executive") && (
                 <div className="col-span-2 mt-2">
-                  <Label className="text-[10px] uppercase tracking-wide text-emerald-700">Next Payment Date</Label>
+                  <Label className="text-[10px] uppercase tracking-wide text-emerald-700 font-bold">Next Payment Date</Label>
                   <Input
                     type="text"
                     placeholder="DD-MM-YYYY"
                     value={formData.nextPaymentDate || ""}
                     onChange={(e) => setFormData(prev => ({ ...prev, nextPaymentDate: e.target.value }))}
-                    className="h-8 mt-1 bg-white"
+                    className="h-9 mt-1 bg-white rounded-xl border-slate-200 focus-visible:ring-emerald-500"
                     disabled={userRole === "viewer"}
                   />
                 </div>
@@ -524,74 +561,102 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
         </Card>
       )}
 
-      {/* --- 2. UPDATE FORM --- */}
-      <Card className="border shadow-sm">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-lg">Action & Evidence</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-6">
+      {/* --- 2. UPDATE ACTION & EVIDENCE --- */}
+      <Card className="bg-white border-slate-100 shadow-sm rounded-2xl overflow-hidden">
+        <CardContent className="p-5 space-y-6">
             
-            {/* Status Buttons */}
-            <div className="space-y-3">
-              <Label className="text-xs font-bold text-gray-500 uppercase">Set Status</Label>
-              <div className="grid grid-cols-1 gap-3">
-                <div className="flex gap-3">
-                  <Button type="button" variant={formData.disconStatus === "disconnected" ? "default" : "outline"} className={`flex-1 h-12 border-2 ${formData.disconStatus === "disconnected" ? "bg-slate-800 hover:bg-slate-900 text-white border-slate-800" : "border-slate-300 text-slate-700 hover:border-slate-800 hover:bg-slate-50"}`} onClick={() => handleStatusUpdate("disconnected")}> 
-                    <Power className="h-4 w-4 mr-2" /> DISCONNECT
-                  </Button>
-                  <Button type="button" variant={formData.disconStatus === "bill dispute" ? "default" : "outline"} className={`flex-1 h-12 border-2 ${formData.disconStatus === "bill dispute" ? "bg-slate-800 hover:bg-slate-900 text-white border-slate-800" : "border-slate-300 text-slate-700 hover:border-slate-800 hover:bg-slate-50"}`} onClick={() => handleStatusUpdate("bill dispute")}> 
-                    <AlertCircle className="h-4 w-4 mr-2" /> DISPUTE
-                  </Button>
-                </div>
-                <div className="flex gap-3">
-                  <Button type="button" variant={formData.disconStatus === "office team" ? "default" : "outline"} className={`flex-1 h-12 border-2 ${formData.disconStatus === "office team" ? "bg-slate-800 hover:bg-slate-900 text-white border-slate-800" : "border-slate-300 text-slate-700 hover:border-slate-800 hover:bg-slate-50"}`} onClick={() => handleStatusUpdate("office team")}> 
-                    <Clock className="h-4 w-4 mr-2" /> OFFICE TEAM
-                  </Button>
-                  <Button type="button" variant={formData.disconStatus === "agency paid" ? "default" : "outline"} className={`flex-1 h-12 border-2 ${formData.disconStatus === "agency paid" ? "bg-slate-800 hover:bg-slate-900 text-white border-slate-800" : "border-slate-300 text-slate-700 hover:border-slate-800 hover:bg-slate-50"}`} onClick={() => handleStatusUpdate("agency paid")}> 
-                    <Check className="h-4 w-4 mr-2" /> PAID
-                  </Button>
-                </div>
-                <div className="flex gap-3">
-                  <Button type="button" variant={formData.disconStatus === "not found" ? "default" : "outline"} className={`flex-1 h-12 border-2 ${formData.disconStatus === "not found" ? "bg-slate-800 hover:bg-slate-900 text-white border-slate-800" : "border-slate-300 text-slate-700 hover:border-slate-800 hover:bg-slate-50"}`} onClick={() => handleStatusUpdate("not found")}> 
-                    <CircleX className="h-4 w-4 mr-2" /> NOT FOUND
-                  </Button>
-                  {userRole === "admin" && (
-                    <Button type="button" variant={formData.disconStatus === "connected" ? "default" : "outline"} className={`flex-1 h-12 border-2 ${formData.disconStatus === "connected" ? "bg-slate-800 hover:bg-slate-900 text-white border-slate-800" : "border-slate-300 text-slate-700 hover:border-slate-800 hover:bg-slate-50"}`} onClick={() => handleStatusUpdate("connected")}> 
-                      <RotateCcw className="h-4 w-4 mr-2" /> REISSUE
-                    </Button>
-                  )}
-                </div>
+            {/* Status Segmented Control/Selectable Toggle Chips */}
+            <div className="space-y-2">
+              <Label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Set Status</Label>
+              <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
+                <button
+                  type="button"
+                  className={getStatusChipStyle("disconnected", formData.disconStatus === "disconnected")}
+                  onClick={() => handleStatusUpdate("disconnected")}
+                >
+                  <Power className="h-4 w-4 shrink-0" />
+                  <span>DISCONNECT</span>
+                </button>
+
+                <button
+                  type="button"
+                  className={getStatusChipStyle("bill dispute", formData.disconStatus === "bill dispute")}
+                  onClick={() => handleStatusUpdate("bill dispute")}
+                >
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  <span>DISPUTE</span>
+                </button>
+
+                <button
+                  type="button"
+                  className={getStatusChipStyle("office team", formData.disconStatus === "office team")}
+                  onClick={() => handleStatusUpdate("office team")}
+                >
+                  <Clock className="h-4 w-4 shrink-0" />
+                  <span>OFFICE TEAM</span>
+                </button>
+
+                <button
+                  type="button"
+                  className={getStatusChipStyle("agency paid", formData.disconStatus === "agency paid")}
+                  onClick={() => handleStatusUpdate("agency paid")}
+                >
+                  <Check className="h-4 w-4 shrink-0" />
+                  <span>PAID</span>
+                </button>
+
+                <button
+                  type="button"
+                  className={getStatusChipStyle("not found", formData.disconStatus === "not found")}
+                  onClick={() => handleStatusUpdate("not found")}
+                >
+                  <CircleX className="h-4 w-4 shrink-0" />
+                  <span>NOT FOUND</span>
+                </button>
+
+                {userRole === "admin" && (
+                  <button
+                    type="button"
+                    className={getStatusChipStyle("connected", formData.disconStatus === "connected")}
+                    onClick={() => handleStatusUpdate("connected")}
+                  >
+                    <RotateCcw className="h-4 w-4 shrink-0" />
+                    <span>REISSUE</span>
+                  </button>
+                )}
               </div>
-              <div className="bg-gray-50 p-2 rounded text-center text-xs text-gray-500">
-                Current: <span className="font-bold text-gray-900 uppercase">{formData.disconStatus}</span>
-                {formData.disconDate && <span> ({formData.disconDate})</span>}
-              </div>
+              
+              {formData.disconDate && (
+                <div className="text-[10px] text-slate-400 font-bold text-right pt-1 pr-1">
+                  Status updated on: <span className="text-slate-600 font-semibold">{formData.disconDate}</span>
+                </div>
+              )}
             </div>
 
-            {/* Admin: Agency Selection + Urgent Priority */}
+            {/* Admin Options */}
             {userRole === "admin" && (
-              <div className="space-y-3 pt-2 border-t">
-                <div className="space-y-2">
-                  <Label>Assign Agency</Label>
+              <div className="space-y-4 pt-4 border-t border-slate-100">
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-bold text-slate-500 uppercase tracking-wide">Assign Agency</Label>
                   <select
                     value={formData.agency}
                     onChange={(e) => setFormData({...formData, agency: e.target.value})}
-                    className="w-full p-2 border rounded-md text-sm"
+                    className="w-full p-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-1 focus:ring-blue-600 bg-white"
                   >
                     <option value="">Select Agency</option>
                     {availableAgencies.map(a => <option key={a} value={a}>{a}</option>)}
                   </select>
                 </div>
-                {/* Urgent flag: displayed as a toggle button */}
-                <div className="space-y-1">
-                  <Label className="text-xs font-bold text-gray-500 uppercase">Priority</Label>
+                {/* Urgent flag */}
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-bold text-slate-500 uppercase tracking-wide">Priority</Label>
                   <Button
                     type="button"
                     variant={formData.priority === "urgent" ? "destructive" : "outline"}
-                    className={`w-full h-10 border-2 font-semibold ${
+                    className={`w-full h-11 border rounded-xl font-bold text-xs transition-all duration-200 ${
                       formData.priority === "urgent"
-                        ? "bg-red-600 hover:bg-red-700 text-white border-red-600"
-                        : "border-gray-300 text-gray-600 hover:border-red-400 hover:text-red-600"
+                        ? "bg-red-600 hover:bg-red-700 text-white border-red-650"
+                        : "border-slate-200 text-slate-650 hover:border-red-400 hover:text-red-600"
                     }`}
                     onClick={() =>
                       setFormData(prev => ({
@@ -606,14 +671,14 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
               </div>
             )}
 
-            {/* Image Upload with Live Camera */}
-            <div className="space-y-3 pt-2 border-t">
-                <Label className="text-xs font-bold text-gray-500 uppercase">
-                  Evidence (Auto-Watermarked) {userRole !== "admin" && formData.disconStatus !== "agency paid" && <span className="text-red-500">*</span>}
-                  {userRole !== "admin" && formData.disconStatus === "agency paid" && <span className="text-gray-400 normal-case ml-1">(optional)</span>}
+            {/* Image Evidence */}
+            <div className="space-y-3 pt-4 border-t border-slate-100">
+                <Label className="text-xs font-bold text-slate-500 uppercase tracking-wide block">
+                  Evidence (Auto-Watermarked) {userRole !== "admin" && formData.disconStatus !== "agency paid" && <span className="text-red-500 font-bold">*</span>}
+                  {userRole !== "admin" && formData.disconStatus === "agency paid" && <span className="text-slate-400 normal-case ml-1 font-semibold">(optional)</span>}
                 </Label>
                 
-                {/* Hidden File Input for Gallery */}
+                {/* Hidden File Input */}
                 <input 
                     ref={fileInputRef}
                     type="file" 
@@ -630,28 +695,30 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
                         <Button 
                             type="button" 
                             variant="outline"
-                            className="h-12 border-2 border-slate-300 text-slate-700 hover:border-slate-800 hover:bg-slate-50"
+                            className="h-11 rounded-xl border border-slate-200 text-slate-650 hover:text-slate-900 hover:border-slate-400 hover:bg-slate-50/50 flex items-center justify-center gap-2 font-bold text-xs transition-all duration-200"
                             onClick={startCamera}
                             disabled={uploading}
                         >
-                            <Camera className="h-5 w-5 mr-2" /> Camera (Live)
+                            <Camera className="h-4.5 w-4.5 text-slate-505" />
+                            <span>Camera (Live)</span>
                         </Button>
                         <Button 
                             type="button" 
                             variant="outline"
-                            className="h-12 border-2 border-slate-300 text-slate-700 hover:border-slate-800 hover:bg-slate-50"
+                            className="h-11 rounded-xl border border-slate-200 text-slate-650 hover:text-slate-900 hover:border-slate-400 hover:bg-slate-50/50 flex items-center justify-center gap-2 font-bold text-xs transition-all duration-200"
                             onClick={() => {
                                 if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
                                 fileInputRef.current?.click()
                             }}
                             disabled={uploading}
                         >
-                            <Upload className="h-5 w-5 mr-2" /> Gallery
+                            <Upload className="h-4.5 w-4.5 text-slate-505" />
+                            <span>Gallery</span>
                         </Button>
                     </div>
                 ) : (
-                    <div className="space-y-3 bg-black p-2 rounded-lg">
-                        <div className="relative w-full h-64 bg-black rounded overflow-hidden">
+                    <div className="space-y-3 bg-black p-2 rounded-2xl overflow-hidden">
+                        <div className="relative w-full h-64 bg-black rounded-xl overflow-hidden">
                             <video 
                                 ref={videoRef} 
                                 autoPlay 
@@ -660,10 +727,10 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
                             />
                         </div>
                         <div className="flex gap-3">
-                            <Button className="flex-1 bg-white text-black hover:bg-gray-200" onClick={capturePhoto}>
+                            <Button className="flex-1 bg-white text-black hover:bg-gray-200 rounded-xl text-xs font-bold h-10" onClick={capturePhoto}>
                                 Capture Photo
                             </Button>
-                            <Button variant="destructive" onClick={stopCamera}>
+                            <Button variant="destructive" className="rounded-xl text-xs font-bold h-10" onClick={stopCamera}>
                                 Cancel
                             </Button>
                         </div>
@@ -672,7 +739,7 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
 
                 {/* Preview & Status */}
                 {(previewUrl || formData.imageUrl) && !cameraActive && (
-                    <div className="relative mt-2 rounded-lg overflow-hidden border border-gray-200">
+                    <div className="relative mt-2 rounded-2xl overflow-hidden border border-slate-200 shadow-sm">
                         <img 
                             src={previewUrl || formData.imageUrl} 
                             alt="Evidence" 
@@ -680,73 +747,81 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
                         />
                         {uploading && (
                             <div className="absolute inset-0 flex items-center justify-center bg-black/10">
-                                <div className="bg-white/90 px-4 py-2 rounded-full flex items-center shadow-sm">
+                                <div className="bg-white/95 px-4 py-2 rounded-full flex items-center shadow-md">
                                     <Loader2 className="h-4 w-4 mr-2 animate-spin text-blue-600" />
-                                    <span className="text-xs font-medium text-blue-600">Processing...</span>
+                                    <span className="text-xs font-bold text-blue-600">Processing image...</span>
                                 </div>
                             </div>
                         )}
                         {!uploading && formData.imageUrl && (
-                            <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-xs p-2 text-center">
-                                Uploaded Successfully
+                            <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-[10px] font-bold py-2 text-center uppercase tracking-wider">
+                                Image Linked Successfully
                             </div>
                         )}
                     </div>
                 )}
             </div>
-
-            {/* Notes & Reading */}
-            <div className="space-y-4 pt-2 border-t">
-                <div className="space-y-2">
-                    <Label>Meter Reading {userRole !== "admin" && (formData.disconStatus === "disconnected" || formData.disconStatus === "bill dispute") && <span className="text-red-500">*</span>}</Label>
-                    <Input 
-                        placeholder="Enter reading..." 
-                        value={formData.reading} 
-                        onChange={e => setFormData({...formData, reading: e.target.value})}
-                    />
-                </div>
-                <div className="space-y-2">
-                    <Label>Remarks {userRole !== "admin" && (formData.disconStatus === "bill dispute" || formData.disconStatus === "office team") && <span className="text-red-500">*</span>}</Label>
-                    <Textarea 
-                        placeholder="Any additional notes..." 
-                        value={formData.notes} 
-                        onChange={e => setFormData({...formData, notes: e.target.value})}
-                    />
-                </div>
-            </div>
-
         </CardContent>
       </Card>
 
-      {/* --- 3. LOCATION INFO --- */}
+      {/* --- 3. INPUT FIELDS CARD --- */}
+      <Card className="bg-white border-slate-100 shadow-sm rounded-2xl overflow-hidden">
+        <CardContent className="p-5 space-y-4">
+            <div className="space-y-1.5">
+                <Label className="text-xs font-bold text-slate-500 uppercase tracking-wide">
+                  Meter Reading {userRole !== "admin" && (formData.disconStatus === "disconnected" || formData.disconStatus === "bill dispute") && <span className="text-red-500 font-bold">*</span>}
+                </Label>
+                <Input 
+                    placeholder="Enter reading..." 
+                    value={formData.reading} 
+                    onChange={e => setFormData({...formData, reading: e.target.value})}
+                    className="h-10 rounded-xl border-slate-200 focus-visible:ring-blue-600 text-sm font-semibold"
+                />
+            </div>
+            <div className="space-y-1.5">
+                <Label className="text-xs font-bold text-slate-500 uppercase tracking-wide">
+                  Remarks {userRole !== "admin" && (formData.disconStatus === "bill dispute" || formData.disconStatus === "office team") && <span className="text-red-500 font-bold">*</span>}
+                </Label>
+                <Textarea 
+                    placeholder="Any additional notes..." 
+                    value={formData.notes} 
+                    onChange={e => setFormData({...formData, notes: e.target.value})}
+                    className="min-h-24 rounded-xl border-slate-200 focus-visible:ring-blue-600 text-sm font-medium"
+                />
+            </div>
+        </CardContent>
+      </Card>
+
+      {/* --- 4. LOCATION INFO --- */}
       {consumer.latitude && consumer.longitude && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg flex items-center">
-              <MapPin className="h-4 w-4 mr-2" />
+        <Card className="bg-white border-slate-100 shadow-sm rounded-2xl overflow-hidden">
+          <CardHeader className="pb-2 p-5 border-b border-slate-50">
+            <CardTitle className="text-sm font-bold flex items-center text-slate-800">
+              <MapPin className="h-4 w-4 mr-1.5 text-blue-600" />
               Location Details
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span className="text-gray-600">GIS Pole:</span>
-                <span className="font-medium">{consumer.gisPole || "N/A"}</span>
+          <CardContent className="p-5 space-y-4">
+            <div className="space-y-3 text-xs">
+              <div className="flex justify-between items-center py-1 border-b border-slate-50">
+                <span className="text-slate-400 font-bold uppercase tracking-wider text-[9px]">GIS Pole Reference</span>
+                <span className="font-semibold text-slate-850 text-sm">{consumer.gisPole || "N/A"}</span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Coordinates:</span>
-                <span className="font-mono text-xs">{consumer.latitude}, {consumer.longitude}</span>
+              <div className="flex justify-between items-center py-1">
+                <span className="text-slate-400 font-bold uppercase tracking-wider text-[9px]">GPS Coordinates</span>
+                <span className="font-mono text-slate-800 font-semibold">{consumer.latitude}, {consumer.longitude}</span>
               </div>
-              <Button
-                className="w-full mt-2"
-                onClick={() => {
-                  const url = `https://www.google.com/maps?q=${consumer.latitude},${consumer.longitude}`
-                  window.open(url, "_blank")
-                }}
-              >
-                Open in Maps
-              </Button>
             </div>
+            <Button
+              className="w-full h-11 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-sm transition-all duration-200"
+              onClick={() => {
+                const url = `https://www.google.com/maps?q=${consumer.latitude},${consumer.longitude}`
+                window.open(url, "_blank")
+              }}
+            >
+              <MapPin className="h-4 w-4" />
+              <span>Open in Google Maps</span>
+            </Button>
           </CardContent>
         </Card>
       )}
