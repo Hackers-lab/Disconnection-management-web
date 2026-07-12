@@ -105,6 +105,8 @@ export function MeterList({ userRole, userAgencies, username, agencies }: Props)
   const [prefill, setPrefill]                         = useState<any>(null)
   const [replacements, setReplacements]               = useState<MeterReplacement[]>([])
   const [loadingReplacements, setLoadingReplacements] = useState(false)
+  // NSC quotation lookup — keyed by receiveNo → status
+  const [nscStatusMap, setNscStatusMap]               = useState<Record<string, string>>({})
   const PAGE = 20
 
   // ── Load data ──────────────────────────────────────────────────────────────
@@ -154,6 +156,18 @@ export function MeterList({ userRole, userAgencies, username, agencies }: Props)
       if (!silent) toast({ title: "Failed to load meter data", variant: "destructive" })
     }
   }
+
+  // Load NSC data once to build receiveNo → status map for quotation badges
+  useEffect(() => {
+    fetch("/api/nsc")
+      .then(r => r.ok ? r.json() : [])
+      .then((data: { receiveNo: string; status: string }[]) => {
+        const map: Record<string, string> = {}
+        data.forEach(a => { if (a.receiveNo) map[a.receiveNo] = a.status })
+        setNscStatusMap(map)
+      })
+      .catch(() => {})
+  }, [])
 
   const loadReplacements = async () => {
     setLoadingReplacements(true)
@@ -494,7 +508,16 @@ export function MeterList({ userRole, userAgencies, username, agencies }: Props)
                     <p className="text-xs text-gray-600 mt-0.5">
                       {issue.consumerName && <span className="font-medium">{issue.consumerName} </span>}
                       {issue.consumerId && <span className="font-mono">({issue.consumerId})</span>}
-                      {issue.nscReceiveNo && <span className="font-mono text-green-700">NSC: {issue.nscReceiveNo}</span>}
+                      {issue.nscReceiveNo && (
+                        <>
+                          <span className="font-mono text-green-700">NSC: {issue.nscReceiveNo}</span>
+                          {nscStatusMap[issue.nscReceiveNo] === "quotation_issued" && (
+                            <span className="ml-1.5 inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 border border-green-200">
+                              ✓ Quotation
+                            </span>
+                          )}
+                        </>
+                      )}
                     </p>
                     {(issue.address || issue.mobile) && (
                       <div className="mt-1 bg-blue-50 border border-blue-100 rounded-lg px-2.5 py-1.5 space-y-0.5">
@@ -527,7 +550,7 @@ export function MeterList({ userRole, userAgencies, username, agencies }: Props)
                     {/* Admin: return to stock + print */}
                     {isAdmin && (
                       <>
-                        <Button size="sm" variant="outline" className="flex-1 h-9 text-orange-700 border-orange-200 text-xs font-semibold rounded-lg shadow-sm transition-colors"
+                        <Button size="sm" className="flex-1 h-9 bg-slate-950 hover:bg-slate-900 text-white text-xs font-semibold rounded-lg shadow-sm transition-colors"
                           onClick={() => handleReturn(issue)}>
                           <RotateCcw className="h-3 w-3 mr-1" /> Return
                         </Button>
@@ -626,7 +649,7 @@ export function MeterList({ userRole, userAgencies, username, agencies }: Props)
                     {rep.remarks && <p className="text-xs text-gray-500 italic mt-1">Remarks: "{rep.remarks}"</p>}
                   </div>
                   <div className="flex flex-col items-end gap-2 shrink-0">
-                    <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white mt-2"
+                    <Button size="sm" className="bg-slate-950 hover:bg-slate-900 text-white mt-2"
                       onClick={() => {
                         setPrefill({
                           replacementId: rep.replacementId,
@@ -741,7 +764,7 @@ export function MeterList({ userRole, userAgencies, username, agencies }: Props)
                 <Button variant="outline" className="flex-1" onClick={() => { setShowFinalizeModal(false); setFinalizeRef(""); setFinalizeInstNo("") }} disabled={finalizing}>
                   Cancel
                 </Button>
-                <Button className="flex-[2] bg-teal-600 hover:bg-teal-700 text-white" onClick={handleFinalize} disabled={finalizing || (!isNSCOnly && !finalizeRef.trim()) || targets.length === 0}>
+                <Button className="flex-[2] bg-slate-950 hover:bg-slate-900 text-white" onClick={handleFinalize} disabled={finalizing || (!isNSCOnly && !finalizeRef.trim()) || targets.length === 0}>
                   {finalizing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <ClipboardCheck className="h-4 w-4 mr-2" />}
                   {finalizing ? "Finalizing..." : isNSCOnly ? "Confirm & Finalize" : `Confirm & Finalize ${targets.length}`}
                 </Button>
@@ -1114,7 +1137,7 @@ function AddStockForm({ onSave, onCancel }: { onSave: () => void; onCancel: () =
       {mode !== "excel" && (
         <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t z-50 flex gap-3 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)]">
           <Button variant="outline" className="flex-1 h-12" onClick={onCancel}>Cancel</Button>
-          <Button className="flex-[2] h-12 bg-blue-600 hover:bg-blue-700 text-white" onClick={handleSubmit} disabled={submitting}>
+          <Button className="flex-[2] h-12 bg-slate-950 hover:bg-slate-900 text-white" onClick={handleSubmit} disabled={submitting}>
             {submitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
             {submitting ? "Adding..." : "Add to Stock"}
           </Button>

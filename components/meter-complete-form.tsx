@@ -263,7 +263,7 @@ export function MeterCompleteForm({ issue, onSave, onCancel }: Props) {
 
       <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t z-50 flex gap-3 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)]">
         <Button variant="outline" className="flex-1 h-12" onClick={onCancel}>Cancel</Button>
-        <Button className="flex-[2] h-12 bg-green-600 hover:bg-green-700 text-white" onClick={handleSubmit} disabled={submitting || !!uploading}>
+        <Button className="flex-[2] h-12 bg-slate-950 hover:bg-slate-900 text-white" onClick={handleSubmit} disabled={submitting || !!uploading}>
           {submitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
           {submitting ? "Saving..." : "Mark Installation Done"}
         </Button>

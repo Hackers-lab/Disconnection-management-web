@@ -374,7 +374,7 @@ export function DTRPaintingForm({ dtr, username, userRole, onSave, onCancel }: P
         </Button>
         <Button
           type="button"
-          className="flex-[2] h-12 rounded-xl bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-100 font-bold"
+          className="flex-[2] h-12 rounded-xl bg-slate-950 hover:bg-slate-900 text-white shadow-lg font-bold"
           onClick={handleSubmit}
           disabled={submitting || uploading}
         >

@@ -506,7 +506,7 @@ export function DTRPaintingList({ userRole, userAgencies = [], username, agencie
                   {isAdmin || !isPainted ? (
                     <Button 
                       onClick={() => setSelectedDtr(r)} 
-                      className="flex-[1.2] h-9 rounded-xl transition text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white shadow-sm"
+                      className="flex-[1.2] h-9 rounded-xl transition text-xs font-semibold bg-slate-950 hover:bg-slate-900 text-white shadow-sm"
                     >
                       Update Painting
                     </Button>

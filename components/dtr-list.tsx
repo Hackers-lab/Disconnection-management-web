@@ -701,7 +701,7 @@ export function DTRList({ userRole, userAgencies = [], username, agencies = [], 
                       className={`flex-[1.2] h-9 rounded-xl transition text-xs font-semibold ${
                         isVerified 
                           ? "bg-slate-100 hover:bg-slate-200 text-slate-700" 
-                          : "bg-blue-600 hover:bg-blue-700 text-white shadow-sm"
+                          : "bg-slate-950 hover:bg-slate-900 text-white shadow-sm"
                       }`}
                     >
                       {userRole === "painter" ? "Register Painting" : isVerified ? "Re-Inspect" : "Inspect DTR"}
@@ -741,7 +741,7 @@ export function DTRList({ userRole, userAgencies = [], username, agencies = [], 
                     onClick={() => setCurrentPage(p)}
                     className={`h-10 w-10 rounded-xl ${
                       currentPage === p 
-                        ? "bg-blue-600 hover:bg-blue-700 text-white" 
+                        ? "bg-slate-950 hover:bg-slate-900 text-white" 
                         : "text-gray-650"
                     }`}
                   >

@@ -1258,7 +1258,7 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
                 </Button>
 
                 <Button
-                  className="w-full mt-2 bg-blue-600 hover:bg-blue-700 text-white"
+                  className="w-full mt-2 bg-slate-950 hover:bg-slate-900 text-white"
                   onClick={() => setIsFilterOpen(false)}
                 >
                   OK
@@ -1572,7 +1572,7 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
                                 setSelectedConsumer(consumer)
                               }}
                               size="sm"
-                              className="h-8 bg-blue-600 hover:bg-blue-700 text-white"
+                              className="h-8 bg-slate-950 hover:bg-slate-900 text-white"
                               disabled={roleBlocked}
                               title={reconnBlocked ? "Reconnection pending >30h" : undefined}
                             >

@@ -23,14 +23,15 @@ export async function POST(request: NextRequest) {
     }
 
     await processApplication({
-      receiveNo:     body.receiveNo,
-      adminDecision: body.adminDecision || "",
-      adminRemarks:  body.adminRemarks  || "",
-      finalAction:   body.finalAction,
-      memoNo:        body.memoNo        || "",
-      applicationNo: body.applicationNo || "",
-      newAgency:     body.newAgency     || "",
-      finalizedBy:   `${session.role}:${session.username}`,
+      receiveNo:          body.receiveNo,
+      adminDecision:      body.adminDecision      || "",
+      adminRemarks:       body.adminRemarks       || "",
+      finalAction:        body.finalAction,
+      memoNo:             body.memoNo             || "",
+      applicationNo:      body.applicationNo      || "",
+      newAgency:          body.newAgency          || "",
+      existingConsumerId: body.existingConsumerId ?? undefined,
+      finalizedBy:        `${session.role}:${session.username}`,
     })
     return NextResponse.json({ success: true })
   } catch (e: any) {

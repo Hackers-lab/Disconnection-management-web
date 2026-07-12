@@ -32,8 +32,8 @@ const NSC_HEADERS = [
   "Memo No", "Application No", "Finalized At", "Finalized By",
   // Meter & connection milestones
   "Meter Issued At", "Connection Effected At", "Meter Serial No",
-  // Added columns (AS–AU) — safe to append, never break existing data
-  "Office Ref No", "Project ID", "Is Legacy",
+  // Added columns (AS–AV) — safe to append, never break existing data
+  "Office Ref No", "Project ID", "Is Legacy", "Existing Consumer ID",
 ]
 
 // ─── Shared cross-instance cache (Next.js Data Cache) ─────────────────────────
@@ -114,6 +114,7 @@ function parseRow(r: string[]): NSCApplication {
     officeRefNo:          r[44] || "",
     projectId:            r[45] || "",
     isLegacy:             r[46] || "",
+    existingConsumerId:   r[47] || "",
   }
 }
 
@@ -121,7 +122,7 @@ function parseRow(r: string[]): NSCApplication {
 async function _fetchApplicationsRaw(): Promise<NSCApplication[]> {
   const id = getSpreadsheetId()
   await ensureTab(id)
-  const res = await sheets.spreadsheets.values.get({ spreadsheetId: id, range: `${NSC_TAB}!A:AU` })
+  const res = await sheets.spreadsheets.values.get({ spreadsheetId: id, range: `${NSC_TAB}!A:AV` })
   return (res.data.values || []).slice(1).filter(r => r[0]).map(r => parseRow(r.map(String)))
 }
 
@@ -132,17 +133,29 @@ export const fetchApplications = unstable_cache(
   { revalidate: NSC_REVALIDATE_S, tags: [NSC_TAG] },
 )
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-async function nextReceiveNo(id: string): Promise<string> {
+// ─── Helpers ─────────────────────────────────────────────────────────────────────────────────
+// nextReceiveNo now embeds phase: NSC/26-27/1P/0001 or NSC/26-27/3P/0001
+// Separate counters per phase per FY prevent gaps when one type is common.
+async function nextReceiveNo(id: string, phase: string): Promise<string> {
   const all = await _fetchApplicationsRaw()
-  const fy = currentFY()
-  const prefix = `NSC/${fy}/`
-  const nums = all
-    .filter(a => a.receiveNo.startsWith(prefix))
-    .map(a => parseInt(a.receiveNo.slice(prefix.length), 10))
+  const fy  = currentFY()
+  // Support legacy format (no phase segment) AND new format
+  const phaseSegment = phase === "3P" ? "3P" : "1P"
+  const newPrefix    = `NSC/${fy}/${phaseSegment}/`
+  const legacyPrefix = `NSC/${fy}/`
+  // Count only rows matching the same phase prefix (new format)
+  const newNums = all
+    .filter(a => a.receiveNo.startsWith(newPrefix))
+    .map(a => parseInt(a.receiveNo.slice(newPrefix.length), 10))
     .filter(n => !isNaN(n))
-  const max = nums.length ? Math.max(...nums) : 0
-  return `${prefix}${String(max + 1).padStart(4, "0")}`
+  // Also check legacy rows that don't have phase segment but same phase value
+  const legacyNums = all
+    .filter(a => a.receiveNo.startsWith(legacyPrefix) && !a.receiveNo.slice(legacyPrefix.length).includes("/") && a.phase === phase)
+    .map(a => parseInt(a.receiveNo.slice(legacyPrefix.length), 10))
+    .filter(n => !isNaN(n))
+  const allNums = [...newNums, ...legacyNums]
+  const max = allNums.length ? Math.max(...allNums) : 0
+  return `${newPrefix}${String(max + 1).padStart(4, "0")}`
 }
 
 
@@ -160,9 +173,9 @@ export async function createApplication(req: {
 }): Promise<string> {
   const id = getSpreadsheetId()
   await ensureTab(id)
-  const receiveNo = await nextReceiveNo(id)
+  const receiveNo = await nextReceiveNo(id, req.phase)
   const now = nowTs()
-  const row = new Array(47).fill("")
+  const row = new Array(48).fill("")
   row[0]  = receiveNo
   row[1]  = now.split(" ")[0]
   row[2]  = req.applicantName
@@ -177,7 +190,7 @@ export async function createApplication(req: {
   row[11] = now
   row[44] = req.officeRefNo || ""
   await sheets.spreadsheets.values.append({
-    spreadsheetId: id, range: `${NSC_TAB}!A:AU`,
+    spreadsheetId: id, range: `${NSC_TAB}!A:AV`,
     valueInputOption: "RAW",
     requestBody: { values: [row] },
   })
@@ -253,14 +266,15 @@ export async function submitInspection(req: {
 
 // ─── Process application (admin/exec) ─────────────────────────────────────────
 export async function processApplication(req: {
-  receiveNo:     string
-  adminDecision: string
-  adminRemarks:  string
-  finalAction:   string   // "quotation" | "dispute_letter" | "reassign"
-  memoNo?:       string
-  applicationNo?: string
-  newAgency?:    string   // only for reassign
-  finalizedBy:   string
+  receiveNo:          string
+  adminDecision:      string
+  adminRemarks:       string
+  finalAction:        string   // "quotation" | "dispute_letter" | "reassign"
+  memoNo?:            string
+  applicationNo?:     string
+  newAgency?:         string   // only for reassign
+  existingConsumerId?: string
+  finalizedBy:        string
 }): Promise<void> {
   const id = getSpreadsheetId()
   await ensureTab(id)
@@ -282,9 +296,11 @@ export async function processApplication(req: {
     { range: `${NSC_TAB}!AN${row}`, values: [[now]] },
     { range: `${NSC_TAB}!AO${row}`, values: [[req.finalizedBy]] },
   ]
-  if (req.memoNo)        updates.push({ range: `${NSC_TAB}!AL${row}`, values: [[req.memoNo]] })
-  if (req.applicationNo) updates.push({ range: `${NSC_TAB}!AM${row}`, values: [[req.applicationNo]] })
-  if (req.newAgency)     updates.push({ range: `${NSC_TAB}!I${row}`,  values: [[req.newAgency]] })
+  if (req.memoNo)            updates.push({ range: `${NSC_TAB}!AL${row}`, values: [[req.memoNo]] })
+  if (req.applicationNo)     updates.push({ range: `${NSC_TAB}!AM${row}`, values: [[req.applicationNo]] })
+  if (req.newAgency)         updates.push({ range: `${NSC_TAB}!I${row}`,  values: [[req.newAgency]] })
+  if (req.existingConsumerId !== undefined)
+    updates.push({ range: `${NSC_TAB}!AV${row}`, values: [[req.existingConsumerId]] })
 
   await sheets.spreadsheets.values.batchUpdate({
     spreadsheetId: id,
@@ -421,7 +437,7 @@ export async function importLegacyApplications(rows: LegacyImportRow[]): Promise
   const values = rows.map(r => {
     counter++
     const receiveNo = `${prefix}${String(counter).padStart(4, "0")}`
-    const row = new Array(47).fill("")
+    const row = new Array(48).fill("")
     row[0]  = receiveNo
     row[1]  = r.receivedDate
     row[2]  = r.applicantName
@@ -443,7 +459,7 @@ export async function importLegacyApplications(rows: LegacyImportRow[]): Promise
   const BATCH = 200
   for (let i = 0; i < values.length; i += BATCH) {
     await sheets.spreadsheets.values.append({
-      spreadsheetId: id, range: `${NSC_TAB}!A:AU`,
+      spreadsheetId: id, range: `${NSC_TAB}!A:AV`,
       valueInputOption: "RAW",
       requestBody: { values: values.slice(i, i + BATCH) },
     })

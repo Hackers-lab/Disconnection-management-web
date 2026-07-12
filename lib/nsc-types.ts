@@ -19,7 +19,7 @@ export const NSC_PHASES: { value: NSCPhase; label: string }[] = [
 
 export const NSC_STATUS_LABELS: Record<string, string> = {
   pending:             "Pending Inspection",
-  inspected:           "Inspected",
+  inspected:           "Inspection Completed",
   quotation_issued:    "Quotation Issued",
   dispute_issued:      "Dispute Issued",
   project_required:    "Erection Pending",
@@ -100,6 +100,8 @@ export interface NSCApplication {
   projectId:            string
   // Legacy import flag
   isLegacy:             string   // "true" | ""
+  // Existing consumer ID — entered by admin at processing stage (searchable)
+  existingConsumerId:   string
 }
 
 // ── NSC Project ───────────────────────────────────────────────────────────────

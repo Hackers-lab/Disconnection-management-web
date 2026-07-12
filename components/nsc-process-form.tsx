@@ -24,11 +24,12 @@ export function NscProcessForm({ app, agencies, onSave, onCancel }: Props) {
   const [adminDecision, setAdminDecision] = useState<"accepted" | "rejected" | "">(
     (app.adminDecision as any) || app.agencyDecision as any || ""
   )
-  const [adminRemarks,  setAdminRemarks]  = useState(app.adminRemarks || "")
-  const [finalAction,   setFinalAction]   = useState<"quotation" | "dispute_letter" | "reassign" | "">("")
-  const [memoNo,        setMemoNo]        = useState(app.memoNo        || "")
-  const [applicationNo, setApplicationNo] = useState(app.applicationNo || "")
-  const [newAgency,     setNewAgency]     = useState(app.agency        || "")
+  const [adminRemarks,        setAdminRemarks]        = useState(app.adminRemarks        || "")
+  const [finalAction,         setFinalAction]         = useState<"quotation" | "dispute_letter" | "reassign" | "">("")
+  const [memoNo,              setMemoNo]              = useState(app.memoNo              || "")
+  const [applicationNo,       setApplicationNo]       = useState(app.applicationNo       || "")
+  const [newAgency,           setNewAgency]           = useState(app.agency              || "")
+  const [existingConsumerId,  setExistingConsumerId]  = useState(app.existingConsumerId  || "")
   const [submitting,    setSubmitting]    = useState(false)
   const [agencyList,    setAgencyList]    = useState<string[]>(agencies)
 
@@ -64,13 +65,14 @@ export function NscProcessForm({ app, agencies, onSave, onCancel }: Props) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          receiveNo:     app.receiveNo,
-          adminDecision: finalAction !== "reassign" ? adminDecision : "",
-          adminRemarks:  adminRemarks.trim(),
+          receiveNo:          app.receiveNo,
+          adminDecision:      finalAction !== "reassign" ? adminDecision : "",
+          adminRemarks:       adminRemarks.trim(),
           finalAction,
-          memoNo:        memoNo.trim(),
-          applicationNo: applicationNo.trim(),
-          newAgency:     finalAction === "reassign" ? newAgency : "",
+          memoNo:             memoNo.trim(),
+          applicationNo:      applicationNo.trim(),
+          newAgency:          finalAction === "reassign" ? newAgency : "",
+          existingConsumerId: existingConsumerId.trim() || undefined,
         }),
       })
       if (!res.ok) throw new Error((await res.json()).error || "Failed")
@@ -185,6 +187,17 @@ export function NscProcessForm({ app, agencies, onSave, onCancel }: Props) {
             <Label className="text-xs">Remarks {isDecisionChanged && "*"}</Label>
             <Textarea value={adminRemarks} onChange={e => setAdminRemarks(e.target.value)} placeholder="Admin notes / override reason..." rows={2} />
           </div>
+          {/* Existing Consumer ID — relevant when applicant already has a connection */}
+          <div className="space-y-1">
+            <Label className="text-xs">Existing Consumer ID <span className="text-gray-400 font-normal">(optional)</span></Label>
+            <Input
+              value={existingConsumerId}
+              onChange={e => setExistingConsumerId(e.target.value)}
+              placeholder="e.g. 1234567890 — if applicant has existing connection"
+              className="font-mono"
+            />
+            <p className="text-xs text-gray-400">Stored separately from remarks for future search. Used when a dispute is based on an existing consumer relationship.</p>
+          </div>
         </CardContent>
       </Card>
 
@@ -242,7 +255,7 @@ export function NscProcessForm({ app, agencies, onSave, onCancel }: Props) {
 
       <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t z-50 flex gap-3 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)]">
         <Button variant="outline" className="flex-1 h-12" onClick={onCancel}>Cancel</Button>
-        <Button className="flex-[2] h-12 bg-indigo-600 hover:bg-indigo-700 text-white" onClick={handleSubmit} disabled={submitting || !finalAction}>
+        <Button className="flex-[2] h-12 bg-slate-950 hover:bg-slate-900 text-white" onClick={handleSubmit} disabled={submitting || !finalAction}>
           {submitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
           {submitting ? "Processing..." : "Confirm & Process"}
         </Button>

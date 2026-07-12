@@ -7,7 +7,8 @@ import { Input } from "@/components/ui/input"
 import { Card, CardContent } from "@/components/ui/card"
 import {
   Search, X, Plus, RefreshCw, Check, ChevronLeft, ChevronRight,
-  FileDown, Phone, MapPin, ClipboardList, Clock, FolderOpen, FileInput, Pencil, MoreVertical, Loader2,
+  FileDown, Phone, MapPin, ClipboardList, Clock, FolderOpen,
+  FileInput, Pencil, Loader2, SlidersHorizontal, Eye,
 } from "lucide-react"
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
@@ -15,6 +16,9 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select"
+import {
+  Popover, PopoverContent, PopoverTrigger,
+} from "@/components/ui/popover"
 import { useToast } from "@/components/ui/use-toast"
 import { getFromCache, saveToCache } from "@/lib/indexed-db"
 import { NSC_STATUS_COLORS, NSC_STATUS_LABELS, NSC_CLASSES } from "@/lib/nsc-types"
@@ -22,6 +26,7 @@ import type { NSCApplication } from "@/lib/nsc-types"
 import { NscApplicationForm } from "@/components/nsc-application-form"
 import { NscInspectForm } from "@/components/nsc-inspect-form"
 import { NscProcessForm } from "@/components/nsc-process-form"
+import { NscViewDialog } from "@/components/nsc-view-dialog"
 // xlsx loaded dynamically to reduce bundle size
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import {
@@ -34,8 +39,8 @@ import type { NSCProject } from "@/lib/nsc-types"
 const CACHE_KEY = "nsc_data_cache"
 const PAGE = 20
 
-type Tab  = "all" | "pending" | "inspected" | "completed" | "projects" | "reports"
-type View = "list" | "create" | "inspect" | "process"
+type Tab      = "all" | "pending" | "inspected" | "completed" | "projects" | "reports"
+type View     = "list" | "create" | "inspect" | "process"
 type SyncState = "idle" | "loading" | "updated"
 
 const CLASS_LABELS: Record<string, string> = {
@@ -44,6 +49,34 @@ const CLASS_LABELS: Record<string, string> = {
   stw:        "STW",
   industrial: "LT Industrial",
 }
+
+// Agency pill color by hash
+const AGENCY_COLORS = [
+  "bg-violet-100 text-violet-800",
+  "bg-cyan-100 text-cyan-800",
+  "bg-emerald-100 text-emerald-800",
+  "bg-rose-100 text-rose-800",
+  "bg-amber-100 text-amber-800",
+  "bg-indigo-100 text-indigo-800",
+  "bg-teal-100 text-teal-800",
+  "bg-orange-100 text-orange-800",
+]
+function agencyColor(name: string) {
+  let h = 0; for (const c of name) h = (h * 31 + c.charCodeAt(0)) & 0xffff
+  return AGENCY_COLORS[h % AGENCY_COLORS.length]
+}
+
+// Completed = non-pole resolved OR pole fully done
+const COMPLETED_STATUSES = ["quotation_issued", "dispute_issued", "project_done", "connection_effected", "meter_issued"]
+
+interface ActiveFilters {
+  phase:    string   // "" | "1P" | "3P"
+  klass:    string   // "" | appliedClass value
+  pole:     string   // "" | "yes" | "no"
+  dispute:  boolean  // only dispute-flagged applications
+}
+
+const DEFAULT_FILTERS: ActiveFilters = { phase: "", klass: "", pole: "", dispute: false }
 
 interface Props {
   userRole:     string
@@ -64,9 +97,14 @@ export function NscList({ userRole, userAgencies, username, agencies }: Props) {
   const [search, setSearch]     = useState("")
   const [selected, setSelected] = useState<NSCApplication | null>(null)
   const [historyApp, setHistoryApp] = useState<NSCApplication | null>(null)
+  const [viewApp, setViewApp]   = useState<NSCApplication | null>(null)
   const [page, setPage]         = useState(1)
 
-  // Project state (additive)
+  // Filters
+  const [filters, setFilters]   = useState<ActiveFilters>(DEFAULT_FILTERS)
+  const [filterOpen, setFilterOpen] = useState(false)
+
+  // Project state
   const [projects, setProjects]                 = useState<NSCProject[]>([])
   const [projectDialogApp, setProjectDialogApp] = useState<NSCApplication | null>(null)
   const [showLegacyImport, setShowLegacyImport] = useState(false)
@@ -99,12 +137,11 @@ export function NscList({ userRole, userAgencies, username, agencies }: Props) {
 
   useEffect(() => { load() }, [])
 
-  // Load projects (admin + agency)
+  // Load projects
   useEffect(() => {
     fetch("/api/nsc/project").then(r => r.ok ? r.json() : []).then(setProjects).catch(() => {})
   }, [])
 
-  // Build receiveNo → project map
   const projectMap = useMemo(() => {
     const map: Record<string, NSCProject> = {}
     projects.forEach(p => {
@@ -137,16 +174,33 @@ export function NscList({ userRole, userAgencies, username, agencies }: Props) {
   }
 
   // ── Filter ────────────────────────────────────────────────────────────────
+  const activeFilterCount = [
+    filters.phase !== "",
+    filters.klass !== "",
+    filters.pole  !== "",
+    filters.dispute,
+  ].filter(Boolean).length
+
+  const scopedApps = useMemo(() =>
+    isAgency
+      ? apps.filter(a => userAgencies.map(x => x.toUpperCase()).includes(a.agency.toUpperCase()))
+      : apps,
+  [apps, isAgency, userAgencies])
+
   const filtered = useMemo(() => {
-    let data = apps
-    if (tab === "pending")   data = data.filter(a => a.status === "pending")
+    let data = scopedApps
+    if (tab === "pending")   data = data.filter(a => !COMPLETED_STATUSES.includes(a.status))
     if (tab === "inspected") data = data.filter(a => a.status === "inspected")
-    if (tab === "completed") data = data.filter(a => ["quotation_issued", "dispute_issued", "project_required", "project_ongoing", "project_done"].includes(a.status))
+    if (tab === "completed") data = data.filter(a => COMPLETED_STATUSES.includes(a.status))
     if (tab === "projects")  data = data.filter(a => ["project_required", "project_ongoing", "project_done"].includes(a.status))
-    if (isAgency) {
-      const upper = userAgencies.map(a => a.toUpperCase())
-      data = data.filter(a => upper.includes(a.agency.toUpperCase()))
-    }
+
+    // Additional filters
+    if (filters.phase)   data = data.filter(a => a.phase === filters.phase)
+    if (filters.klass)   data = data.filter(a => a.appliedClass === filters.klass)
+    if (filters.pole === "yes") data = data.filter(a => a.poleRequired === "yes")
+    if (filters.pole === "no")  data = data.filter(a => a.poleRequired !== "yes")
+    if (filters.dispute) data = data.filter(a => !!a.dispute)
+
     if (search.trim()) {
       const q = search.toLowerCase()
       data = data.filter(a =>
@@ -156,48 +210,52 @@ export function NscList({ userRole, userAgencies, username, agencies }: Props) {
         a.careOf.toLowerCase().includes(q)                  ||
         a.address.toLowerCase().includes(q)                 ||
         a.mobile.includes(q)                                ||
-        a.agency.toLowerCase().includes(q)
+        a.agency.toLowerCase().includes(q)                  ||
+        (a.existingConsumerId || "").includes(q)
       )
     }
     return data
-  }, [apps, tab, search, isAgency, userAgencies])
+  }, [scopedApps, tab, search, filters])
 
   const totalPages = Math.ceil(filtered.length / PAGE)
   const paginated  = filtered.slice((page - 1) * PAGE, page * PAGE)
-  useEffect(() => setPage(1), [tab, search])
+  useEffect(() => setPage(1), [tab, search, filters])
 
   // ── Tab counts ────────────────────────────────────────────────────────────
-  const scopedApps = isAgency
-    ? apps.filter(a => userAgencies.map(x => x.toUpperCase()).includes(a.agency.toUpperCase()))
-    : apps
-  const pendingCount    = scopedApps.filter(a => a.status === "pending").length
+  const pendingCount    = scopedApps.filter(a => !COMPLETED_STATUSES.includes(a.status)).length
   const inspectedCount  = scopedApps.filter(a => a.status === "inspected").length
+  const completedCount  = scopedApps.filter(a => COMPLETED_STATUSES.includes(a.status)).length
   const projectCount    = scopedApps.filter(a => ["project_required", "project_ongoing", "project_done"].includes(a.status)).length
+
+  // Phase sub-counts for pending — shows how many 1P vs 3P are waiting
+  const pending1P = scopedApps.filter(a => !COMPLETED_STATUSES.includes(a.status) && a.phase === "1P").length
+  const pending3P = scopedApps.filter(a => !COMPLETED_STATUSES.includes(a.status) && a.phase === "3P").length
 
   // ── Export ────────────────────────────────────────────────────────────────
   const exportData = useCallback(async () => {
     if (filtered.length === 0) { toast({ title: "No data to export" }); return }
     const rows = filtered.map(a => ({
-      "Receive No":        a.receiveNo,
-      "Received Date":     a.receivedDate,
-      "Applicant Name":    a.applicantName,
-      "C/O":               a.careOf,
-      "Address":           a.address,
-      "Mobile":            a.mobile,
-      "Applied Class":     CLASS_LABELS[a.appliedClass] || a.appliedClass,
-      "Phase":             a.phase,
-      "Agency":            a.agency,
-      "Status":            NSC_STATUS_LABELS[a.status] || a.status,
-      "Agency Decision":   a.agencyDecision,
-      "Admin Decision":    a.adminDecision,
-      "Final Action":      a.finalAction,
-      "Application No":    a.applicationNo,
-      "Memo No":           a.memoNo,
-      "Load (kW)":         a.load,
-      "DTR Capacity":      a.dtrCapacity,
-      "Pole Required":     a.poleRequired,
-      "Inspected At":      a.inspectedAt,
-      "Finalized At":      a.finalizedAt,
+      "Receive No":          a.receiveNo,
+      "Received Date":       a.receivedDate,
+      "Applicant Name":      a.applicantName,
+      "C/O":                 a.careOf,
+      "Address":             a.address,
+      "Mobile":              a.mobile,
+      "Applied Class":       CLASS_LABELS[a.appliedClass] || a.appliedClass,
+      "Phase":               a.phase,
+      "Agency":              a.agency,
+      "Status":              NSC_STATUS_LABELS[a.status] || a.status,
+      "Agency Decision":     a.agencyDecision,
+      "Admin Decision":      a.adminDecision,
+      "Final Action":        a.finalAction,
+      "Application No":      a.applicationNo,
+      "Memo No":             a.memoNo,
+      "Existing Consumer ID": a.existingConsumerId,
+      "Load (kW)":           a.load,
+      "DTR Capacity":        a.dtrCapacity,
+      "Pole Required":       a.poleRequired,
+      "Inspected At":        a.inspectedAt,
+      "Finalized At":        a.finalizedAt,
     }))
     const XLSX = await import("xlsx")
     const ws = XLSX.utils.json_to_sheet(rows)
@@ -206,17 +264,13 @@ export function NscList({ userRole, userAgencies, username, agencies }: Props) {
     XLSX.writeFile(wb, `nsc-${tab}-${new Date().toISOString().slice(0, 10)}.xlsx`)
   }, [filtered, tab, toast])
 
-  // Listen to actions dispatched from global header
+  // Listen to global header actions
   useEffect(() => {
     const handleAction = (e: Event) => {
-      const customEvent = e as CustomEvent
-      if (customEvent.detail?.action === "export") {
-        exportData()
-      } else if (customEvent.detail?.action === "import-legacy") {
-        setShowLegacyImport(true)
-      } else if (customEvent.detail?.action === "refresh") {
-        load()
-      }
+      const ce = e as CustomEvent
+      if (ce.detail?.action === "export")         exportData()
+      else if (ce.detail?.action === "import-legacy") setShowLegacyImport(true)
+      else if (ce.detail?.action === "refresh")   load()
     }
     window.addEventListener("nsc-action", handleAction)
     return () => window.removeEventListener("nsc-action", handleAction)
@@ -248,6 +302,62 @@ export function NscList({ userRole, userAgencies, username, agencies }: Props) {
     />
   )
 
+  // ── Filter Popover content ─────────────────────────────────────────────────
+  const FilterPanel = () => (
+    <div className="space-y-4 p-1">
+      {/* Phase */}
+      <div>
+        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Phase</p>
+        <div className="flex gap-1.5">
+          {["", "1P", "3P"].map(v => (
+            <button key={v} onClick={() => setFilters(f => ({ ...f, phase: f.phase === v ? "" : v }))}
+              className={`px-3 py-1 text-xs font-semibold rounded-full border transition ${filters.phase === v && v !== "" ? "bg-slate-900 text-white border-slate-900" : "border-gray-200 text-gray-600 hover:border-slate-400"}`}>
+              {v || "All"}
+            </button>
+          ))}
+        </div>
+      </div>
+      {/* Class */}
+      <div>
+        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Applied Class</p>
+        <div className="flex flex-wrap gap-1.5">
+          {[{ value: "", label: "All" }, ...NSC_CLASSES].map(c => (
+            <button key={c.value} onClick={() => setFilters(f => ({ ...f, klass: f.klass === c.value ? "" : c.value }))}
+              className={`px-3 py-1 text-xs font-semibold rounded-full border transition ${filters.klass === c.value && c.value !== "" ? "bg-slate-900 text-white border-slate-900" : "border-gray-200 text-gray-600 hover:border-slate-400"}`}>
+              {c.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      {/* Pole case */}
+      <div>
+        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Case Type</p>
+        <div className="flex gap-1.5">
+          {[{ v: "", l: "All" }, { v: "yes", l: "Pole Case" }, { v: "no", l: "Non-Pole" }].map(({ v, l }) => (
+            <button key={v} onClick={() => setFilters(f => ({ ...f, pole: f.pole === v ? "" : v }))}
+              className={`px-3 py-1 text-xs font-semibold rounded-full border transition ${filters.pole === v && v !== "" ? "bg-slate-900 text-white border-slate-900" : "border-gray-200 text-gray-600 hover:border-slate-400"}`}>
+              {l}
+            </button>
+          ))}
+        </div>
+      </div>
+      {/* Dispute flag */}
+      <div>
+        <button onClick={() => setFilters(f => ({ ...f, dispute: !f.dispute }))}
+          className={`flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-full border transition w-full ${filters.dispute ? "bg-amber-500 text-white border-amber-500" : "border-gray-200 text-gray-600 hover:border-amber-400"}`}>
+          ⚠ Dispute Flagged {filters.dispute && "(Active)"}
+        </button>
+      </div>
+      {/* Clear */}
+      {activeFilterCount > 0 && (
+        <button onClick={() => setFilters(DEFAULT_FILTERS)}
+          className="text-xs text-red-500 hover:text-red-700 w-full text-center py-1">
+          ✕ Clear all filters
+        </button>
+      )}
+    </div>
+  )
+
   // ── Main list ─────────────────────────────────────────────────────────────
   return (
     <div className="space-y-4">
@@ -258,29 +368,74 @@ export function NscList({ userRole, userAgencies, username, agencies }: Props) {
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 h-4 w-4" />
             <Input value={search} onChange={e => setSearch(e.target.value)}
-              placeholder="Search receive no, name, C/O, address, mobile, agency..."
+              placeholder="Search receive no, name, address, mobile, agency, consumer ID..."
               className="pl-10 pr-8 rounded-xl h-9 text-sm" />
             {search && <X className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-red-500 cursor-pointer" onClick={() => setSearch("")} />}
           </div>
 
+          {/* Status tab dropdown */}
           <Select value={tab} onValueChange={(val) => setTab(val as Tab)}>
-            <SelectTrigger className="w-[155px] h-9 rounded-xl shrink-0 text-xs font-semibold bg-gray-50 border-gray-200 hover:bg-gray-100 transition-colors">
-              <SelectValue placeholder="Status: Pending" />
+            <SelectTrigger className="w-[170px] h-9 rounded-xl shrink-0 text-xs font-semibold bg-gray-50 border-gray-200 hover:bg-gray-100 transition-colors">
+              <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="pending" className="text-xs font-medium">⏳ Pending ({pendingCount})</SelectItem>
-              <SelectItem value="inspected" className="text-xs font-medium">🔍 Inspected ({inspectedCount})</SelectItem>
-              <SelectItem value="completed" className="text-xs font-medium">✅ Completed</SelectItem>
-              <SelectItem value="projects" className="text-xs font-medium">📁 Projects ({projectCount})</SelectItem>
+              <SelectItem value="pending"   className="text-xs font-medium">⏳ Pending ({pendingCount})</SelectItem>
+              <SelectItem value="inspected" className="text-xs font-medium">🕐 Inspection Completed ({inspectedCount})</SelectItem>
+              <SelectItem value="completed" className="text-xs font-medium">✅ Completed ({completedCount})</SelectItem>
+              <SelectItem value="projects"  className="text-xs font-medium">📁 Projects ({projectCount})</SelectItem>
               {isAdmin && <SelectItem value="reports" className="text-xs font-medium">📊 Reports</SelectItem>}
-              <SelectItem value="all" className="text-xs font-medium">🗂️ All ({scopedApps.length})</SelectItem>
+              <SelectItem value="all"       className="text-xs font-medium">🗂️ All ({scopedApps.length})</SelectItem>
             </SelectContent>
           </Select>
+
+          {/* Filter button */}
+          <Popover open={filterOpen} onOpenChange={setFilterOpen}>
+            <PopoverTrigger asChild>
+              <button
+                className={`relative h-9 w-9 flex items-center justify-center rounded-xl border transition shrink-0
+                  ${activeFilterCount > 0
+                    ? "bg-slate-900 border-slate-900 text-white"
+                    : "bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100"}`}
+                title="Filters"
+              >
+                <SlidersHorizontal className="h-4 w-4" />
+                {activeFilterCount > 0 && (
+                  <span className="absolute -top-1.5 -right-1.5 h-4 w-4 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center">
+                    {activeFilterCount}
+                  </span>
+                )}
+              </button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-64 p-3">
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-xs font-bold text-gray-800">Filter Applications</p>
+                <button onClick={() => setFilterOpen(false)} className="text-gray-400 hover:text-gray-600">
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+              <FilterPanel />
+            </PopoverContent>
+          </Popover>
         </div>
 
-        <div className="flex justify-between items-center mt-2 text-xs text-gray-500">
+        {/* Status bar */}
+        <div className="flex justify-between items-center text-xs text-gray-500">
           <div className="flex items-center gap-2">
             <span>{filtered.length} records</span>
+            {/* Pending breakdown */}
+            {tab === "pending" && (
+              <span className="flex items-center gap-1">
+                <span className="bg-blue-100 text-blue-700 text-[10px] font-semibold px-1.5 py-0.5 rounded-full">1P: {pending1P}</span>
+                <span className="bg-purple-100 text-purple-700 text-[10px] font-semibold px-1.5 py-0.5 rounded-full">3P: {pending3P}</span>
+              </span>
+            )}
+            {/* Active filter pills */}
+            {filters.phase   && <span className="bg-slate-100 text-slate-700 text-[10px] font-semibold px-1.5 py-0.5 rounded-full">{filters.phase}</span>}
+            {filters.klass   && <span className="bg-slate-100 text-slate-700 text-[10px] font-semibold px-1.5 py-0.5 rounded-full">{CLASS_LABELS[filters.klass]}</span>}
+            {filters.pole === "yes" && <span className="bg-blue-100 text-blue-700 text-[10px] font-semibold px-1.5 py-0.5 rounded-full">Pole</span>}
+            {filters.pole === "no"  && <span className="bg-teal-100 text-teal-700 text-[10px] font-semibold px-1.5 py-0.5 rounded-full">Non-Pole</span>}
+            {filters.dispute && <span className="bg-amber-100 text-amber-700 text-[10px] font-semibold px-1.5 py-0.5 rounded-full">⚠ Dispute</span>}
+
             <button
               onClick={() => load()}
               disabled={syncState === "loading"}
@@ -291,23 +446,13 @@ export function NscList({ userRole, userAgencies, username, agencies }: Props) {
                   ? "border-green-500 bg-green-50 text-green-600"
                   : "border-blue-300 bg-blue-50 text-blue-500 hover:border-blue-500 hover:bg-blue-100 hover:text-blue-700 active:scale-95 cursor-pointer"
               }`}
-              title={syncState === "loading" ? "Loading data..." : "Tap to refresh"}
             >
               {syncState === "loading" ? (
-                <>
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                  <span className="text-[10px] font-medium">Loading...</span>
-                </>
+                <><Loader2 className="h-3 w-3 animate-spin" /><span className="text-[10px] font-medium">Loading...</span></>
               ) : syncState === "updated" ? (
-                <>
-                  <Check className="h-3 w-3" />
-                  <span className="text-[10px] font-medium">Updated</span>
-                </>
+                <><Check className="h-3 w-3" /><span className="text-[10px] font-medium">Updated</span></>
               ) : (
-                <>
-                  <RefreshCw className="h-3 w-3" />
-                  <span className="text-[10px] font-medium">Refresh</span>
-                </>
+                <><RefreshCw className="h-3 w-3" /><span className="text-[10px] font-medium">Refresh</span></>
               )}
             </button>
           </div>
@@ -343,127 +488,173 @@ export function NscList({ userRole, userAgencies, username, agencies }: Props) {
 
       {/* Application cards */}
       {tab !== "reports" && (
-        <div className="space-y-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {paginated.length === 0 ? (
-            <div className="text-center py-16 text-gray-400">
+            <div className="text-center py-16 text-gray-400 col-span-full">
               <ClipboardList className="h-10 w-10 mx-auto mb-3 opacity-30" />
               <p>No NSC applications found</p>
             </div>
           ) : paginated.map(app => (
             <Card key={app.receiveNo} className="hover:shadow-md transition-all duration-200 overflow-hidden border border-gray-200 hover:border-blue-200">
               <CardContent className="p-4">
-                <div className="flex justify-between items-start gap-2">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-mono text-xs text-gray-400">{app.receiveNo}</span>
-                      {app.officeRefNo && (
-                        <>
-                          <span className="text-xs text-gray-300">|</span>
-                          <span className="font-mono text-xs text-blue-600 font-medium">Ref: {app.officeRefNo}</span>
-                        </>
-                      )}
-                      {app.isLegacy === "true" && <Badge variant="outline" className="text-xs py-0 px-1 text-amber-700 border-amber-300">Legacy</Badge>}
-                      <span className="text-xs text-gray-400">·</span>
-                      <span className="text-xs font-medium text-gray-600">{CLASS_LABELS[app.appliedClass] || app.appliedClass} · {app.phase}</span>
-                    </div>
-                    {app.projectId && (
-                      <p className="text-xs text-orange-600 font-mono mt-0.5">
-                        <FolderOpen className="inline h-3 w-3 mr-1" />{app.projectId}
-                      </p>
+
+                {/* Top row: receive no + phase chip + status badge + agency pill */}
+                <div className="flex items-start justify-between gap-2 flex-wrap">
+                  <div className="flex items-center gap-2 flex-wrap min-w-0">
+                    <span className="font-mono text-xs text-gray-400">{app.receiveNo}</span>
+                    {app.officeRefNo && (
+                      <>
+                        <span className="text-xs text-gray-300">|</span>
+                        <span className="font-mono text-xs text-blue-600 font-medium">Ref: {app.officeRefNo}</span>
+                      </>
                     )}
-                    <p className="font-bold text-gray-900 mt-0.5">{app.applicantName}</p>
-                    {app.careOf && <p className="text-xs text-gray-500">C/O {app.careOf}</p>}
-                    <div className="flex items-start gap-1 mt-0.5">
-                      <MapPin className="h-3 w-3 text-gray-400 shrink-0 mt-0.5" />
-                      <p className="text-xs text-gray-600">{app.address}</p>
-                    </div>
-                    <div className="flex items-center gap-3 mt-1 flex-wrap">
-                      <a href={`tel:${app.mobile}`} className="flex items-center gap-1 text-xs text-blue-600 font-mono">
-                        <Phone className="h-3 w-3" />{app.mobile}
-                      </a>
-                      <span className="text-xs text-gray-400">Agency: <span className="font-medium text-gray-600">{app.agency}</span></span>
-                    </div>
-                    {/* Status summary line */}
-                    {app.status !== "pending" && (
-                      <div className="mt-1 text-xs text-gray-400">
-                        {app.agencyDecision && (
-                          <span className={`mr-2 ${app.agencyDecision === "accepted" ? "text-green-600" : "text-red-600"}`}>
-                            Agency: {app.agencyDecision}
-                          </span>
-                        )}
-                        {app.adminDecision && (
-                          <span className={app.adminDecision === "accepted" ? "text-green-700 font-medium" : "text-red-700 font-medium"}>
-                            Admin: {app.adminDecision}
-                          </span>
-                        )}
-                        {app.applicationNo && <span className="ml-2 font-mono text-green-700">App# {app.applicationNo}</span>}
-                        {app.memoNo        && <span className="ml-2 font-mono text-orange-700">Memo: {app.memoNo}</span>}
-                      </div>
+                    {app.isLegacy === "true" && <Badge variant="outline" className="text-xs py-0 px-1 text-amber-700 border-amber-300">Legacy</Badge>}
+                    {/* Phase pill */}
+                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${app.phase === "3P" ? "bg-purple-100 text-purple-700" : "bg-blue-100 text-blue-700"}`}>
+                      {app.phase}
+                    </span>
+                    {app.poleRequired === "yes" && (
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-orange-100 text-orange-700">Pole</span>
                     )}
-                    {app.meterSerialNo && (
-                      <div className="mt-1 flex items-center gap-2 text-xs">
-                        <span className="font-mono font-bold text-purple-700">{app.meterSerialNo}</span>
-                        <span className="text-gray-400">→</span>
-                        <span className="text-gray-600">{app.agency}</span>
-                      </div>
+                    {app.dispute && (
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">⚠ Dispute</span>
                     )}
-                    <p className="text-xs text-gray-400 mt-0.5">{app.receivedDate}</p>
                   </div>
-                  <Badge className={`shrink-0 ${NSC_STATUS_COLORS[app.status] || "bg-gray-100 text-gray-700"}`}>
-                    {NSC_STATUS_LABELS[app.status] || app.status}
-                  </Badge>
+                  {/* Agency pill — right side */}
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${agencyColor(app.agency)}`}>
+                    {app.agency}
+                  </span>
                 </div>
 
-                {/* Action buttons */}
-                <div className="flex gap-2 mt-3 pt-3 border-t">
-                  {/* Agency: inspect pending apps */}
+                {/* Project link */}
+                {app.projectId && (
+                  <p className="text-xs text-orange-600 font-mono mt-0.5">
+                    <FolderOpen className="inline h-3 w-3 mr-1" />{app.projectId}
+                  </p>
+                )}
+
+                {/* Applicant info */}
+                <div className="mt-1.5">
+                  <div className="flex items-center justify-between gap-1">
+                    <p className="font-bold text-gray-900">{app.applicantName}</p>
+                    <Badge className={`shrink-0 text-[10px] px-1.5 py-0 ${NSC_STATUS_COLORS[app.status] || "bg-gray-100 text-gray-700"}`}>
+                      {NSC_STATUS_LABELS[app.status] || app.status}
+                    </Badge>
+                  </div>
+                  {app.careOf && <p className="text-xs text-gray-500">C/O {app.careOf}</p>}
+                  <div className="flex items-center gap-1 mt-0.5">
+                    <span className="text-xs text-gray-500 font-medium">{CLASS_LABELS[app.appliedClass] || app.appliedClass}</span>
+                  </div>
+                  <div className="flex items-start gap-1 mt-0.5">
+                    <MapPin className="h-3 w-3 text-gray-400 shrink-0 mt-0.5" />
+                    <p className="text-xs text-gray-600">{app.address}</p>
+                  </div>
+                  <div className="flex items-center gap-3 mt-1 flex-wrap">
+                    <a href={`tel:${app.mobile}`} className="flex items-center gap-1 text-xs text-blue-600 font-mono">
+                      <Phone className="h-3 w-3" />{app.mobile}
+                    </a>
+                    {app.existingConsumerId && (
+                      <span className="text-xs font-mono text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded">
+                        ConsID: {app.existingConsumerId}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Processing summary */}
+                {app.status !== "pending" && (
+                  <div className="mt-1 text-xs text-gray-400">
+                    {app.agencyDecision && (
+                      <span className={`mr-2 ${app.agencyDecision === "accepted" ? "text-green-600" : "text-red-600"}`}>
+                        Agency: {app.agencyDecision}
+                      </span>
+                    )}
+                    {app.adminDecision && (
+                      <span className={app.adminDecision === "accepted" ? "text-green-700 font-medium" : "text-red-700 font-medium"}>
+                        Admin: {app.adminDecision}
+                      </span>
+                    )}
+                    {app.applicationNo && <span className="ml-2 font-mono text-green-700">App# {app.applicationNo}</span>}
+                    {app.memoNo        && <span className="ml-2 font-mono text-orange-700">Memo: {app.memoNo}</span>}
+                  </div>
+                )}
+
+                {app.meterSerialNo && (
+                  <div className="mt-1 flex items-center gap-2 text-xs">
+                    <span className="font-mono font-bold text-purple-700">{app.meterSerialNo}</span>
+                    <span className="text-gray-400">→</span>
+                    <span className="text-gray-600">{app.agency}</span>
+                  </div>
+                )}
+
+                <p className="text-xs text-gray-400 mt-0.5">{app.receivedDate}</p>
+
+                {/* ─ Action buttons ─────────────────────────────────────────── */}
+                <div className="flex gap-2 mt-3 pt-3 border-t flex-wrap">
+
+                  {/* View button — always visible */}
+                  <button
+                    className="flex items-center gap-1 text-xs text-gray-500 hover:text-slate-900 bg-gray-50 hover:bg-gray-100 rounded-lg px-2.5 py-1.5 border border-gray-200 transition"
+                    onClick={() => setViewApp(app)}
+                    title="View full details"
+                  >
+                    <Eye className="h-3.5 w-3.5" /> View
+                  </button>
+
+                  {/* Agency: inspect pending */}
                   {isAgency && app.status === "pending" && (
                     <Button size="sm" className="flex-1 bg-slate-950 hover:bg-slate-900 text-white text-xs font-semibold h-9 rounded-lg shadow-sm transition-colors"
                       onClick={() => { setSelected(app); setView("inspect") }}>
                       Start Inspection
                     </Button>
                   )}
-                  {/* Agency: already inspected — read-only */}
+                  {/* Agency: inspection submitted */}
                   {isAgency && app.status !== "pending" && (
                     <p className="text-xs text-gray-500 flex items-center gap-1">
                       <Check className="h-3 w-3 text-green-600" /> Inspection submitted
                     </p>
                   )}
-                  {/* Admin: process inspected apps */}
+
+                  {/* Admin: process inspected */}
                   {isAdmin && app.status === "inspected" && (
                     <Button size="sm" className="flex-1 bg-slate-950 hover:bg-slate-900 text-white text-xs font-semibold h-9 rounded-lg shadow-sm transition-colors"
                       onClick={() => { setSelected(app); setView("process") }}>
                       Process
                     </Button>
                   )}
-                  {/* Admin: view / reprocess quotation or dispute */}
+
+                  {/* Admin: view/reprocess quotation or dispute */}
                   {isAdmin && (app.status === "quotation_issued" || app.status === "dispute_issued") && (
-                    <Button size="sm" variant="outline" className="flex-1 h-9 text-xs font-semibold rounded-lg shadow-sm transition-colors"
+                    <Button size="sm" variant="outline" className="flex-1 h-9 text-xs font-semibold rounded-lg shadow-sm bg-slate-950 hover:bg-slate-900 text-white border-slate-900 transition-colors"
                       onClick={() => { setSelected(app); setView("process") }}>
                       View / Override
                     </Button>
                   )}
-                  {/* Admin: create project from quotation_issued app */}
+
+                  {/* Admin: create project from quotation */}
                   {isAdmin && app.status === "quotation_issued" && !app.projectId && (
                     <Button size="sm" variant="outline" className="h-9 text-orange-700 border-orange-200 text-xs font-semibold rounded-lg shadow-sm transition-colors"
                       onClick={() => setProjectDialogApp(app)}>
                       <FolderOpen className="h-3 w-3 mr-1" /> Create Project
                     </Button>
                   )}
-                  {/* Admin: project statuses — view linked project */}
+
+                  {/* Admin: project statuses */}
                   {isAdmin && ["project_required", "project_ongoing", "project_done"].includes(app.status) && (
                     <Button size="sm" variant="outline" className="flex-1 h-9 text-orange-700 border-orange-200 text-xs font-semibold rounded-lg shadow-sm transition-colors"
                       onClick={() => { setTab("projects") }}>
                       <FolderOpen className="h-3 w-3 mr-1" /> View Projects
                     </Button>
                   )}
-                  {/* Admin: approve project if it's done */}
+
+                  {/* Admin: approve project if done */}
                   {isAdmin && app.status === "project_ongoing" && projectMap[app.receiveNo]?.status === "done" && (
                     <Button size="sm" className="h-9 bg-slate-950 hover:bg-slate-900 text-white text-xs font-semibold rounded-lg shadow-sm transition-colors"
                       onClick={() => { setSelectedProject(projectMap[app.receiveNo]); setProjectAction("approve") }}>
                       Approve Project
                     </Button>
                   )}
+
                   {/* Agency: mark project complete */}
                   {isAgency && ["project_required", "project_ongoing"].includes(app.status) && app.projectId &&
                     projectMap[app.receiveNo]?.status === "ongoing" && projectMap[app.receiveNo]?.poNumber && (
@@ -472,13 +663,15 @@ export function NscList({ userRole, userAgencies, username, agencies }: Props) {
                       Mark Work Done
                     </Button>
                   )}
-                  {/* Admin: pending — can reassign */}
+
+                  {/* Admin: pending — reassign */}
                   {isAdmin && app.status === "pending" && (
-                    <Button size="sm" variant="outline" className="flex-1 h-9 text-purple-700 border-purple-200 text-xs font-semibold rounded-lg shadow-sm transition-colors"
+                    <Button size="sm" className="flex-1 h-9 bg-slate-950 hover:bg-slate-900 text-white text-xs font-semibold rounded-lg shadow-sm transition-colors"
                       onClick={() => { setSelected(app); setView("process") }}>
                       Reassign
                     </Button>
                   )}
+
                   {/* Admin: meter issued / connection effected — view only */}
                   {isAdmin && (app.status === "meter_issued" || app.status === "connection_effected") && (
                     <p className="text-xs text-teal-700 flex items-center gap-1 font-medium">
@@ -486,19 +679,21 @@ export function NscList({ userRole, userAgencies, username, agencies }: Props) {
                       {app.status === "connection_effected" ? "Connection effected" : "Meter issued — awaiting installation"}
                     </p>
                   )}
+
                   {/* Admin: edit office ref no */}
                   {isAdmin && (
                     <button
-                      className="flex items-center gap-1 text-xs text-gray-400 hover:text-blue-600"
+                      className="flex items-center gap-1 text-xs text-gray-400 hover:text-blue-600 ml-auto"
                       onClick={() => { setEditingRefApp(app); setRefNoInput(app.officeRefNo || "") }}
                       title="Edit office reference number">
                       <Pencil className="h-3 w-3" /> {app.officeRefNo ? "Ref" : "Add Ref"}
                     </button>
                   )}
+
                   {/* Admin: history button */}
                   {isAdmin && (
                     <button
-                      className="ml-auto flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600"
+                      className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600"
                       onClick={() => setHistoryApp(app)}>
                       <Clock className="h-3 w-3" /> History
                     </button>
@@ -510,12 +705,15 @@ export function NscList({ userRole, userAgencies, username, agencies }: Props) {
         </div>
       )}
 
+      {/* View dialog */}
+      <NscViewDialog app={viewApp} open={!!viewApp} onClose={() => setViewApp(null)} />
+
       {/* Sticky bottom — Add NSC */}
       {isAdmin && (
         <div className="fixed bottom-0 left-0 right-0 z-40 p-4 pointer-events-none">
           <div className="max-w-xl mx-auto pointer-events-auto">
             <Button
-              className="w-full bg-green-600 hover:bg-green-700 text-white shadow-lg rounded-2xl text-base font-semibold flex items-center justify-center gap-2 py-3"
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white shadow-lg rounded-2xl text-base font-semibold flex items-center justify-center gap-2 py-3"
               onClick={() => setView("create")}>
               <Plus className="h-5 w-5" /> Add NSC
             </Button>
@@ -523,7 +721,7 @@ export function NscList({ userRole, userAgencies, username, agencies }: Props) {
         </div>
       )}
 
-      {/* History popup */}
+      {/* Legacy history popup (mini stepper — kept for backward compat) */}
       {historyApp && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
           onClick={() => setHistoryApp(null)}>
@@ -562,11 +760,14 @@ export function NscList({ userRole, userAgencies, username, agencies }: Props) {
                 </div>
               ))}
             </div>
+            <Button className="w-full bg-slate-950 hover:bg-slate-900 text-white text-sm" onClick={() => { setViewApp(historyApp); setHistoryApp(null) }}>
+              View Full Details
+            </Button>
           </div>
         </div>
       )}
 
-      {/* ── Project: Create dialog ────────────────────────────────────────── */}
+      {/* Project: Create dialog */}
       <Dialog open={!!projectDialogApp} onOpenChange={open => { if (!open) setProjectDialogApp(null) }}>
         <DialogContent className="max-w-lg">
           <DialogHeader><DialogTitle>Create Infrastructure Project</DialogTitle></DialogHeader>
@@ -582,41 +783,35 @@ export function NscList({ userRole, userAgencies, username, agencies }: Props) {
         </DialogContent>
       </Dialog>
 
-      {/* ── Project: action dialog (PO / complete / approve) ──────────────── */}
+      {/* Project: action dialog */}
       <Dialog open={!!selectedProject && !!projectAction} onOpenChange={open => { if (!open) { setSelectedProject(null); setProjectAction(null) } }}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>
-              {projectAction === "po"       ? "Enter PO Number" :
+              {projectAction === "po"       ? "Enter PO Number"    :
                projectAction === "complete" ? "Mark Work Complete" :
                "Approve Project"}
             </DialogTitle>
           </DialogHeader>
           {selectedProject && projectAction === "po" && (
-            <ProjectPOForm
-              project={selectedProject}
+            <ProjectPOForm project={selectedProject}
               onSuccess={() => { setSelectedProject(null); setProjectAction(null); reloadProjects() }}
-              onCancel={() => { setSelectedProject(null); setProjectAction(null) }}
-            />
+              onCancel={() => { setSelectedProject(null); setProjectAction(null) }} />
           )}
           {selectedProject && projectAction === "complete" && (
-            <AgencyCompleteProjectForm
-              project={selectedProject}
+            <AgencyCompleteProjectForm project={selectedProject}
               onSuccess={() => { setSelectedProject(null); setProjectAction(null); reloadProjects(); load(true) }}
-              onCancel={() => { setSelectedProject(null); setProjectAction(null) }}
-            />
+              onCancel={() => { setSelectedProject(null); setProjectAction(null) }} />
           )}
           {selectedProject && projectAction === "approve" && (
-            <AdminApproveProjectForm
-              project={selectedProject}
+            <AdminApproveProjectForm project={selectedProject}
               onSuccess={() => { setSelectedProject(null); setProjectAction(null); reloadProjects(); load(true) }}
-              onCancel={() => { setSelectedProject(null); setProjectAction(null) }}
-            />
+              onCancel={() => { setSelectedProject(null); setProjectAction(null) }} />
           )}
         </DialogContent>
       </Dialog>
 
-      {/* ── Legacy import dialog ──────────────────────────────────────────── */}
+      {/* Legacy import dialog */}
       <Dialog open={showLegacyImport} onOpenChange={setShowLegacyImport}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Import Legacy Applications</DialogTitle></DialogHeader>
@@ -627,7 +822,7 @@ export function NscList({ userRole, userAgencies, username, agencies }: Props) {
         </DialogContent>
       </Dialog>
 
-      {/* ── Edit office ref no dialog ─────────────────────────────────────── */}
+      {/* Edit office ref no dialog */}
       <Dialog open={!!editingRefApp} onOpenChange={open => { if (!open) setEditingRefApp(null) }}>
         <DialogContent className="max-w-sm">
           <DialogHeader><DialogTitle>Office Reference Number</DialogTitle></DialogHeader>
@@ -642,7 +837,7 @@ export function NscList({ userRole, userAgencies, username, agencies }: Props) {
                 onChange={e => setRefNoInput(e.target.value)}
               />
               <div className="flex gap-2">
-                <Button onClick={saveRefNo} disabled={savingRefNo}>{savingRefNo ? "Saving…" : "Save"}</Button>
+                <Button className="bg-slate-950 hover:bg-slate-900 text-white" onClick={saveRefNo} disabled={savingRefNo}>{savingRefNo ? "Saving…" : "Save"}</Button>
                 <Button variant="outline" onClick={() => setEditingRefApp(null)}>Cancel</Button>
               </div>
             </div>
@@ -666,7 +861,7 @@ export function NscList({ userRole, userAgencies, username, agencies }: Props) {
   )
 }
 
-// ── Reports panel ─────────────────────────────────────────────────────────────
+// ── Reports panel ──────────────────────────────────────────────────────────────
 function NscReports({ apps }: { apps: NSCApplication[] }) {
   const { toast } = useToast()
 
@@ -681,18 +876,19 @@ function NscReports({ apps }: { apps: NSCApplication[] }) {
     total:     apps.filter(a => a.appliedClass === c.value).length,
     pending:   apps.filter(a => a.appliedClass === c.value && a.status === "pending").length,
     inspected: apps.filter(a => a.appliedClass === c.value && a.status === "inspected").length,
-    done:      apps.filter(a => a.appliedClass === c.value && (a.status === "quotation_issued" || a.status === "dispute_issued")).length,
+    done:      apps.filter(a => a.appliedClass === c.value && COMPLETED_STATUSES.includes(a.status)).length,
   }))
 
   const byPhase = ["1P", "3P"].map(p => ({
     phase:     p,
     total:     apps.filter(a => a.phase === p).length,
     pending:   apps.filter(a => a.phase === p && a.status === "pending").length,
-    done:      apps.filter(a => a.phase === p && (a.status === "quotation_issued" || a.status === "dispute_issued")).length,
+    inspected: apps.filter(a => a.phase === p && a.status === "inspected").length,
+    done:      apps.filter(a => a.phase === p && COMPLETED_STATUSES.includes(a.status)).length,
   }))
 
-  const agencies = Array.from(new Set(apps.map(a => a.agency).filter(Boolean)))
-  const byAgency = agencies.map(ag => ({
+  const agencyNames = Array.from(new Set(apps.map(a => a.agency).filter(Boolean)))
+  const byAgency = agencyNames.map(ag => ({
     agency:    ag,
     total:     apps.filter(a => a.agency === ag).length,
     pending:   apps.filter(a => a.agency === ag && a.status === "pending").length,
@@ -708,7 +904,7 @@ function NscReports({ apps }: { apps: NSCApplication[] }) {
       ["Metric", "Count"],
       ["Total Applications", total],
       ["Pending Inspection", pending],
-      ["Inspected (Awaiting Processing)", inspected],
+      ["Inspection Completed", inspected],
       ["Quotation Issued", quotation],
       ["Dispute Letter Issued", dispute],
     ]), "Summary")
@@ -717,8 +913,8 @@ function NscReports({ apps }: { apps: NSCApplication[] }) {
       ...byClass.map(c => [c.label, c.total, c.pending, c.inspected, c.done]),
     ]), "By Class")
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
-      ["Phase", "Total", "Pending", "Completed"],
-      ...byPhase.map(p => [p.phase, p.total, p.pending, p.done]),
+      ["Phase", "Total", "Pending", "Inspected", "Completed"],
+      ...byPhase.map(p => [p.phase, p.total, p.pending, p.inspected, p.done]),
     ]), "By Phase")
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
       ["Agency", "Total", "Pending", "Inspected", "Accepted", "Rejected"],
@@ -731,6 +927,7 @@ function NscReports({ apps }: { apps: NSCApplication[] }) {
       "Agency": a.agency, "Status": NSC_STATUS_LABELS[a.status] || a.status,
       "Agency Decision": a.agencyDecision, "Admin Decision": a.adminDecision,
       "Application No": a.applicationNo, "Memo No": a.memoNo,
+      "Existing Consumer ID": a.existingConsumerId,
       "Load (kW)": a.load, "DTR Capacity": a.dtrCapacity,
     }))), "All Applications")
     XLSX.writeFile(wb, `nsc-report-${new Date().toISOString().slice(0, 10)}.xlsx`)
@@ -767,35 +964,22 @@ function NscReports({ apps }: { apps: NSCApplication[] }) {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3">
-        <StatCard label="Total Applications" value={total}     color="bg-gray-50 border-gray-200" />
-        <StatCard label="Pending Inspection" value={pending}   color="bg-yellow-50 border-yellow-200" />
-        <StatCard label="Awaiting Processing" value={inspected} color="bg-blue-50 border-blue-200" />
-        <StatCard label="Quotation Issued"   value={quotation} color="bg-green-50 border-green-200" />
-        <StatCard label="Dispute Issued"     value={dispute}   color="bg-red-50 border-red-200" />
-        <StatCard label="Accepted by Agency" value={apps.filter(a => a.agencyDecision === "accepted").length} color="bg-teal-50 border-teal-200" />
+        <StatCard label="Total Applications"        value={total}     color="bg-gray-50 border-gray-200" />
+        <StatCard label="Pending Inspection"        value={pending}   color="bg-yellow-50 border-yellow-200" />
+        <StatCard label="Inspection Completed"      value={inspected} color="bg-blue-50 border-blue-200" />
+        <StatCard label="Quotation Issued"          value={quotation} color="bg-green-50 border-green-200" />
+        <StatCard label="Dispute Issued"            value={dispute}   color="bg-red-50 border-red-200" />
+        <StatCard label="Accepted by Agency"        value={apps.filter(a => a.agencyDecision === "accepted").length} color="bg-teal-50 border-teal-200" />
       </div>
 
-      <Table
-        title="By Applied Class"
-        headers={["Class", "Total", "Pending", "Inspected", "Completed"]}
-        rows={byClass.map(c => [c.label, c.total, c.pending, c.inspected, c.done])}
-      />
-
-      <Table
-        title="By Phase"
-        headers={["Phase", "Total", "Pending", "Completed"]}
-        rows={byPhase.map(p => [p.phase, p.total, p.pending, p.done])}
-      />
-
+      <Table title="By Applied Class"   headers={["Class", "Total", "Pending", "Inspected", "Completed"]} rows={byClass.map(c => [c.label, c.total, c.pending, c.inspected, c.done])} />
+      <Table title="By Phase"           headers={["Phase", "Total", "Pending", "Inspected", "Completed"]} rows={byPhase.map(p => [p.phase, p.total, p.pending, p.inspected, p.done])} />
       {byAgency.length > 0 && (
-        <Table
-          title="Agency Performance"
-          headers={["Agency", "Total", "Pending", "Inspected", "Accepted", "Rejected"]}
-          rows={byAgency.map(a => [a.agency, a.total, a.pending, a.inspected, a.accepted, a.rejected])}
-        />
+        <Table title="Agency Performance" headers={["Agency", "Total", "Pending", "Inspected", "Accepted", "Rejected"]}
+          rows={byAgency.map(a => [a.agency, a.total, a.pending, a.inspected, a.accepted, a.rejected])} />
       )}
 
-      <Button className="w-full bg-indigo-600 hover:bg-indigo-700 text-white h-11" onClick={exportReport}>
+      <Button className="w-full bg-slate-950 hover:bg-slate-900 text-white h-11" onClick={exportReport}>
         <FileDown className="h-4 w-4 mr-2" /> Export Full Report (Excel)
       </Button>
     </div>

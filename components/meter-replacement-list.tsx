@@ -585,7 +585,7 @@ function MeterReplacementCreateForm({ agencies, onSave, onCancel }: FormProps) {
             <Button type="button" variant="outline" className="flex-1" onClick={onCancel} disabled={submitting}>
               Cancel
             </Button>
-            <Button type="submit" className="flex-[2] bg-blue-600 hover:bg-blue-700 text-white" disabled={submitting || uploading}>
+            <Button type="submit" className="flex-[2] bg-slate-950 hover:bg-slate-900 text-white" disabled={submitting || uploading}>
               {submitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Check className="h-4 w-4 mr-2" />}
               {submitting ? "Submitting..." : "Save Proposal"}
             </Button>
