@@ -2,6 +2,8 @@ import { type NextRequest, NextResponse } from "next/server"
 import { verifySession } from "@/lib/session"
 import { getAgencies, addAgency, updateAgency, deleteAgency } from "@/lib/agency-storage"
 
+export const dynamic = "force-dynamic"
+
 // GET - List all agencies
 export async function GET() {
   const session = await verifySession()

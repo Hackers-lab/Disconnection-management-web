@@ -936,7 +936,7 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-3 sm:p-6">
           <div className="w-full max-w-4xl h-full max-h-[90vh]">
             <NearbyConsumerMap
-              consumers={consumers}
+              consumers={filteredConsumers}
               onClose={() => setShowNearbyMap(false)}
               onGoToConsumer={(consumer) => {
                 // Close radar, ensure card view and navigate to the consumer's page/card

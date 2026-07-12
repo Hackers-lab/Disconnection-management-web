@@ -2,6 +2,8 @@ import { type NextRequest, NextResponse } from "next/server"
 import { verifySession } from "@/lib/session"
 import { getTemplatesForUser, saveTemplate, deleteTemplate } from "@/lib/report-templates"
 
+export const dynamic = "force-dynamic"
+
 // GET - list the current admin's saved report templates
 export async function GET() {
   const session = await verifySession()

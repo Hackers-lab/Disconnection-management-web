@@ -1068,7 +1068,7 @@ export function DTRList({ userRole, userAgencies = [], username, agencies = [], 
             <DialogTitle>Nearby DTR Radar</DialogTitle>
             <DialogDescription>Interactive map showing distribution transformers nearby using GPS coordinates.</DialogDescription>
           </DialogHeader>
-          <NearbyDtrMap records={records} onClose={() => setShowMap(false)} />
+          <NearbyDtrMap records={filtered} onClose={() => setShowMap(false)} />
         </DialogContent>
       </Dialog>
 

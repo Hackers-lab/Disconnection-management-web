@@ -31,6 +31,7 @@ export function NearbyDtrMap({ records, onClose }: Props) {
   const [userCoords, setUserCoords] = useState<[number, number] | null>(null)
   const [loadingLocation, setLoadingLocation] = useState(true)
   const [filterPending, setFilterPending] = useState(true) // Toggle to show all or pending
+  const [mapType, setMapType] = useState<"roadmap" | "hybrid">("roadmap")
 
   // ── Load Leaflet once using shared loader (keeps scripts/styles for reuse) ─
   useEffect(() => {
@@ -94,10 +95,14 @@ export function NearbyDtrMap({ records, onClose }: Props) {
     // Create Map Instance
     const map = L.map("nearby-map-container").setView(userCoords, zoom)
     
-    // Add OpenStreetMap tile layer
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      maxZoom: 19,
-      attribution: '&copy; <a href="https://openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    const googleTileUrl = mapType === "roadmap"
+      ? "https://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}"
+      : "https://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}"
+
+    L.tileLayer(googleTileUrl, {
+      maxZoom: 20,
+      subdomains: ["mt0", "mt1", "mt2", "mt3"],
+      attribution: '&copy; <a href="https://maps.google.com">Google Maps</a>'
     }).addTo(map)
 
     // Draw range search circle
@@ -221,7 +226,7 @@ export function NearbyDtrMap({ records, onClose }: Props) {
     return () => {
       map.remove()
     }
-  }, [userCoords, range, records, leafletLoaded, filterPending])
+  }, [userCoords, range, records, leafletLoaded, filterPending, mapType])
 
   return (
     <div className="flex flex-col h-[75vh] w-full border border-slate-200 rounded-3xl overflow-hidden bg-white shadow-xl relative animate-in fade-in duration-300">
@@ -236,6 +241,15 @@ export function NearbyDtrMap({ records, onClose }: Props) {
         </div>
         
         <div className="flex items-center gap-2">
+          {/* Map Type Toggle */}
+          <Button
+            variant="ghost"
+            onClick={() => setMapType(prev => prev === "roadmap" ? "hybrid" : "roadmap")}
+            className="h-7 px-2.5 text-[10px] font-bold rounded-lg border border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white transition-all duration-200"
+          >
+            {mapType === "roadmap" ? "Satellite View" : "Street View"}
+          </Button>
+
           {/* Toggle All vs Pending DTRs */}
           <Button
             variant="ghost"
