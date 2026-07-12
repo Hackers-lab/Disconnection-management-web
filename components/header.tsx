@@ -187,7 +187,7 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
 
   const isDisconnectionView = activeView === "disconnection";
   const isDDView = activeView === 'deemed';
-  const showDownloadButton = isDisconnectionView || isDDView;
+  const showDownloadButton = isDisconnectionView || isDDView || activeView === "nsc";
 
   // --- Date helpers ---
   const parseDate = (dateStr: string) => {
@@ -904,7 +904,7 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
   return (
     <header className="bg-white shadow sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between items-center py-4">
+        <div className="flex justify-between items-center py-2.5 sm:py-4">
           
           {/* LEFT SIDE: Sidebar & Logo */}
           <div className="flex items-center space-x-2">
@@ -1080,6 +1080,32 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
                           Download DD List (PDF)
                         </button>
                       )}
+                      {activeView === "nsc" && (
+                        <>
+                          <button
+                            type="button"
+                            className="block w-full text-left px-4 py-2 hover:bg-blue-50 text-sm font-semibold text-slate-800"
+                            onClick={() => {
+                              setShowDownloadMenu(false);
+                              window.dispatchEvent(new CustomEvent("nsc-action", { detail: { action: "export" } }))
+                            }}
+                          >
+                            Export NSC Data
+                          </button>
+                          {isAdminUser && (
+                            <button
+                              type="button"
+                              className="block w-full text-left px-4 py-2 hover:bg-slate-50 text-sm font-semibold text-indigo-650 border-t"
+                              onClick={() => {
+                                setShowDownloadMenu(false);
+                                window.dispatchEvent(new CustomEvent("nsc-action", { detail: { action: "import-legacy" } }))
+                              }}
+                            >
+                              Import Legacy Apps
+                            </button>
+                          )}
+                        </>
+                      )}
                     </div>
                   )}
                 </div>
@@ -1243,6 +1269,25 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
                         <Download className="mr-2 h-4 w-4" />
                         <span>Download DD List</span>
                     </DropdownMenuItem>
+                  )}
+
+                  {activeView === "nsc" && (
+                    <>
+                      <DropdownMenuItem onClick={() => {
+                        window.dispatchEvent(new CustomEvent("nsc-action", { detail: { action: "export" } }))
+                      }}>
+                        <Download className="mr-2 h-4 w-4 text-blue-600" />
+                        <span className="font-medium text-blue-700">Export NSC Data</span>
+                      </DropdownMenuItem>
+                      {isAdminUser && (
+                        <DropdownMenuItem onClick={() => {
+                          window.dispatchEvent(new CustomEvent("nsc-action", { detail: { action: "import-legacy" } }))
+                        }}>
+                          <Upload className="mr-2 h-4 w-4 text-indigo-600" />
+                          <span className="text-indigo-700 font-medium">Import Legacy Apps</span>
+                        </DropdownMenuItem>
+                      )}
+                    </>
                   )}
 
                   {isDisconnectionView && canSeeAgencyUpdates && (

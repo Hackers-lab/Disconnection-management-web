@@ -1,17 +1,20 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent } from "@/components/ui/card"
 import {
   Search, X, Plus, RefreshCw, Check, ChevronLeft, ChevronRight,
-  FileDown, Phone, MapPin, ClipboardList, Clock, FolderOpen, FileInput, Pencil, MoreVertical,
+  FileDown, Phone, MapPin, ClipboardList, Clock, FolderOpen, FileInput, Pencil, MoreVertical, Loader2,
 } from "lucide-react"
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select"
 import { useToast } from "@/components/ui/use-toast"
 import { getFromCache, saveToCache } from "@/lib/indexed-db"
 import { NSC_STATUS_COLORS, NSC_STATUS_LABELS, NSC_CLASSES } from "@/lib/nsc-types"
@@ -56,7 +59,7 @@ export function NscList({ userRole, userAgencies, username, agencies }: Props) {
 
   const [apps, setApps]         = useState<NSCApplication[]>([])
   const [syncState, setSyncState] = useState<SyncState>("loading")
-  const [tab, setTab]           = useState<Tab>("all")
+  const [tab, setTab]           = useState<Tab>("pending")
   const [view, setView]         = useState<View>("list")
   const [search, setSearch]     = useState("")
   const [selected, setSelected] = useState<NSCApplication | null>(null)
@@ -172,7 +175,7 @@ export function NscList({ userRole, userAgencies, username, agencies }: Props) {
   const projectCount    = scopedApps.filter(a => ["project_required", "project_ongoing", "project_done"].includes(a.status)).length
 
   // ── Export ────────────────────────────────────────────────────────────────
-  const exportData = async () => {
+  const exportData = useCallback(async () => {
     if (filtered.length === 0) { toast({ title: "No data to export" }); return }
     const rows = filtered.map(a => ({
       "Receive No":        a.receiveNo,
@@ -201,7 +204,23 @@ export function NscList({ userRole, userAgencies, username, agencies }: Props) {
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, "NSC Applications")
     XLSX.writeFile(wb, `nsc-${tab}-${new Date().toISOString().slice(0, 10)}.xlsx`)
-  }
+  }, [filtered, tab, toast])
+
+  // Listen to actions dispatched from global header
+  useEffect(() => {
+    const handleAction = (e: Event) => {
+      const customEvent = e as CustomEvent
+      if (customEvent.detail?.action === "export") {
+        exportData()
+      } else if (customEvent.detail?.action === "import-legacy") {
+        setShowLegacyImport(true)
+      } else if (customEvent.detail?.action === "refresh") {
+        load()
+      }
+    }
+    window.addEventListener("nsc-action", handleAction)
+    return () => window.removeEventListener("nsc-action", handleAction)
+  }, [exportData])
 
   // ── Sub-views ─────────────────────────────────────────────────────────────
   if (view === "create") return (
@@ -240,58 +259,58 @@ export function NscList({ userRole, userAgencies, username, agencies }: Props) {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 h-4 w-4" />
             <Input value={search} onChange={e => setSearch(e.target.value)}
               placeholder="Search receive no, name, C/O, address, mobile, agency..."
-              className="pl-10 pr-8" />
+              className="pl-10 pr-8 rounded-xl h-9 text-sm" />
             {search && <X className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-red-500 cursor-pointer" onClick={() => setSearch("")} />}
           </div>
-          {tab !== "reports" && (
-            <Button size="sm" variant="ghost" onClick={exportData} className="shrink-0" title="Export">
-              <FileDown className="h-4 w-4" />
-            </Button>
-          )}
-          <Button size="sm" variant="ghost" onClick={() => load()} className="shrink-0">
-            <RefreshCw className={`h-4 w-4 ${syncState === "loading" ? "animate-spin" : ""}`} />
-          </Button>
-          {isAdmin && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button size="sm" variant="ghost" className="shrink-0">
-                  <MoreVertical className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => setShowLegacyImport(true)}>
-                  <FileInput className="h-4 w-4 mr-2" /> Import Legacy Applications
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
+
+          <Select value={tab} onValueChange={(val) => setTab(val as Tab)}>
+            <SelectTrigger className="w-[155px] h-9 rounded-xl shrink-0 text-xs font-semibold bg-gray-50 border-gray-200 hover:bg-gray-100 transition-colors">
+              <SelectValue placeholder="Status: Pending" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="pending" className="text-xs font-medium">⏳ Pending ({pendingCount})</SelectItem>
+              <SelectItem value="inspected" className="text-xs font-medium">🔍 Inspected ({inspectedCount})</SelectItem>
+              <SelectItem value="completed" className="text-xs font-medium">✅ Completed</SelectItem>
+              <SelectItem value="projects" className="text-xs font-medium">📁 Projects ({projectCount})</SelectItem>
+              {isAdmin && <SelectItem value="reports" className="text-xs font-medium">📊 Reports</SelectItem>}
+              <SelectItem value="all" className="text-xs font-medium">🗂️ All ({scopedApps.length})</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
 
-        {/* Tabs */}
-        <div className="flex gap-1 overflow-x-auto pb-1">
-          {(isAdmin
-            ? ["all", "pending", "inspected", "completed", "projects", "reports"] as Tab[]
-            : ["all", "pending", "inspected", "completed", "projects"] as Tab[]
-          ).map(t => {
-            const label =
-              t === "all"       ? `All (${scopedApps.length})` :
-              t === "pending"   ? `Pending (${pendingCount})` :
-              t === "inspected" ? `Inspected (${inspectedCount})` :
-              t === "completed" ? "Completed" :
-              t === "projects"  ? `Projects${projectCount > 0 ? ` (${projectCount})` : ""}` :
-              "Reports"
-            return (
-              <button key={t} onClick={() => setTab(t)}
-                className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap transition relative ${tab === t ? "bg-green-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>
-                {label}
-              </button>
-            )
-          })}
-        </div>
-
-        <div className="flex items-center gap-3 text-xs text-gray-500">
-          <span>{filtered.length} records</span>
-          {syncState === "updated" && <span className="flex items-center gap-1 text-green-600"><Check className="h-3 w-3" /> Updated</span>}
+        <div className="flex justify-between items-center mt-2 text-xs text-gray-500">
+          <div className="flex items-center gap-2">
+            <span>{filtered.length} records</span>
+            <button
+              onClick={() => load()}
+              disabled={syncState === "loading"}
+              className={`flex items-center gap-1 rounded-full px-2 py-0.5 border transition-colors disabled:cursor-not-allowed ${
+                syncState === "loading"
+                  ? "border-blue-400 bg-blue-50 text-blue-500"
+                  : syncState === "updated"
+                  ? "border-green-500 bg-green-50 text-green-600"
+                  : "border-blue-300 bg-blue-50 text-blue-500 hover:border-blue-500 hover:bg-blue-100 hover:text-blue-700 active:scale-95 cursor-pointer"
+              }`}
+              title={syncState === "loading" ? "Loading data..." : "Tap to refresh"}
+            >
+              {syncState === "loading" ? (
+                <>
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  <span className="text-[10px] font-medium">Loading...</span>
+                </>
+              ) : syncState === "updated" ? (
+                <>
+                  <Check className="h-3 w-3" />
+                  <span className="text-[10px] font-medium">Updated</span>
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="h-3 w-3" />
+                  <span className="text-[10px] font-medium">Refresh</span>
+                </>
+              )}
+            </button>
+          </div>
         </div>
       </div>
 
