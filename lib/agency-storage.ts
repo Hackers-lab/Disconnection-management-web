@@ -1,4 +1,5 @@
 import { google } from "googleapis"
+import { auth } from "./google-drive"
 
 const SHEET_ID = process.env.USERS_SHEET!
 const AGENCY_SHEET_NAME = "Agencies" // Change if your sheet name is different
@@ -9,13 +10,6 @@ let lastCacheTime = 0
 const CACHE_TTL = 24 * 60 * 60 * 1000 // 24 hours (effectively server session)
 
 async function getSheetsClient() {
-  const auth = new google.auth.GoogleAuth({
-    credentials: {
-      client_email: process.env.GOOGLE_SHEETS_CLIENT_EMAIL,
-      private_key: process.env.GOOGLE_SHEETS_PRIVATE_KEY?.replace(/\\n/g, "\n"),
-    },
-    scopes: ["https://www.googleapis.com/auth/spreadsheets"],
-  })
   return google.sheets({ version: "v4", auth })
 }
 

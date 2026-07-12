@@ -1,20 +1,11 @@
 import { google } from "googleapis"
 import { unstable_cache, revalidateTag } from "next/cache"
 import { getSpreadsheetId } from "./google-sheets-api"
+import { auth } from "./google-drive"
 
-const client_email = process.env.GOOGLE_SHEETS_CLIENT_EMAIL
-const private_key = process.env.GOOGLE_SHEETS_PRIVATE_KEY
 const TAB = "DTR"
 const DTR_TAG = "dtr-data"
 const DTR_REVALIDATE = 5 * 60 // 5 minutes
-
-const auth = new google.auth.GoogleAuth({
-  credentials: {
-    client_email,
-    private_key: private_key?.replace(/\\n/g, "\n"),
-  },
-  scopes: ["https://www.googleapis.com/auth/spreadsheets"],
-})
 
 const sheets = google.sheets({ version: "v4", auth })
 

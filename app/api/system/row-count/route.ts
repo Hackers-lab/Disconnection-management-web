@@ -31,22 +31,13 @@ export async function GET(request: NextRequest) {
     // Fetch Column C for consumer ID (DD sheet)
     let range = "DD!C:C";
 
-    const client_email = process.env.GOOGLE_SHEETS_CLIENT_EMAIL || process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL
-    const private_key = (process.env.GOOGLE_SHEETS_PRIVATE_KEY || process.env.GOOGLE_PRIVATE_KEY)?.replace(/\\n/g, "\n")
     const spreadsheetId = process.env.DISCONNECTION_SHEET || process.env.GOOGLE_SHEET_ID
 
-    if (!client_email || !private_key || !spreadsheetId) {
+    if (!spreadsheetId) {
       throw new Error("Missing required environment variables for Google Sheets API")
     }
 
-    const auth = new google.auth.GoogleAuth({
-      credentials: {
-        client_email,
-        private_key,
-      },
-      scopes: ["https://www.googleapis.com/auth/spreadsheets.readonly"],
-    })
-
+    const { auth } = await import("@/lib/google-drive")
     const sheets = google.sheets({ version: "v4", auth })
 
     const response = await sheets.spreadsheets.values.get({
