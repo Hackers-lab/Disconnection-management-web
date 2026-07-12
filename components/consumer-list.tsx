@@ -1315,7 +1315,7 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
         </div>
 
         {/* Summary Footer in Sticky Header */}
-        <div className="flex justify-between items-center mt-2 text-xs text-gray-500">
+        <div className="pt-3 border-t flex justify-between items-center mt-2 text-xs text-gray-500">
            <div className="flex items-center gap-2">
               <span>{sortedConsumers.length} consumers</span>
 
