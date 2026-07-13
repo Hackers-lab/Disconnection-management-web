@@ -26,6 +26,7 @@ export async function GET() {
           consumer_master: [],
           admin: [],
           meter_replacement: [],
+          material: [],
         },
       })
     }

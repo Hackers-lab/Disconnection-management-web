@@ -11,7 +11,8 @@ import {
   BarChart3,       // For Analysis
   Users,           // For Consumer Master
   RadioTower,      // For DTR Verification
-  Brush            // For DTR Painting
+  Brush,            // For DTR Painting
+  Package
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from "@/components/ui/sheet"
@@ -21,7 +22,7 @@ import type { ConsumerData } from "@/lib/google-sheets"
 import { Badge } from "@/components/ui/badge"
 
 // Define the available views
-export type ViewType = "disconnection" | "reconnection" | "deemed" | "nsc" | "meter" | "admin" | "home" | "analysis" | "agency-updates" | "consumer-master" | "dtr" | "meter-replacement" | "dtr-painting"
+export type ViewType = "disconnection" | "reconnection" | "deemed" | "nsc" | "meter" | "admin" | "home" | "analysis" | "agency-updates" | "consumer-master" | "dtr" | "meter-replacement" | "dtr-painting" | "material"
 
 interface AppSidebarProps {
   activeView: ViewType
@@ -117,6 +118,11 @@ export function AppSidebar({ activeView, setActiveView, userRole, isMobile = fal
       id: "meter-replacement",
       label: "Replacement List",
       icon: ClipboardCheck,
+    },
+    {
+      id: "material",
+      label: "Material Management",
+      icon: Package,
     },
     // Only show Admin Panel button here if you want it in the menu
     {

@@ -24,6 +24,7 @@ const ConsumerMaster = dynamic(() => import("@/components/consumer-master").then
 const DTRList = dynamic(() => import("@/components/dtr-list").then(m => ({ default: m.DTRList })), { ssr: false })
 const DTRPaintingList = dynamic(() => import("@/components/dtr-painting-list").then(m => ({ default: m.DTRPaintingList })), { ssr: false })
 const MeterReplacementList = dynamic(() => import("@/components/meter-replacement-list").then(m => ({ default: m.MeterReplacementList })), { ssr: false })
+const MaterialList = dynamic(() => import("@/components/material-list").then(m => ({ default: m.MaterialList })), { ssr: false })
 
 import { Loader2 } from "lucide-react"
 
@@ -1128,6 +1129,14 @@ export default function DashboardClient({ role, agencies }: DashboardClientProps
             username={agencies[0] || role}
             agencies={agencies}
             permissions={permissions}
+          />
+        )}
+
+        {activeView === "material" && (
+          <MaterialList
+            userRole={role}
+            userAgencies={agencies}
+            username={agencies[0] || role}
           />
         )}
 

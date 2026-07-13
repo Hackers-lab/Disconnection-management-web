@@ -18,7 +18,8 @@ import {
   Users,
   RefreshCw,
   Brush,
-  Phone
+  Phone,
+  Package
 } from "lucide-react"
 import { ViewType } from "@/components/app-sidebar"
 import { getFromCache, saveToCache } from "@/lib/indexed-db"
@@ -39,6 +40,7 @@ export function DashboardMenu({ onSelect, userRole, userAgencies = [], permissio
   const [replacementPendingCount, setReplacementPendingCount] = useState<number>(0)
   const [dtrPendingCount, setDtrPendingCount] = useState<number>(0)
   const [dtrPaintingPendingCount, setDtrPaintingPendingCount] = useState<number>(0)
+  const [materialPendingCount, setMaterialPendingCount] = useState<number>(0)
   const [showDevModal, setShowDevModal] = useState(false)
   const [loadingModules, setLoadingModules] = useState<Record<string, boolean>>({
     disconnection: false,
@@ -49,6 +51,7 @@ export function DashboardMenu({ onSelect, userRole, userAgencies = [], permissio
     meter: false,
     nsc: false,
     "meter-replacement": false,
+    material: false,
   })
 
   const modules = [
@@ -148,6 +151,17 @@ export function DashboardMenu({ onSelect, userRole, userAgencies = [], permissio
       color: "text-indigo-600",
       bgColor: "bg-indigo-50",
       borderColor: "hover:border-indigo-400 hover:shadow-indigo-500/10",
+      allowed: ["admin", "executive", "agency"],
+      status: "live"
+    },
+    {
+      id: "material",
+      title: "Material Management",
+      description: "Track office store materials inward and issuance",
+      icon: Package,
+      color: "text-amber-600",
+      bgColor: "bg-amber-50",
+      borderColor: "hover:border-amber-400 hover:shadow-amber-500/10",
       allowed: ["admin", "executive", "agency"],
       status: "live"
     },
@@ -387,6 +401,22 @@ export function DashboardMenu({ onSelect, userRole, userAgencies = [], permissio
       } finally {
         setLoadingModules(prev => ({ ...prev, dtr: false, "dtr-painting": false }))
       }
+
+      // Material Stock
+      try {
+        setLoadingModules(prev => ({ ...prev, material: true }))
+        const res = await fetch("/api/material")
+        if (res.ok) {
+          const data = await res.json()
+          const stock = data.stock || []
+          const belowThresholdCount = stock.filter((s: any) => s.currentStock < (s.threshold || 0)).length
+          setMaterialPendingCount(belowThresholdCount)
+        }
+      } catch (e) {
+        console.error("Auto-fetch material failed", e)
+      } finally {
+        setLoadingModules(prev => ({ ...prev, material: false }))
+      }
     }
     loadPendingCount()
   }, [userRole, userAgencies])
@@ -448,6 +478,12 @@ export function DashboardMenu({ onSelect, userRole, userAgencies = [], permissio
                     <div className={`absolute top-2 right-2 md:top-4 md:right-4 z-20 flex items-center justify-center text-white text-[10px] md:text-xs font-bold min-w-[1.5rem] h-6 px-1.5 md:min-w-[2rem] md:h-8 md:px-2 rounded-full shadow-lg border-2 border-white ring-2 ring-indigo-500/10 transition-all duration-300 group-hover:scale-105 ${loadingModules["meter-replacement"] ? "bg-blue-500 animate-pulse" : replacementPendingCount > 0 ? "bg-indigo-600" : "bg-gray-400"
                       }`}>
                       {loadingModules["meter-replacement"] ? <RefreshCw className="h-3 w-3 animate-spin" /> : replacementPendingCount}
+                    </div>
+                  )}
+                  {module.id === "material" && (
+                    <div className={`absolute top-2 right-2 md:top-4 md:right-4 z-20 flex items-center justify-center text-white text-[10px] md:text-xs font-bold min-w-[1.5rem] h-6 px-1.5 md:min-w-[2rem] md:h-8 md:px-2 rounded-full shadow-lg border-2 border-white ring-2 ring-amber-500/10 transition-all duration-300 group-hover:scale-105 ${loadingModules["material"] ? "bg-blue-500 animate-pulse" : materialPendingCount > 0 ? "bg-amber-600 shadow-amber-500/20" : "bg-gray-400 shadow-gray-400/20"
+                      }`}>
+                      {loadingModules["material"] ? <RefreshCw className="h-3 w-3 animate-spin" /> : materialPendingCount}
                     </div>
                   )}
                   {module.id === "dtr" && (

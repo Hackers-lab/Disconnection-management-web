@@ -26,6 +26,7 @@ export interface RolePermissions {
   admin: string[]
   meter_replacement: string[]
   dtr_painting: string[]
+  material: string[]
 }
 
 const MODULES = [
@@ -39,6 +40,7 @@ const MODULES = [
   "admin",
   "meter_replacement",
   "dtr_painting",
+  "material",
 ] as const
 
 const DEFAULT_ROLES: RolePermissions[] = [
@@ -54,6 +56,7 @@ const DEFAULT_ROLES: RolePermissions[] = [
     admin: ["read", "create", "update", "delete"],
     meter_replacement: ["read", "create", "update", "delete"],
     dtr_painting: ["read", "create", "update", "delete"],
+    material: ["read", "create", "update", "delete"],
   },
   {
     role: "viewer",
@@ -67,6 +70,7 @@ const DEFAULT_ROLES: RolePermissions[] = [
     admin: [],
     meter_replacement: ["read"],
     dtr_painting: ["read"],
+    material: ["read"],
   },
   {
     role: "agency",
@@ -80,6 +84,7 @@ const DEFAULT_ROLES: RolePermissions[] = [
     admin: [],
     meter_replacement: ["read", "update"],
     dtr_painting: ["read", "update"],
+    material: ["read", "update"],
   },
   {
     role: "technical",
@@ -93,6 +98,7 @@ const DEFAULT_ROLES: RolePermissions[] = [
     admin: [],
     meter_replacement: [],
     dtr_painting: [],
+    material: [],
   },
   {
     role: "painter",
@@ -106,6 +112,7 @@ const DEFAULT_ROLES: RolePermissions[] = [
     admin: [],
     meter_replacement: [],
     dtr_painting: ["read", "update"],
+    material: [],
   },
   {
     role: "executive",
@@ -119,6 +126,7 @@ const DEFAULT_ROLES: RolePermissions[] = [
     admin: [],
     meter_replacement: ["read", "create", "update", "delete"],
     dtr_painting: ["read", "create", "update", "delete"],
+    material: ["read", "create", "update", "delete"],
   },
 ]
 
@@ -188,12 +196,12 @@ export class RoleStorage {
         // Tab exists. Let's check headers.
         const res = await sheets.spreadsheets.values.get({
           spreadsheetId: SHEET_ID,
-          range: `${SHEET_NAME}!A1:K`,
+          range: `${SHEET_NAME}!A1:Z`,
         })
         const allRows = res.data.values || []
         const headers = allRows[0] || []
 
-        if (!headers.includes("meter_replacement") || !headers.includes("dtr_painting")) {
+        if (!headers.includes("meter_replacement") || !headers.includes("dtr_painting") || !headers.includes("material")) {
           console.log(`Updating "${SHEET_NAME}" with new headers and default permissions for missing columns...`)
           
           // 1. Update header row
@@ -247,7 +255,7 @@ export class RoleStorage {
 
     const res = await sheets.spreadsheets.values.get({
       spreadsheetId: SHEET_ID,
-      range: `${SHEET_NAME}!A2:K`,
+      range: `${SHEET_NAME}!A2:Z`,
     })
     const rows = res.data.values || []
     const roles = this._parseRows(rows)
@@ -301,7 +309,7 @@ export class RoleStorage {
       // Append
       await sheets.spreadsheets.values.append({
         spreadsheetId: SHEET_ID,
-        range: `${SHEET_NAME}!A:K`,
+        range: `${SHEET_NAME}!A:Z`,
         valueInputOption: "RAW",
         requestBody: {
           values: [rowValues],
@@ -312,7 +320,7 @@ export class RoleStorage {
       const rowNum = idx + 2 // A2 starts at index 0, so row is index + 2
       await sheets.spreadsheets.values.update({
         spreadsheetId: SHEET_ID,
-        range: `${SHEET_NAME}!A${rowNum}:K${rowNum}`,
+        range: `${SHEET_NAME}!A${rowNum}:Z${rowNum}`,
         valueInputOption: "RAW",
         requestBody: {
           values: [rowValues],

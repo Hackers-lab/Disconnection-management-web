@@ -704,6 +704,9 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
       meter: ["read"],
       nsc: ["read"],
       consumer_master: ["read"],
+      meter_replacement: ["read"],
+      dtr_painting: ["read"],
+      material: ["read"],
       admin: []
     }
     
@@ -2549,6 +2552,7 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
                     { id: "meter_replacement", name: "Replacement List" },
                     { id: "nsc", name: "NSC Management" },
                     { id: "consumer_master", name: "Consumer Master" },
+                    { id: "material", name: "Material Management" },
                     { id: "admin", name: "Admin Panel" },
                   ]
 

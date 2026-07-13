@@ -1,0 +1,23 @@
+import { NextResponse } from "next/server"
+import { checkApiPermission } from "@/lib/permissions"
+import { getMaterialHistory } from "@/lib/material-service"
+
+export async function GET(req: Request) {
+  const { authorized, error, status } = await checkApiPermission("material", "read")
+  if (!authorized) return NextResponse.json({ error }, { status: status || 403 })
+
+  try {
+    const { searchParams } = new URL(req.url)
+    const materialId = searchParams.get("materialId")
+
+    if (!materialId) {
+      return NextResponse.json({ error: "materialId query param is required" }, { status: 400 })
+    }
+
+    const history = await getMaterialHistory(materialId)
+    return NextResponse.json(history)
+  } catch (e: any) {
+    console.error("Material history error:", e)
+    return NextResponse.json({ error: e.message }, { status: 500 })
+  }
+}
