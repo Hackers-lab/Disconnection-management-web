@@ -40,142 +40,154 @@ const ISSUE_HEADERS = [
 const MATERIAL_TAG = "material"
 const REVALIDATE_S = 60
 let tabsReady = false
+let ensureTabsPromise: Promise<void> | null = null
 
 export function invalidateMaterialCache() { revalidateTag(MATERIAL_TAG) }
 
 // ─── Tab bootstrap ────────────────────────────────────────────────────────────
 async function ensureTabs(id: string) {
   if (tabsReady) return
-  const meta = await sheets.spreadsheets.get({ spreadsheetId: id })
-  const existing = meta.data.sheets?.map(s => s.properties?.title) || []
-  const toCreate = [CAT_TAB, RECEIVE_TAB, ISSUE_TAB].filter(t => !existing.includes(t))
+  if (ensureTabsPromise) return ensureTabsPromise
 
-  if (toCreate.length > 0) {
-    await sheets.spreadsheets.batchUpdate({
-      spreadsheetId: id,
-      requestBody: {
-        requests: toCreate.map(t => ({ addSheet: { properties: { title: t } } })),
-      },
-    })
-    for (const tab of toCreate) {
-      const headers = tab === CAT_TAB ? CAT_HEADERS
-        : tab === RECEIVE_TAB ? RECEIVE_HEADERS
-        : ISSUE_HEADERS
-      await sheets.spreadsheets.values.update({
-        spreadsheetId: id,
-        range: `${tab}!A1`,
-        valueInputOption: "RAW",
-        requestBody: { values: [headers] },
-      })
-    }
-  }
+  ensureTabsPromise = (async () => {
+    try {
+      const meta = await sheets.spreadsheets.get({ spreadsheetId: id })
+      const existing = meta.data.sheets?.map(s => s.properties?.title) || []
+      const toCreate = [CAT_TAB, RECEIVE_TAB, ISSUE_TAB].filter(t => !existing.includes(t))
 
-  // Seed catalogue if empty
-  if (toCreate.includes(CAT_TAB) || !existing.includes(CAT_TAB)) {
-    // Check if catalogue is empty (just header)
-    const catRows = await sheets.spreadsheets.values.get({
-      spreadsheetId: id,
-      range: `${CAT_TAB}!A:A`,
-    })
-    const rowCount = (catRows.data.values || []).length
-    if (rowCount <= 1) {
-      // Seed with default materials
-      const seedRows = SEED_MATERIALS.map((m, i) => [
-        `MAT-${String(i + 1).padStart(4, "0")}`, // Material ID
-        m.materialNo,
-        m.description,
-        m.unit,
-        m.category,
-        "yes",
-        nowDate(),
-        "system",
-      ])
-      if (seedRows.length > 0) {
-        await sheets.spreadsheets.values.append({
+      if (toCreate.length > 0) {
+        await sheets.spreadsheets.batchUpdate({
           spreadsheetId: id,
-          range: `${CAT_TAB}!A2`,
-          valueInputOption: "RAW",
-          requestBody: { values: seedRows },
+          requestBody: {
+            requests: toCreate.map(t => ({ addSheet: { properties: { title: t } } })),
+          },
         })
+        for (const tab of toCreate) {
+          const headers = tab === CAT_TAB ? CAT_HEADERS
+            : tab === RECEIVE_TAB ? RECEIVE_HEADERS
+            : ISSUE_HEADERS
+          await sheets.spreadsheets.values.update({
+            spreadsheetId: id,
+            range: `${tab}!A1`,
+            valueInputOption: "RAW",
+            requestBody: { values: [headers] },
+          })
+        }
       }
-    }
-  }
 
-  // Migration check for Min Threshold column
-  if (existing.includes(CAT_TAB)) {
-    const res = await sheets.spreadsheets.values.get({
-      spreadsheetId: id,
-      range: `${CAT_TAB}!A1:I1`,
-    })
-    const headers = res.data.values?.[0] || []
-    if (!headers.includes("Min Threshold")) {
-      console.log("Migrating Mat_Catalogue sheet to include Min Threshold...")
-      await sheets.spreadsheets.values.update({
-        spreadsheetId: id,
-        range: `${CAT_TAB}!A1`,
-        valueInputOption: "RAW",
-        requestBody: { values: [CAT_HEADERS] },
-      })
-      const allRes = await sheets.spreadsheets.values.get({
-        spreadsheetId: id,
-        range: `${CAT_TAB}!A2:H`,
-      })
-      const rows = allRes.data.values || []
-      const updatedRows = rows.map(r => {
-        const nr = [...r]
-        while (nr.length < 8) nr.push("")
-        nr.push("0")
-        return nr
-      })
-      if (updatedRows.length > 0) {
-        await sheets.spreadsheets.values.update({
+      // Seed catalogue if empty
+      if (toCreate.includes(CAT_TAB) || !existing.includes(CAT_TAB)) {
+        // Check if catalogue is empty (just header)
+        const catRows = await sheets.spreadsheets.values.get({
           spreadsheetId: id,
-          range: `${CAT_TAB}!A2`,
-          valueInputOption: "RAW",
-          requestBody: { values: updatedRows },
+          range: `${CAT_TAB}!A:A`,
         })
+        const rowCount = (catRows.data.values || []).length
+        if (rowCount <= 1) {
+          // Seed with default materials
+          const seedRows = SEED_MATERIALS.map((m, i) => [
+            `MAT-${String(i + 1).padStart(4, "0")}`, // Material ID
+            m.materialNo,
+            m.description,
+            m.unit,
+            m.category,
+            "yes",
+            nowDate(),
+            "system",
+          ])
+          if (seedRows.length > 0) {
+            await sheets.spreadsheets.values.append({
+              spreadsheetId: id,
+              range: `${CAT_TAB}!A2`,
+              valueInputOption: "RAW",
+              requestBody: { values: seedRows },
+            })
+          }
+        }
       }
-    }
-  }
 
-  // Migration check for Photo URL column
-  if (existing.includes(CAT_TAB)) {
-    const res = await sheets.spreadsheets.values.get({
-      spreadsheetId: id,
-      range: `${CAT_TAB}!A1:J1`,
-    })
-    const headers = res.data.values?.[0] || []
-    if (!headers.includes("Photo URL")) {
-      console.log("Migrating Mat_Catalogue sheet to include Photo URL...")
-      await sheets.spreadsheets.values.update({
-        spreadsheetId: id,
-        range: `${CAT_TAB}!A1`,
-        valueInputOption: "RAW",
-        requestBody: { values: [CAT_HEADERS] },
-      })
-      const allRes = await sheets.spreadsheets.values.get({
-        spreadsheetId: id,
-        range: `${CAT_TAB}!A2:I`,
-      })
-      const rows = allRes.data.values || []
-      const updatedRows = rows.map(r => {
-        const nr = [...r]
-        while (nr.length < 9) nr.push("")
-        nr.push("")
-        return nr
-      })
-      if (updatedRows.length > 0) {
-        await sheets.spreadsheets.values.update({
+      // Migration check for Min Threshold column
+      if (existing.includes(CAT_TAB)) {
+        const res = await sheets.spreadsheets.values.get({
           spreadsheetId: id,
-          range: `${CAT_TAB}!A2`,
-          valueInputOption: "RAW",
-          requestBody: { values: updatedRows },
+          range: `${CAT_TAB}!A1:I1`,
         })
+        const headers = res.data.values?.[0] || []
+        if (!headers.includes("Min Threshold")) {
+          console.log("Migrating Mat_Catalogue sheet to include Min Threshold...")
+          await sheets.spreadsheets.values.update({
+            spreadsheetId: id,
+            range: `${CAT_TAB}!A1`,
+            valueInputOption: "RAW",
+            requestBody: { values: [CAT_HEADERS] },
+          })
+          const allRes = await sheets.spreadsheets.values.get({
+            spreadsheetId: id,
+            range: `${CAT_TAB}!A2:H`,
+          })
+          const rows = allRes.data.values || []
+          const updatedRows = rows.map(r => {
+            const nr = [...r]
+            while (nr.length < 8) nr.push("")
+            nr.push("0")
+            return nr
+          })
+          if (updatedRows.length > 0) {
+            await sheets.spreadsheets.values.update({
+              spreadsheetId: id,
+              range: `${CAT_TAB}!A2`,
+              valueInputOption: "RAW",
+              requestBody: { values: updatedRows },
+            })
+          }
+        }
       }
-    }
-  }
 
-  tabsReady = true
+      // Migration check for Photo URL column
+      if (existing.includes(CAT_TAB)) {
+        const res = await sheets.spreadsheets.values.get({
+          spreadsheetId: id,
+          range: `${CAT_TAB}!A1:J1`,
+        })
+        const headers = res.data.values?.[0] || []
+        if (!headers.includes("Photo URL")) {
+          console.log("Migrating Mat_Catalogue sheet to include Photo URL...")
+          await sheets.spreadsheets.values.update({
+            spreadsheetId: id,
+            range: `${CAT_TAB}!A1`,
+            valueInputOption: "RAW",
+            requestBody: { values: [CAT_HEADERS] },
+          })
+          const allRes = await sheets.spreadsheets.values.get({
+            spreadsheetId: id,
+            range: `${CAT_TAB}!A2:I`,
+          })
+          const rows = allRes.data.values || []
+          const updatedRows = rows.map(r => {
+            const nr = [...r]
+            while (nr.length < 9) nr.push("")
+            nr.push("")
+            return nr
+          })
+          if (updatedRows.length > 0) {
+            await sheets.spreadsheets.values.update({
+              spreadsheetId: id,
+              range: `${CAT_TAB}!A2`,
+              valueInputOption: "RAW",
+              requestBody: { values: updatedRows },
+            })
+          }
+        }
+      }
+
+      tabsReady = true
+    } catch (err) {
+      ensureTabsPromise = null
+      throw err
+    }
+  })()
+
+  return ensureTabsPromise
 }
 
 // ─── Parsers ──────────────────────────────────────────────────────────────────
@@ -235,7 +247,7 @@ async function rawCatalogue() {
   await ensureTabs(id)
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId: id,
-    range: `${CAT_TAB}!A2:H`,
+    range: `${CAT_TAB}!A2:J`,
   })
   const items = (res.data.values || []).map(parseCatalogue)
   const seenIds = new Set<string>()
