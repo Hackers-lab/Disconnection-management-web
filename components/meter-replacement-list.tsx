@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   Search, X, Plus, Clock, CheckCircle2, ChevronLeft, ChevronRight,
   Loader2, Download, RefreshCw, Check, ArrowLeft, RotateCcw, Package,
-  MapPin, Phone, Building2, User, Upload, FileText
+  MapPin, Phone, Building2, User, Upload, FileText, Monitor
 } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
 import { useHashState } from "@/hooks/use-hash-state"
@@ -69,6 +69,41 @@ export function MeterReplacementList({ userRole, userAgencies, username, agencie
   const [view, setView] = useHashState<"list" | "create">("meter-replacement", "list")
   
   const isAdmin = userRole === "admin" || userRole === "executive"
+  const [oldMeterMap, setOldMeterMap] = useState<Record<string, string>>({})
+
+  useEffect(() => {
+    async function loadMasterMap() {
+      try {
+        const cached = await getFromCache<ConsumerMasterRow[]>("consumer_master_cache")
+        if (cached && Array.isArray(cached)) {
+          const map: Record<string, string> = {}
+          cached.forEach(c => {
+            if (c.consumerId && c.meterNo) {
+              map[c.consumerId] = c.meterNo
+            }
+          })
+          setOldMeterMap(map)
+        } else {
+          const res = await fetch("/api/consumer-master")
+          if (res.ok) {
+            const data: ConsumerMasterRow[] = await res.json()
+            await saveToCache("consumer_master_cache", data)
+            const map: Record<string, string> = {}
+            data.forEach(c => {
+              if (c.consumerId && c.meterNo) {
+                map[c.consumerId] = c.meterNo
+              }
+            })
+            setOldMeterMap(map)
+          }
+        }
+      } catch (e) {
+        console.error("Failed to load master map for old meter lookup", e)
+      }
+    }
+    loadMasterMap()
+  }, [])
+
   const PAGE_SIZE = 15
 
   const load = async (silent = false) => {
@@ -125,6 +160,7 @@ export function MeterReplacementList({ userRole, userAgencies, username, agencie
       "#": i + 1,
       "Replacement ID": r.replacementId,
       "Consumer ID": r.consumerId,
+      "Old Meter No": oldMeterMap[r.consumerId] || "",
       "Name": r.consumerName,
       "Address": r.address,
       "Mobile": r.mobile,
@@ -205,55 +241,93 @@ export function MeterReplacementList({ userRole, userAgencies, username, agencie
       </div>
 
       {/* Replacement cards */}
-      <div className="space-y-3">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {paginated.length === 0 ? (
-          <div className="bg-white text-center py-16 text-gray-400 border rounded-2xl">
+          <div className="col-span-full bg-white text-center py-16 text-gray-400 border rounded-2xl">
             <Package className="h-10 w-10 mx-auto mb-3 opacity-30" />
             <p>No replacement proposals found</p>
           </div>
         ) : paginated.map(r => (
-          <Card key={r.replacementId} className="hover:shadow-md transition-all duration-200 overflow-hidden border border-gray-200 hover:border-blue-200">
-            <CardContent className="p-4">
-              <div className="flex justify-between items-start gap-2">
-                <div className="min-w-0 flex-1 space-y-1">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-mono text-xs text-gray-400 font-bold">{r.replacementId}</span>
-                    <span className="text-xs text-gray-400">•</span>
-                    <span className="text-xs text-gray-500 font-medium">Proposed: {r.proposedDate}</span>
-                    <span className="text-xs text-gray-400">•</span>
-                    <span className={`text-xs font-semibold ${PURPOSE_COLORS[r.purpose] || "text-blue-700"}`}>
+          <Card key={r.replacementId} className="hover:shadow-md transition-shadow overflow-hidden max-w-full">
+            <CardHeader className="pb-3">
+              <div className="flex justify-between items-start">
+                <div>
+                  <CardTitle className="text-lg">{r.consumerName || "No Name"}</CardTitle>
+                  <p className="text-sm text-gray-600 font-mono">{r.consumerId || "No ID"}</p>
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    <span className="font-mono text-[10px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">
+                      ID: {r.replacementId}
+                    </span>
+                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border ${
+                      PURPOSE_COLORS[r.purpose] || "text-blue-700 border-blue-200"
+                    }`}>
                       {PURPOSE_LABELS[r.purpose] || r.purpose}
                     </span>
                   </div>
-                  <h4 className="font-bold text-gray-900 text-sm md:text-base leading-tight mt-1">
-                    {r.consumerName} <span className="font-mono font-normal text-xs text-gray-500">({r.consumerId})</span>
-                  </h4>
-                  <div className="bg-slate-50 border rounded-lg p-2 mt-2 space-y-1">
-                    {r.address && <p className="text-xs text-gray-600 flex items-center gap-1"><MapPin className="h-3 w-3 shrink-0 text-gray-400" /> {r.address}</p>}
-                    {r.mobile && <p className="text-xs text-gray-600 flex items-center gap-1"><Phone className="h-3 w-3 shrink-0 text-gray-400" /> <span className="font-mono">{r.mobile}</span></p>}
-                    {r.agency && <p className="text-xs text-gray-600 flex items-center gap-1"><Building2 className="h-3 w-3 shrink-0 text-gray-400" /> Agency: <strong>{r.agency}</strong></p>}
-                  </div>
-                  {r.remarks && <p className="text-xs text-gray-500 italic mt-1">Remarks: "{r.remarks}"</p>}
-                  {r.attachmentUrl && (
-                    <div className="mt-1">
-                      <a href={r.attachmentUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-blue-600 underline font-medium hover:text-blue-800">
-                        <FileText className="h-3.5 w-3.5 shrink-0 text-blue-500" /> View Attachment ↗
-                      </a>
-                    </div>
-                  )}
-                  
-                  {/* Linked Meter info */}
-                  {(r.serialNo || r.issueId) && (
-                    <div className="pt-2 border-t mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs">
-                      {r.serialNo && <p className="text-gray-600">Issued Meter: <strong className="font-mono text-blue-700">{r.serialNo}</strong></p>}
-                      {r.issueId && <p className="text-gray-600">Issue ID: <strong className="font-mono text-gray-500">{r.issueId}</strong></p>}
-                    </div>
-                  )}
                 </div>
                 <div className="flex flex-col items-end gap-1 shrink-0">
                   <Badge className={STATUS_COLORS[r.status] || ""}>{STATUS_LABELS[r.status] || r.status}</Badge>
+                  <Badge variant="outline" className="text-xs max-w-[120px] truncate block">{r.agency}</Badge>
                 </div>
               </div>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {r.address && (
+                <div className="flex items-start gap-2">
+                  <MapPin className="h-4 w-4 text-gray-400 mt-0.5 shrink-0" />
+                  <p className="text-sm text-gray-600 line-clamp-2">{r.address}</p>
+                </div>
+              )}
+
+              {r.mobile && (
+                <div className="flex items-center gap-2">
+                  <Phone className="h-4 w-4 text-gray-400" />
+                  <a href={`tel:${r.mobile}`} className="text-sm text-blue-600 hover:underline">
+                    {r.mobile}
+                  </a>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="flex items-center gap-2">
+                  <Monitor className="h-4 w-4 text-gray-400 shrink-0" />
+                  <div>
+                    <p className="text-sm font-semibold text-amber-700 font-mono">
+                      {oldMeterMap[r.consumerId] || "—"}
+                    </p>
+                    <p className="text-[10px] text-gray-500 uppercase font-bold">Old Meter No</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Package className="h-4 w-4 text-gray-400 shrink-0" />
+                  <div>
+                    <p className="text-sm font-semibold text-blue-800 font-mono">
+                      {r.serialNo || "—"}
+                    </p>
+                    <p className="text-[10px] text-gray-500 uppercase font-bold">New Meter Serial</p>
+                  </div>
+                </div>
+              </div>
+
+              {r.remarks && (
+                <p className="text-xs text-gray-500 italic bg-gray-50 p-2 rounded">
+                  Remarks: "{r.remarks}"
+                </p>
+              )}
+
+              {r.attachmentUrl && (
+                <div className="pt-1">
+                  <a href={r.attachmentUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-blue-600 underline font-medium hover:text-blue-800">
+                    View Attachment ↗
+                  </a>
+                </div>
+              )}
+
+              {(r.serialNo || r.issueId) && (
+                <div className="pt-2 border-t mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500">
+                  {r.issueId && <p>Issue ID: <strong className="font-mono">{r.issueId}</strong></p>}
+                </div>
+              )}
             </CardContent>
           </Card>
         ))}

@@ -12,7 +12,7 @@ import {
   Search, X, Plus, RefreshCw, Loader2, Check, AlertCircle,
   Printer, ChevronLeft, ChevronRight, RotateCcw, Package,
   ArrowLeft, Upload, ChevronDown, ChevronUp, FileDown, ClipboardCheck,
-  MapPin, Phone, Building2, FileSpreadsheet,
+  MapPin, Phone, Building2, FileSpreadsheet, Monitor,
 } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
 import type { MeterStock, MeterIssue, StockSummary, MeterTypeLabel } from "@/lib/meter-types"
@@ -22,6 +22,7 @@ import { MeterCompleteForm } from "@/components/meter-complete-form"
 import { printMeterSlip } from "@/components/meter-slip"
 import { useHashState } from "@/hooks/use-hash-state"
 import { getFromCache, saveToCache } from "@/lib/indexed-db"
+import type { ConsumerMasterRow } from "@/components/consumer-master"
 // xlsx loaded dynamically to reduce initial bundle size
 const loadXLSX = () => import("xlsx")
 
@@ -109,6 +110,41 @@ export function MeterList({ userRole, userAgencies, username, agencies }: Props)
   const [repSubTab, setRepSubTab]                     = useState<"pending" | "progress" | "replaced" | "all">("pending")
   // NSC quotation lookup — keyed by receiveNo → status
   const [nscStatusMap, setNscStatusMap]               = useState<Record<string, string>>({})
+  const [oldMeterMap, setOldMeterMap]                 = useState<Record<string, string>>({})
+
+  useEffect(() => {
+    async function loadMasterMap() {
+      try {
+        const cached = await getFromCache<ConsumerMasterRow[]>("consumer_master_cache")
+        if (cached && Array.isArray(cached)) {
+          const map: Record<string, string> = {}
+          cached.forEach(c => {
+            if (c.consumerId && c.meterNo) {
+              map[c.consumerId] = c.meterNo
+            }
+          })
+          setOldMeterMap(map)
+        } else {
+          const res = await fetch("/api/consumer-master")
+          if (res.ok) {
+            const data: ConsumerMasterRow[] = await res.json()
+            await saveToCache("consumer_master_cache", data)
+            const map: Record<string, string> = {}
+            data.forEach(c => {
+              if (c.consumerId && c.meterNo) {
+                map[c.consumerId] = c.meterNo
+              }
+            })
+            setOldMeterMap(map)
+          }
+        }
+      } catch (e) {
+        console.error("Failed to load master map for old meter lookup", e)
+      }
+    }
+    loadMasterMap()
+  }, [])
+
   const PAGE = 20
 
   // ── Load data ──────────────────────────────────────────────────────────────
@@ -508,61 +544,96 @@ export function MeterList({ userRole, userAgencies, username, agencies }: Props)
 
       {/* Issue cards */}
       {tab !== "stock" && tab !== "reports" && tab !== "proposed" && (
-        <div className="space-y-3">
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {paginated.length === 0 ? (
-            <div className="text-center py-16 text-gray-400">
+            <div className="col-span-full text-center py-16 text-gray-400 bg-white rounded-2xl border">
               <Package className="h-10 w-10 mx-auto mb-3 opacity-30" />
               <p>No meter issues found</p>
             </div>
           ) : paginated.map(issue => (
-            <Card key={issue.issueId} className={`hover:shadow-md transition-all duration-200 overflow-hidden border border-gray-200 hover:border-blue-200 ${issue.status === "issued" && isAdmin ? "cursor-pointer" : ""}`}>
-              <CardContent className="p-4">
-                <div className="flex justify-between items-start gap-2">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 flex-wrap">
+            <Card key={issue.issueId} className={`hover:shadow-md transition-shadow overflow-hidden max-w-full ${issue.status === "issued" && isAdmin ? "cursor-pointer" : ""}`}>
+              <CardHeader className="pb-3">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <CardTitle className="text-lg">{issue.consumerName || "No Name"}</CardTitle>
+                    <p className="text-sm text-gray-600 font-mono">{issue.consumerId || "No ID"}</p>
+                    <div className="flex flex-wrap gap-1.5 mt-2">
                       {isAdmin && issue.status === "issued" && (
                         <input type="checkbox" checked={selectedForSlip.has(issue.issueId)}
-                          onChange={() => toggleSlip(issue.issueId)} className="shrink-0" />
+                          onChange={(e) => { e.stopPropagation(); toggleSlip(issue.issueId) }} className="shrink-0 accent-blue-600" />
                       )}
-                      <span className="font-mono text-xs text-gray-400">{issue.issueId}</span>
-                      <span className="text-xs text-gray-400">•</span>
-                      <span className={`text-xs font-medium ${PURPOSE_COLORS[issue.purpose] ?? "text-blue-700"}`}>{PURPOSE_LABELS[issue.purpose]}</span>
-                    </div>
-                    <div className="flex items-center gap-2 mt-1 flex-wrap">
-                      <span className="font-mono font-bold text-blue-800">{issue.serialNo}</span>
-                      <span className="text-xs text-gray-500">{issue.meterType}</span>
-                    </div>
-                    <p className="text-xs text-gray-600 mt-0.5">
-                      {issue.consumerName && <span className="font-medium">{issue.consumerName} </span>}
-                      {issue.consumerId && <span className="font-mono">({issue.consumerId})</span>}
+                      <span className="font-mono text-[10px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">
+                        ID: {issue.issueId}
+                      </span>
                       {issue.nscReceiveNo && (
-                        <>
-                          <span className="font-mono text-green-700">NSC: {issue.nscReceiveNo}</span>
-                          {nscStatusMap[issue.nscReceiveNo] === "quotation_issued" && (
-                            <span className="ml-1.5 inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 border border-green-200">
-                              ✓ Quotation
-                            </span>
-                          )}
-                        </>
+                        <Badge variant="outline" className="text-[10px] text-green-700 border-green-200">
+                          NSC: {issue.nscReceiveNo}
+                        </Badge>
                       )}
-                    </p>
-                    {(issue.address || issue.mobile) && (
-                      <div className="mt-1 bg-blue-50 border border-blue-100 rounded-lg px-2.5 py-1.5 space-y-0.5">
-                        {issue.address && <p className="text-xs text-gray-700">{issue.address}</p>}
-                        {issue.mobile  && <p className="text-xs font-mono font-semibold text-blue-700">{issue.mobile}</p>}
-                      </div>
-                    )}
-                    <p className="text-xs text-gray-500 mt-0.5">
-                      Agency: <span className="font-medium">{issue.agency}</span>
-                      <span className="ml-2 text-gray-400">Issued: {issue.issueDate}</span>
-                    </p>
-                    {issue.status !== "issued" && issue.completedAt && (
-                      <p className="text-xs text-gray-400">Completed: {issue.completedAt} | Ref: {issue.completionRef}</p>
-                    )}
+                      {issue.nscReceiveNo && nscStatusMap[issue.nscReceiveNo] === "quotation_issued" && (
+                        <Badge variant="secondary" className="text-[10px] bg-green-100 text-green-700">
+                          ✓ Quotation
+                        </Badge>
+                      )}
+                    </div>
                   </div>
                   <div className="flex flex-col items-end gap-1 shrink-0">
                     <Badge className={STATUS_COLORS[issue.status] || ""}>{STATUS_LABELS[issue.status] || issue.status}</Badge>
+                    <Badge variant="outline" className="text-xs max-w-[120px] truncate block">{issue.agency}</Badge>
                   </div>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {issue.address && (
+                  <div className="flex items-start gap-2">
+                    <MapPin className="h-4 w-4 text-gray-400 mt-0.5 shrink-0" />
+                    <p className="text-sm text-gray-600 line-clamp-2">{issue.address}</p>
+                  </div>
+                )}
+
+                {issue.mobile && (
+                  <div className="flex items-center gap-2">
+                    <Phone className="h-4 w-4 text-gray-400" />
+                    <a href={`tel:${issue.mobile}`} className="text-sm text-blue-600 hover:underline">
+                      {issue.mobile}
+                    </a>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="flex items-center gap-2">
+                    <Monitor className="h-4 w-4 text-gray-400 shrink-0" />
+                    <div>
+                      <p className="text-sm font-semibold text-amber-700 font-mono">
+                        {oldMeterMap[issue.consumerId] || "—"}
+                      </p>
+                      <p className="text-[10px] text-gray-500 uppercase font-bold">Old Meter No</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Package className="h-4 w-4 text-gray-400 shrink-0" />
+                    <div>
+                      <p className="text-sm font-semibold text-blue-800 font-mono">
+                        {issue.serialNo || "—"}
+                      </p>
+                      <p className="text-[10px] text-gray-500 uppercase font-bold">New Meter Serial</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-xs text-gray-600 bg-gray-50 p-2 rounded">
+                  <div><span className="font-medium">Purpose:</span> <span className={`font-semibold ${PURPOSE_COLORS[issue.purpose] ?? "text-blue-700"}`}>{PURPOSE_LABELS[issue.purpose] || issue.purpose}</span></div>
+                  <div><span className="font-medium">Type:</span> {issue.meterType || "—"}</div>
+                </div>
+
+                <div className="flex items-center justify-between text-xs text-gray-500 pt-1">
+                  <div>Issued: {issue.issueDate || "—"}</div>
+                  {issue.status !== "issued" && issue.completedAt && (
+                    <div className="text-right">
+                      <p className="text-green-600 font-medium">{issue.completedAt}</p>
+                      <p className="text-[10px] text-gray-400">Completed</p>
+                    </div>
+                  )}
                 </div>
 
                 {issue.status === "issued" && (
@@ -578,11 +649,11 @@ export function MeterList({ userRole, userAgencies, username, agencies }: Props)
                     {isAdmin && (
                       <>
                         <Button size="sm" className="flex-1 h-9 bg-slate-950 hover:bg-slate-900 text-white text-xs font-semibold rounded-lg shadow-sm transition-colors"
-                          onClick={() => handleReturn(issue)}>
+                          onClick={(e) => { e.stopPropagation(); handleReturn(issue) }}>
                           <RotateCcw className="h-3 w-3 mr-1" /> Return
                         </Button>
                         <Button size="sm" variant="outline" className="h-9 px-2 text-xs font-semibold rounded-lg shadow-sm transition-colors"
-                          onClick={() => { setSelectedForSlip(new Set([issue.issueId])); printMeterSlip([issue]) }}>
+                          onClick={(e) => { e.stopPropagation(); setSelectedForSlip(new Set([issue.issueId])); printMeterSlip([issue]) }}>
                           <Printer className="h-3 w-3" />
                         </Button>
                       </>
@@ -602,12 +673,12 @@ export function MeterList({ userRole, userAgencies, username, agencies }: Props)
                             checked={selectedForFinalize.has(issue.issueId)}
                             onChange={() => toggleFinalize(issue.issueId)}
                           />
-                          <span className="text-xs text-gray-500">Select for bulk finalize</span>
+                          <span className="text-xs text-gray-500 font-medium">Select for bulk finalize</span>
                         </label>
                       )}
-                      {issue.purpose === "nsc" && <span className="flex-1 text-xs text-gray-400">NSC — finalize individually</span>}
-                      {issue.afterImage && <a href={issue.afterImage} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 underline">After ↗</a>}
-                      {issue.beforeImage && <a href={issue.beforeImage} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 underline">Before ↗</a>}
+                      {issue.purpose === "nsc" && <span className="flex-1 text-xs text-gray-400 font-medium">NSC — finalize individually</span>}
+                      {issue.afterImage && <a href={issue.afterImage} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 underline font-medium">After ↗</a>}
+                      {issue.beforeImage && <a href={issue.beforeImage} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 underline font-medium">Before ↗</a>}
                     </div>
                     {issue.newReading && <p className="text-xs text-gray-500">New reading: <strong>{issue.newReading}</strong></p>}
                     <Button size="sm" className="w-full h-9 bg-slate-950 hover:bg-slate-900 text-white text-xs font-semibold rounded-lg shadow-sm transition-colors"
@@ -623,15 +694,15 @@ export function MeterList({ userRole, userAgencies, username, agencies }: Props)
 
                 {/* Agency: installation_done is read-only */}
                 {issue.status === "installation_done" && !isAdmin && (
-                  <div className="mt-3 pt-3 border-t text-xs text-teal-700 font-medium flex items-center gap-1">
-                    <Check className="h-3 w-3" /> Submitted — awaiting admin finalization
+                  <div className="mt-3 pt-3 border-t text-xs text-teal-700 font-semibold flex items-center gap-1">
+                    <Check className="h-3.5 w-3.5" /> Submitted — awaiting admin finalization
                   </div>
                 )}
 
                 {(issue.status === "installed") && (
-                  <div className="flex gap-3 mt-2 text-xs text-gray-500">
-                    {issue.afterImage && <a href={issue.afterImage} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">After ↗</a>}
-                    {issue.beforeImage && <a href={issue.beforeImage} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">Before ↗</a>}
+                  <div className="flex gap-3 mt-2 pt-2 border-t text-xs text-gray-500">
+                    {issue.afterImage && <a href={issue.afterImage} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline font-medium">After ↗</a>}
+                    {issue.beforeImage && <a href={issue.beforeImage} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline font-medium">Before ↗</a>}
                     {issue.newReading && <span>New reading: <strong>{issue.newReading}</strong></span>}
                   </div>
                 )}
@@ -669,61 +740,26 @@ export function MeterList({ userRole, userAgencies, username, agencies }: Props)
               <p>No replacements found matching this criteria</p>
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {filteredReplacements.map(rep => (
-                <Card key={rep.replacementId} className="hover:shadow-md transition-all duration-200 overflow-hidden border border-gray-200 hover:border-blue-200">
-                  <CardContent className="p-4">
-                    <div className="flex justify-between items-start gap-2">
-                      <div className="min-w-0 flex-1 space-y-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-mono text-xs text-gray-400 font-bold">{rep.replacementId}</span>
-                          <span className="text-xs text-gray-400">•</span>
-                          <span className="text-xs text-gray-500 font-medium">Proposed: {rep.proposedDate}</span>
-                          <span className="text-xs text-gray-400">•</span>
-                          <span className={`text-xs font-semibold ${PURPOSE_COLORS[rep.purpose] || "text-blue-700"}`}>
+                <Card key={rep.replacementId} className="hover:shadow-md transition-shadow overflow-hidden max-w-full">
+                  <CardHeader className="pb-3">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <CardTitle className="text-lg">{rep.consumerName || "No Name"}</CardTitle>
+                        <p className="text-sm text-gray-600 font-mono">{rep.consumerId || "No ID"}</p>
+                        <div className="flex flex-wrap gap-1.5 mt-2">
+                          <span className="font-mono text-[10px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">
+                            ID: {rep.replacementId}
+                          </span>
+                          <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border ${
+                            PURPOSE_COLORS[rep.purpose] || "text-blue-700 border-blue-200"
+                          }`}>
                             {PURPOSE_LABELS[rep.purpose] || rep.purpose}
                           </span>
                         </div>
-                        <h4 className="font-bold text-gray-900 text-sm md:text-base leading-tight mt-1">
-                          {rep.consumerName} <span className="font-mono font-normal text-xs text-gray-500">({rep.consumerId})</span>
-                        </h4>
-                        <div className="bg-slate-50 border rounded-lg p-2 mt-2 space-y-1">
-                          {rep.address && <p className="text-xs text-gray-600 flex items-center gap-1"><MapPin className="h-3 w-3 shrink-0 text-gray-400" /> {rep.address}</p>}
-                          {rep.mobile && <p className="text-xs text-gray-600 flex items-center gap-1"><Phone className="h-3 w-3 shrink-0 text-gray-400" /> <span className="font-mono">{rep.mobile}</span></p>}
-                          {rep.agency && <p className="text-xs text-gray-600 flex items-center gap-1"><Building2 className="h-3 w-3 shrink-0 text-gray-400" /> Agency: <strong>{rep.agency}</strong></p>}
-                        </div>
-                        {rep.remarks && <p className="text-xs text-gray-500 italic mt-1">Remarks: "{rep.remarks}"</p>}
-                        
-                        {/* Status tracking info */}
-                        {rep.status !== "proposed" && (
-                          <div className="mt-3 pt-3 border-t space-y-1.5">
-                            <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
-                              {rep.serialNo && <p className="text-gray-600">Issued Meter: <strong className="font-mono text-blue-700">{rep.serialNo}</strong></p>}
-                              {rep.issueId && <p className="text-gray-600">Issue ID: <strong className="font-mono text-gray-500">{rep.issueId}</strong></p>}
-                            </div>
-                            
-                            {/* Detailed status note */}
-                            {rep.status === "issued" && (
-                              <p className="text-xs text-yellow-700 font-medium bg-yellow-50/50 border border-yellow-100 rounded px-2 py-0.5 w-fit">
-                                Pending installation by agency
-                              </p>
-                            )}
-                            {rep.status === "updated" && (
-                              <p className="text-xs text-teal-700 font-medium bg-teal-50/50 border border-teal-100 rounded px-2 py-0.5 w-fit">
-                                Installation done — awaiting admin finalization
-                              </p>
-                            )}
-                            {rep.status === "replaced" && (
-                              <p className="text-xs text-emerald-700 font-medium bg-emerald-50/50 border border-emerald-100 rounded px-2 py-0.5 w-fit">
-                                Replacement completed & finalized
-                              </p>
-                            )}
-                          </div>
-                        )}
                       </div>
-                      
-                      <div className="flex flex-col items-end gap-2 shrink-0">
-                        {/* Always show badge */}
+                      <div className="flex flex-col items-end gap-1 shrink-0">
                         <span className={`text-[10px] md:text-xs font-semibold px-2 py-0.5 rounded-full border ${
                           rep.status === "proposed" ? "bg-amber-50 text-amber-700 border-amber-200" :
                           rep.status === "issued" ? "bg-yellow-50 text-yellow-700 border-yellow-200" :
@@ -735,26 +771,102 @@ export function MeterList({ userRole, userAgencies, username, agencies }: Props)
                            rep.status === "updated" ? "Installed" :
                            "Completed"}
                         </span>
-                        
-                        {rep.status === "proposed" && (
-                          <Button size="sm" className="bg-slate-950 hover:bg-slate-900 text-white mt-1.5"
-                            onClick={() => {
-                              setPrefill({
-                                replacementId: rep.replacementId,
-                                consumerId: rep.consumerId,
-                                consumerName: rep.consumerName,
-                                address: rep.address,
-                                mobile: rep.mobile,
-                                purpose: rep.purpose,
-                                agency: rep.agency,
-                              })
-                              setView("issue")
-                            }}>
-                            Issue Meter
-                          </Button>
-                        )}
+                        <Badge variant="outline" className="text-xs max-w-[120px] truncate block">{rep.agency}</Badge>
                       </div>
                     </div>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {rep.address && (
+                      <div className="flex items-start gap-2">
+                        <MapPin className="h-4 w-4 text-gray-400 mt-0.5 shrink-0" />
+                        <p className="text-sm text-gray-600 line-clamp-2">{rep.address}</p>
+                      </div>
+                    )}
+
+                    {rep.mobile && (
+                      <div className="flex items-center gap-2">
+                        <Phone className="h-4 w-4 text-gray-400" />
+                        <a href={`tel:${rep.mobile}`} className="text-sm text-blue-600 hover:underline">
+                          {rep.mobile}
+                        </a>
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="flex items-center gap-2">
+                        <Monitor className="h-4 w-4 text-gray-400 shrink-0" />
+                        <div>
+                          <p className="text-sm font-semibold text-amber-700 font-mono">
+                            {oldMeterMap[rep.consumerId] || "—"}
+                          </p>
+                          <p className="text-[10px] text-gray-500 uppercase font-bold">Old Meter No</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Package className="h-4 w-4 text-gray-400 shrink-0" />
+                        <div>
+                          <p className="text-sm font-semibold text-blue-800 font-mono">
+                            {rep.serialNo || "—"}
+                          </p>
+                          <p className="text-[10px] text-gray-500 uppercase font-bold">New Meter Serial</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {rep.remarks && (
+                      <p className="text-xs text-gray-500 italic bg-gray-50 p-2 rounded">
+                        Remarks: "{rep.remarks}"
+                      </p>
+                    )}
+
+                    {rep.attachmentUrl && (
+                      <div className="pt-1">
+                        <a href={rep.attachmentUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-blue-600 underline font-medium hover:text-blue-800">
+                          View Attachment ↗
+                        </a>
+                      </div>
+                    )}
+
+                    {rep.status !== "proposed" && (
+                      <div className="pt-2 border-t flex flex-col gap-1.5">
+                        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500">
+                          {rep.issueId && <p>Issue ID: <strong className="font-mono">{rep.issueId}</strong></p>}
+                        </div>
+                        {rep.status === "issued" && (
+                          <p className="text-xs text-yellow-700 font-medium bg-yellow-50/50 border border-yellow-100 rounded px-2 py-0.5 w-fit">
+                            Pending installation by agency
+                          </p>
+                        )}
+                        {rep.status === "updated" && (
+                          <p className="text-xs text-teal-700 font-medium bg-teal-50/50 border border-teal-100 rounded px-2 py-0.5 w-fit">
+                            Installation done — awaiting admin finalization
+                          </p>
+                        )}
+                        {rep.status === "replaced" && (
+                          <p className="text-xs text-emerald-700 font-medium bg-emerald-50/50 border border-emerald-100 rounded px-2 py-0.5 w-fit">
+                            Replacement completed & finalized
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {rep.status === "proposed" && (
+                      <Button size="sm" className="w-full bg-slate-950 hover:bg-slate-900 text-white mt-2"
+                        onClick={() => {
+                          setPrefill({
+                            replacementId: rep.replacementId,
+                            consumerId: rep.consumerId,
+                            consumerName: rep.consumerName,
+                            address: rep.address,
+                            mobile: rep.mobile,
+                            purpose: rep.purpose,
+                            agency: rep.agency,
+                          })
+                          setView("issue")
+                        }}>
+                        Issue Meter
+                      </Button>
+                    )}
                   </CardContent>
                 </Card>
               ))}
@@ -1049,6 +1161,7 @@ function ReportsPanel({ issues, summary, onExport }: { issues: MeterIssue[]; sum
       "Issue Date": i.issueDate,
       "Consumer ID": i.consumerId,
       "Consumer Name": i.consumerName,
+      "Old Meter No": oldMeterMap[i.consumerId] || "",
       "Serial No": i.serialNo,
       "Meter Type": i.meterType,
       "Purpose": PURPOSE_LABELS[i.purpose] || i.purpose,
@@ -1129,7 +1242,7 @@ function ReportsPanel({ issues, summary, onExport }: { issues: MeterIssue[]; sum
     // Raw issues sheet
     const rawRows = issues.map(i => ({
       "Issue ID": i.issueId, "Date": i.issueDate, "Purpose": i.purpose,
-      "Consumer ID": i.consumerId, "NSC No": i.nscReceiveNo, "Consumer Name": i.consumerName,
+      "Consumer ID": i.consumerId, "Old Meter No": oldMeterMap[i.consumerId] || "", "NSC No": i.nscReceiveNo, "Consumer Name": i.consumerName,
       "Agency": i.agency, "Serial No": i.serialNo, "Meter Type": i.meterType,
       "Status": i.status, "Note No": i.completionRef, "Installation No": i.installationNo,
       "Completed At": i.completedAt, "Completed By": i.completedBy, "Remarks": i.remarks,
