@@ -27,6 +27,22 @@ const CACHE_KEY = "material_data_cache"
 type MainView = "menu" | "stock" | "settings" | "receive" | "issue"
 type SettingsSubTab = "catalogue" | "transactions"
 
+function getGoogleDriveDirectLink(url: string): string {
+  if (!url) return ""
+  if (url.includes("drive.google.com")) {
+    let fileId = ""
+    if (url.includes("/file/d/")) {
+      const parts = url.split("/file/d/")
+      if (parts[1]) fileId = parts[1].split("/")[0]
+    } else if (url.includes("id=")) {
+      const match = url.match(/[?&]id=([^&]+)/)
+      if (match && match[1]) fileId = match[1]
+    }
+    if (fileId) return `https://lh3.googleusercontent.com/d/${fileId}`
+  }
+  return url
+}
+
 interface Props {
   userRole: string
   userAgencies: string[]
@@ -630,12 +646,12 @@ export function MaterialList({ userRole, userAgencies, username, permissions }: 
                       <TableCell className="text-xs flex items-center gap-2">
                         {s.photoUrl ? (
                           <img 
-                            src={s.photoUrl} 
+                            src={getGoogleDriveDirectLink(s.photoUrl)} 
                             alt="" 
                             className="h-7 w-7 rounded-lg object-cover border bg-gray-50 flex-shrink-0 cursor-zoom-in hover:opacity-80 transition-opacity"
                             onClick={(e) => {
                               e.stopPropagation()
-                              setPreviewImage({ url: s.photoUrl, title: s.description })
+                              setPreviewImage({ url: getGoogleDriveDirectLink(s.photoUrl), title: s.description })
                             }}
                           />
                         ) : (
@@ -879,12 +895,12 @@ export function MaterialList({ userRole, userAgencies, username, permissions }: 
                           <TableCell className="text-xs py-2 font-medium flex items-center gap-2">
                             {m.photoUrl ? (
                               <img 
-                                src={m.photoUrl} 
+                                src={getGoogleDriveDirectLink(m.photoUrl)} 
                                 alt="" 
                                 className="h-7 w-7 rounded-lg object-cover border bg-gray-50 flex-shrink-0 cursor-zoom-in hover:opacity-80 transition-opacity"
                                 onClick={(e) => {
                                   e.stopPropagation()
-                                  setPreviewImage({ url: m.photoUrl, title: m.description })
+                                  setPreviewImage({ url: getGoogleDriveDirectLink(m.photoUrl), title: m.description })
                                 }}
                               />
                             ) : (

@@ -9,6 +9,22 @@ import { Card, CardContent } from "@/components/ui/card"
 import { ArrowLeft, Loader2, ArrowDownToLine, Plus, Trash2, Camera, Upload, Package } from "lucide-react"
 import type { Material } from "@/lib/material-types"
 
+function getGoogleDriveDirectLink(url: string): string {
+  if (!url) return ""
+  if (url.includes("drive.google.com")) {
+    let fileId = ""
+    if (url.includes("/file/d/")) {
+      const parts = url.split("/file/d/")
+      if (parts[1]) fileId = parts[1].split("/")[0]
+    } else if (url.includes("id=")) {
+      const match = url.match(/[?&]id=([^&]+)/)
+      if (match && match[1]) fileId = match[1]
+    }
+    if (fileId) return `https://lh3.googleusercontent.com/d/${fileId}`
+  }
+  return url
+}
+
 interface Props {
   catalogue: Material[]
   onSuccess: () => void
@@ -263,7 +279,7 @@ export function MaterialReceiveForm({ catalogue, onSuccess, onCancel }: Props) {
                       className="w-full text-left px-3 py-2 hover:bg-emerald-50/30 transition-colors text-xs flex items-center gap-2.5"
                     >
                       {m.photoUrl ? (
-                        <img src={m.photoUrl} alt="" className="h-7 w-7 rounded object-cover border bg-gray-50 shrink-0" />
+                        <img src={getGoogleDriveDirectLink(m.photoUrl)} alt="" className="h-7 w-7 rounded object-cover border bg-gray-50 shrink-0" />
                       ) : (
                         <div className="h-7 w-7 rounded border bg-gray-50 flex items-center justify-center shrink-0 text-gray-400">
                           <Package className="h-3.5 w-3.5" />
@@ -284,7 +300,7 @@ export function MaterialReceiveForm({ catalogue, onSuccess, onCancel }: Props) {
               <div className="flex items-center justify-between bg-emerald-50/40 rounded-xl p-3 border border-emerald-100 shadow-sm">
                 <div className="flex items-center gap-2.5 min-w-0 flex-1">
                   {selectedTempMat.photoUrl ? (
-                    <img src={selectedTempMat.photoUrl} alt="" className="h-8 w-8 rounded object-cover border bg-white shrink-0" />
+                    <img src={getGoogleDriveDirectLink(selectedTempMat.photoUrl)} alt="" className="h-8 w-8 rounded object-cover border bg-white shrink-0" />
                   ) : (
                     <div className="h-8 w-8 rounded border bg-white flex items-center justify-center shrink-0 text-gray-400">
                       <Package className="h-4.5 w-4.5" />
@@ -344,7 +360,7 @@ export function MaterialReceiveForm({ catalogue, onSuccess, onCancel }: Props) {
                   <div key={idx} className="flex items-center justify-between p-3 hover:bg-slate-50/50">
                     <div className="flex items-center gap-2.5 min-w-0 flex-1 pr-3">
                       {m?.photoUrl ? (
-                        <img src={m.photoUrl} alt="" className="h-8 w-8 rounded object-cover border bg-gray-50 shrink-0" />
+                        <img src={getGoogleDriveDirectLink(m.photoUrl)} alt="" className="h-8 w-8 rounded object-cover border bg-gray-50 shrink-0" />
                       ) : (
                         <div className="h-8 w-8 rounded border bg-gray-50 flex items-center justify-center shrink-0 text-gray-400">
                           <Package className="h-4 w-4" />
