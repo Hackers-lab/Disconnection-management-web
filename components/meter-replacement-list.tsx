@@ -180,7 +180,7 @@ export function MeterReplacementList({ userRole, userAgencies, username, agencie
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 h-4 w-4" />
             <Input value={search} onChange={e => setSearch(e.target.value)}
-              placeholder="Search ID, name, mobile, agency, serial..." className="pl-10 pr-8 rounded-xl" />
+              placeholder="Search ID, name, mobile, agency, serial..." className="pl-10 pr-8 rounded-xl h-9 text-sm" />
             {search && <X className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-red-500 cursor-pointer" onClick={() => setSearch("")} />}
           </div>
           {isAdmin && (

@@ -359,7 +359,7 @@ export function DashboardMenu({ onSelect, userRole, userAgencies = [], permissio
         if (mrCached) {
           const upper = (userAgencies || []).map((a: string) => a.toUpperCase())
           const count = mrCached.filter((r: any) => {
-            if (r.status !== "proposed") return false
+            if ((r.status || "").toLowerCase() !== "proposed") return false
             if (userRole === "admin" || userRole === "executive") return true
             return upper.includes((r.agency || "").toUpperCase())
           }).length

@@ -68,7 +68,7 @@ function parseReplacement(r: string[]): MeterReplacement {
     agency:        r[5] || "",
     purpose:       r[6] || "",
     proposedDate:  r[7] || "",
-    status:        (r[8] || "proposed") as any,
+    status:        ((r[8] || "proposed").toLowerCase()) as any,
     serialNo:      r[9] || "",
     issueId:       r[10] || "",
     remarks:       r[11] || "",

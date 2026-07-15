@@ -106,6 +106,7 @@ export function MeterList({ userRole, userAgencies, username, agencies }: Props)
   const [prefill, setPrefill]                         = useState<any>(null)
   const [replacements, setReplacements]               = useState<MeterReplacement[]>([])
   const [loadingReplacements, setLoadingReplacements] = useState(false)
+  const [repSubTab, setRepSubTab]                     = useState<"pending" | "progress" | "replaced" | "all">("pending")
   // NSC quotation lookup — keyed by receiveNo → status
   const [nscStatusMap, setNscStatusMap]               = useState<Record<string, string>>({})
   const PAGE = 20
@@ -149,9 +150,7 @@ export function MeterList({ userRole, userAgencies, username, agencies }: Props)
       }
       setSyncState("updated")
       setTimeout(() => setSyncState("idle"), 3000)
-      if (tab === "proposed") {
-        loadReplacements()
-      }
+      loadReplacements()
     } catch {
       setSyncState("idle")
       if (!silent) toast({ title: "Failed to load meter data", variant: "destructive" })
@@ -219,8 +218,34 @@ export function MeterList({ userRole, userAgencies, username, agencies }: Props)
         i.nscReceiveNo.toLowerCase().includes(q)
       )
     }
-    return data
   }, [issues, tab, search, purposeFilter, isAdmin, userAgencies])
+
+  const filteredReplacements = useMemo(() => {
+    let data = replacements
+    if (!isAdmin) {
+      const upper = userAgencies.map(a => a.toUpperCase())
+      data = data.filter(r => upper.includes((r.agency || "").toUpperCase()))
+    }
+    if (repSubTab === "pending") {
+      data = data.filter(r => (r.status || "").toLowerCase() === "proposed")
+    } else if (repSubTab === "progress") {
+      data = data.filter(r => (r.status || "").toLowerCase() === "issued" || (r.status || "").toLowerCase() === "updated")
+    } else if (repSubTab === "replaced") {
+      data = data.filter(r => (r.status || "").toLowerCase() === "replaced")
+    }
+    if (search.trim()) {
+      const q = search.toLowerCase()
+      data = data.filter(r =>
+        r.replacementId.toLowerCase().includes(q) ||
+        r.consumerId.includes(q) ||
+        r.consumerName.toLowerCase().includes(q) ||
+        (r.serialNo || "").toLowerCase().includes(q) ||
+        (r.issueId || "").toLowerCase().includes(q) ||
+        (r.agency || "").toLowerCase().includes(q)
+      )
+    }
+    return data
+  }, [replacements, repSubTab, search, isAdmin, userAgencies])
 
   const totalPages = Math.ceil(filteredIssues.length / PAGE)
   const paginated  = useMemo(() => filteredIssues.slice((page - 1) * PAGE, page * PAGE), [filteredIssues, page])
@@ -403,7 +428,7 @@ export function MeterList({ userRole, userAgencies, username, agencies }: Props)
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 h-4 w-4" />
             <Input value={search} onChange={e => setSearch(e.target.value)}
-              placeholder="Search issue ID, serial, consumer, agency..." className="pl-10 pr-8" />
+              placeholder="Search issue ID, serial, consumer, agency..." className="pl-10 pr-8 rounded-xl h-9 text-sm" />
             {search && <X className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-red-500 cursor-pointer" onClick={() => setSearch("")} />}
           </div>
           {isAdmin && selectedForSlip.size > 0 && (
@@ -426,9 +451,9 @@ export function MeterList({ userRole, userAgencies, username, agencies }: Props)
             <button key={t} onClick={() => setTab(t)}
               className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap transition ${tab === t ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>
               {t === "stock" ? "All Stock"
-               : t === "active" ? `Active (${issues.filter(i => (i.status === "issued" || i.status === "installation_done") && (isAdmin || userAgencies.map((a: string) => a.toUpperCase()).includes(i.agency.toUpperCase()))).length})`
+               : t === "active" ? `Active (${issues.filter(i => (i.status === "issued" || i.status === "installation_done") && (isAdmin || userAgencies.map((a: string) => a.toUpperCase()).includes((i.agency || "").toUpperCase()))).length})`
                : t === "history" ? "History"
-               : t === "proposed" ? `Proposed (${replacements.filter((r: MeterReplacement) => r.status === "proposed" && (isAdmin || userAgencies.map((a: string) => a.toUpperCase()).includes(r.agency.toUpperCase()))).length})`
+               : t === "proposed" ? `Replacements (${replacements.filter((r: MeterReplacement) => (r.status || "").toLowerCase() === "proposed" && (isAdmin || userAgencies.map((a: string) => a.toUpperCase()).includes((r.agency || "").toUpperCase()))).length} pending)`
                : "Reports"}
             </button>
           ))}
@@ -455,7 +480,7 @@ export function MeterList({ userRole, userAgencies, username, agencies }: Props)
         )}
 
         <div className="flex items-center gap-3 text-xs text-gray-500">
-          <span>{tab === "proposed" ? replacements.filter(r => r.status === "proposed" && (isAdmin || userAgencies.map(a=>a.toUpperCase()).includes(r.agency.toUpperCase()))).length : filteredIssues.length} records</span>
+          <span>{tab === "proposed" ? filteredReplacements.length : filteredIssues.length} records</span>
           {syncState === "updated" && <span className="flex items-center gap-1 text-green-600"><Check className="h-3 w-3" /> Updated</span>}
         </div>
 
@@ -617,59 +642,123 @@ export function MeterList({ userRole, userAgencies, username, agencies }: Props)
 
       {/* Proposed replacements list */}
       {tab === "proposed" && (
-        <div className="space-y-3">
+        <div className="space-y-4">
+          {/* Sub-tab Selector */}
+          <div className="flex gap-1.5 overflow-x-auto pb-1">
+            {[
+              { value: "pending",  label: `Pending Issue (${replacements.filter(r => (r.status || "").toLowerCase() === "proposed" && (isAdmin || userAgencies.map(a => a.toUpperCase()).includes((r.agency || "").toUpperCase()))).length})` },
+              { value: "progress", label: `Issued / In Progress (${replacements.filter(r => ((r.status || "").toLowerCase() === "issued" || (r.status || "").toLowerCase() === "updated") && (isAdmin || userAgencies.map(a => a.toUpperCase()).includes((r.agency || "").toUpperCase()))).length})` },
+              { value: "replaced", label: `Replaced / Completed (${replacements.filter(r => (r.status || "").toLowerCase() === "replaced" && (isAdmin || userAgencies.map(a => a.toUpperCase()).includes((r.agency || "").toUpperCase()))).length})` },
+              { value: "all",      label: `All (${replacements.filter(r => (isAdmin || userAgencies.map(a => a.toUpperCase()).includes((r.agency || "").toUpperCase()))).length})` },
+            ].map(sub => (
+              <button key={sub.value} onClick={() => setRepSubTab(sub.value as any)}
+                className={`px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap border transition ${
+                  repSubTab === sub.value ? "bg-slate-950 text-white border-slate-950" : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
+                }`}>
+                {sub.label}
+              </button>
+            ))}
+          </div>
+
           {loadingReplacements ? (
             <div className="flex justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-blue-600" /></div>
-          ) : replacements.filter((r: MeterReplacement) => r.status === "proposed" && (isAdmin || userAgencies.map((a: string) => a.toUpperCase()).includes(r.agency.toUpperCase()))).length === 0 ? (
+          ) : filteredReplacements.length === 0 ? (
             <div className="bg-white text-center py-16 text-gray-400 border rounded-2xl">
               <Package className="h-10 w-10 mx-auto mb-3 opacity-30" />
-              <p>No proposed replacements found</p>
+              <p>No replacements found matching this criteria</p>
             </div>
-          ) : replacements.filter((r: MeterReplacement) => r.status === "proposed" && (isAdmin || userAgencies.map((a: string) => a.toUpperCase()).includes(r.agency.toUpperCase()))).map(rep => (
-            <Card key={rep.replacementId} className="hover:shadow-md transition-all duration-200 overflow-hidden border border-gray-200 hover:border-blue-200">
-              <CardContent className="p-4">
-                <div className="flex justify-between items-start gap-2">
-                  <div className="min-w-0 flex-1 space-y-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-mono text-xs text-gray-400 font-bold">{rep.replacementId}</span>
-                      <span className="text-xs text-gray-400">•</span>
-                      <span className="text-xs text-gray-500 font-medium">Proposed: {rep.proposedDate}</span>
-                      <span className="text-xs text-gray-400">•</span>
-                      <span className={`text-xs font-semibold ${PURPOSE_COLORS[rep.purpose] || "text-blue-700"}`}>
-                        {PURPOSE_LABELS[rep.purpose] || rep.purpose}
-                      </span>
+          ) : (
+            <div className="space-y-3">
+              {filteredReplacements.map(rep => (
+                <Card key={rep.replacementId} className="hover:shadow-md transition-all duration-200 overflow-hidden border border-gray-200 hover:border-blue-200">
+                  <CardContent className="p-4">
+                    <div className="flex justify-between items-start gap-2">
+                      <div className="min-w-0 flex-1 space-y-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-mono text-xs text-gray-400 font-bold">{rep.replacementId}</span>
+                          <span className="text-xs text-gray-400">•</span>
+                          <span className="text-xs text-gray-500 font-medium">Proposed: {rep.proposedDate}</span>
+                          <span className="text-xs text-gray-400">•</span>
+                          <span className={`text-xs font-semibold ${PURPOSE_COLORS[rep.purpose] || "text-blue-700"}`}>
+                            {PURPOSE_LABELS[rep.purpose] || rep.purpose}
+                          </span>
+                        </div>
+                        <h4 className="font-bold text-gray-900 text-sm md:text-base leading-tight mt-1">
+                          {rep.consumerName} <span className="font-mono font-normal text-xs text-gray-500">({rep.consumerId})</span>
+                        </h4>
+                        <div className="bg-slate-50 border rounded-lg p-2 mt-2 space-y-1">
+                          {rep.address && <p className="text-xs text-gray-600 flex items-center gap-1"><MapPin className="h-3 w-3 shrink-0 text-gray-400" /> {rep.address}</p>}
+                          {rep.mobile && <p className="text-xs text-gray-600 flex items-center gap-1"><Phone className="h-3 w-3 shrink-0 text-gray-400" /> <span className="font-mono">{rep.mobile}</span></p>}
+                          {rep.agency && <p className="text-xs text-gray-600 flex items-center gap-1"><Building2 className="h-3 w-3 shrink-0 text-gray-400" /> Agency: <strong>{rep.agency}</strong></p>}
+                        </div>
+                        {rep.remarks && <p className="text-xs text-gray-500 italic mt-1">Remarks: "{rep.remarks}"</p>}
+                        
+                        {/* Status tracking info */}
+                        {rep.status !== "proposed" && (
+                          <div className="mt-3 pt-3 border-t space-y-1.5">
+                            <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
+                              {rep.serialNo && <p className="text-gray-600">Issued Meter: <strong className="font-mono text-blue-700">{rep.serialNo}</strong></p>}
+                              {rep.issueId && <p className="text-gray-600">Issue ID: <strong className="font-mono text-gray-500">{rep.issueId}</strong></p>}
+                            </div>
+                            
+                            {/* Detailed status note */}
+                            {rep.status === "issued" && (
+                              <p className="text-xs text-yellow-700 font-medium bg-yellow-50/50 border border-yellow-100 rounded px-2 py-0.5 w-fit">
+                                Pending installation by agency
+                              </p>
+                            )}
+                            {rep.status === "updated" && (
+                              <p className="text-xs text-teal-700 font-medium bg-teal-50/50 border border-teal-100 rounded px-2 py-0.5 w-fit">
+                                Installation done — awaiting admin finalization
+                              </p>
+                            )}
+                            {rep.status === "replaced" && (
+                              <p className="text-xs text-emerald-700 font-medium bg-emerald-50/50 border border-emerald-100 rounded px-2 py-0.5 w-fit">
+                                Replacement completed & finalized
+                              </p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                      
+                      <div className="flex flex-col items-end gap-2 shrink-0">
+                        {/* Always show badge */}
+                        <span className={`text-[10px] md:text-xs font-semibold px-2 py-0.5 rounded-full border ${
+                          rep.status === "proposed" ? "bg-amber-50 text-amber-700 border-amber-200" :
+                          rep.status === "issued" ? "bg-yellow-50 text-yellow-700 border-yellow-200" :
+                          rep.status === "updated" ? "bg-teal-50 text-teal-700 border-teal-200" :
+                          "bg-emerald-50 text-emerald-700 border-emerald-200"
+                        }`}>
+                          {rep.status === "proposed" ? "Proposed" :
+                           rep.status === "issued" ? "Issued" :
+                           rep.status === "updated" ? "Installed" :
+                           "Completed"}
+                        </span>
+                        
+                        {rep.status === "proposed" && (
+                          <Button size="sm" className="bg-slate-950 hover:bg-slate-900 text-white mt-1.5"
+                            onClick={() => {
+                              setPrefill({
+                                replacementId: rep.replacementId,
+                                consumerId: rep.consumerId,
+                                consumerName: rep.consumerName,
+                                address: rep.address,
+                                mobile: rep.mobile,
+                                purpose: rep.purpose,
+                                agency: rep.agency,
+                              })
+                              setView("issue")
+                            }}>
+                            Issue Meter
+                          </Button>
+                        )}
+                      </div>
                     </div>
-                    <h4 className="font-bold text-gray-900 text-sm md:text-base leading-tight mt-1">
-                      {rep.consumerName} <span className="font-mono font-normal text-xs text-gray-500">({rep.consumerId})</span>
-                    </h4>
-                    <div className="bg-slate-50 border rounded-lg p-2 mt-2 space-y-1">
-                      {rep.address && <p className="text-xs text-gray-600 flex items-center gap-1"><MapPin className="h-3 w-3 shrink-0 text-gray-400" /> {rep.address}</p>}
-                      {rep.mobile && <p className="text-xs text-gray-600 flex items-center gap-1"><Phone className="h-3 w-3 shrink-0 text-gray-400" /> <span className="font-mono">{rep.mobile}</span></p>}
-                      {rep.agency && <p className="text-xs text-gray-600 flex items-center gap-1"><Building2 className="h-3 w-3 shrink-0 text-gray-400" /> Agency: <strong>{rep.agency}</strong></p>}
-                    </div>
-                    {rep.remarks && <p className="text-xs text-gray-500 italic mt-1">Remarks: "{rep.remarks}"</p>}
-                  </div>
-                  <div className="flex flex-col items-end gap-2 shrink-0">
-                    <Button size="sm" className="bg-slate-950 hover:bg-slate-900 text-white mt-2"
-                      onClick={() => {
-                        setPrefill({
-                          replacementId: rep.replacementId,
-                          consumerId: rep.consumerId,
-                          consumerName: rep.consumerName,
-                          address: rep.address,
-                          mobile: rep.mobile,
-                          purpose: rep.purpose,
-                          agency: rep.agency,
-                        })
-                        setView("issue")
-                      }}>
-                      Issue Meter
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
