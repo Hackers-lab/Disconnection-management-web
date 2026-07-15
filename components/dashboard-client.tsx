@@ -104,6 +104,26 @@ export default function DashboardClient({ role, agencies }: DashboardClientProps
 
   const [permissions, setPermissions] = useState<Record<string, string[]>>({})
   const [permsLoaded, setPermsLoaded] = useState(false)
+  const [loadingText, setLoadingText] = useState("Securing connection...")
+
+  // Cycle loading text messages dynamically
+  useEffect(() => {
+    if (permsLoaded) return
+    const messages = [
+      "Securing connection...",
+      "Fetching role configurations...",
+      "Authorizing workspace modules...",
+      "Decrypting access tokens...",
+      "Preparing dashboard workspace...",
+      "Validating active sessions..."
+    ]
+    let idx = 0
+    const interval = setInterval(() => {
+      idx = (idx + 1) % messages.length
+      setLoadingText(messages[idx])
+    }, 1000)
+    return () => clearInterval(interval)
+  }, [permsLoaded])
 
   // Fetch dynamic permissions map
   useEffect(() => {
@@ -973,10 +993,37 @@ export default function DashboardClient({ role, agencies }: DashboardClientProps
 
   if (!permsLoaded) {
     return (
-      <div className="flex h-screen items-center justify-center bg-slate-50">
-        <div className="flex flex-col items-center gap-2">
-          <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
-          <p className="text-sm font-medium text-gray-500">Loading permissions...</p>
+      <div className="relative flex h-screen w-screen items-center justify-center bg-slate-950 overflow-hidden select-none">
+        {/* Decorative Floating Glowing Blobs */}
+        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl animate-pulse" />
+        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl animate-pulse delay-300" />
+        
+        {/* Premium Glassmorphic Card */}
+        <div className="relative z-10 px-8 py-10 rounded-3xl bg-slate-900/50 backdrop-blur-xl border border-slate-800/80 shadow-2xl flex flex-col items-center gap-8 max-w-sm w-full mx-4 transition-all duration-300">
+          
+          {/* Dynamic Colored Loader Icon */}
+          <div className="relative flex items-center justify-center w-24 h-24">
+            {/* Outer spinning ring with dual color gradient */}
+            <div className="absolute inset-0 rounded-full bg-gradient-to-tr from-blue-500 via-indigo-500 to-purple-600 animate-spin p-[3px]">
+              <div className="w-full h-full bg-slate-950 rounded-full" />
+            </div>
+            
+            {/* Pulsing inner glow */}
+            <div className="absolute w-12 h-12 rounded-full bg-gradient-to-tr from-blue-600 to-purple-600 opacity-20 blur-md animate-ping" />
+            
+            {/* Inner dynamic rotating icon */}
+            <Loader2 className="relative h-8 w-8 animate-spin text-indigo-400" />
+          </div>
+
+          {/* Evolving Text Messages */}
+          <div className="text-center space-y-2.5">
+            <h3 className="text-sm font-bold tracking-widest text-slate-400 uppercase">
+              Access Authorization
+            </h3>
+            <p className="text-xs font-medium text-indigo-300/80 tracking-wide min-h-[16px] transition-all duration-500 animate-pulse">
+              {loadingText}
+            </p>
+          </div>
         </div>
       </div>
     )
@@ -1186,6 +1233,7 @@ export default function DashboardClient({ role, agencies }: DashboardClientProps
             userRole={role}
             userAgencies={agencies}
             username={agencies[0] || role}
+            permissions={permissions}
           />
         )}
 

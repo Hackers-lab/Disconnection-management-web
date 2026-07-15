@@ -30,9 +30,10 @@ interface Props {
   userRole: string
   userAgencies: string[]
   username: string
+  permissions?: Record<string, string[]>
 }
 
-export function MaterialList({ userRole, userAgencies, username }: Props) {
+export function MaterialList({ userRole, userAgencies, username, permissions }: Props) {
   const [view, setView] = useHashState<MainView>("material", "menu")
   const [settingsTab, setSettingsTab] = useState<SettingsSubTab>("catalogue")
 
@@ -86,6 +87,40 @@ export function MaterialList({ userRole, userAgencies, username }: Props) {
     setNewMatPhoto(null)
     setNewMatPhotoPreview(null)
   }
+
+  // Fine-grained permission checks for Material Management sections
+  const materialPermissions = useMemo(() => {
+    return permissions?.material || []
+  }, [permissions])
+
+  const hasReceiveAccess = useMemo(() => {
+    return userRole === "admin" || userRole === "executive" || materialPermissions.includes("receive") || materialPermissions.includes("create")
+  }, [userRole, materialPermissions])
+
+  const hasIssueAccess = useMemo(() => {
+    return userRole === "admin" || userRole === "executive" || materialPermissions.includes("issue") || materialPermissions.includes("update")
+  }, [userRole, materialPermissions])
+
+  const hasStockAccess = useMemo(() => {
+    return userRole === "admin" || userRole === "executive" || materialPermissions.includes("stock") || materialPermissions.includes("read")
+  }, [userRole, materialPermissions])
+
+  const hasSettingsAccess = useMemo(() => {
+    return userRole === "admin" || userRole === "executive" || materialPermissions.includes("settings") || materialPermissions.includes("delete")
+  }, [userRole, materialPermissions])
+
+  // Redirect back to menu if user accesses a view they don't have permission for
+  useEffect(() => {
+    if (view === "receive" && !hasReceiveAccess) {
+      setView("menu")
+    } else if (view === "issue" && !hasIssueAccess) {
+      setView("menu")
+    } else if (view === "stock" && !hasStockAccess) {
+      setView("menu")
+    } else if (view === "settings" && !hasSettingsAccess) {
+      setView("menu")
+    }
+  }, [view, hasReceiveAccess, hasIssueAccess, hasStockAccess, hasSettingsAccess, setView])
 
   const canWrite = userRole === "admin" || userRole === "executive"
 
@@ -423,7 +458,7 @@ export function MaterialList({ userRole, userAgencies, username }: Props) {
       {view === "menu" && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-4">
           {/* Receive Card */}
-          {canWrite && (
+          {hasReceiveAccess && (
             <Card
               className="hover:shadow-lg transition-all duration-300 border hover:border-emerald-200 hover:bg-emerald-50/20 cursor-pointer overflow-hidden group"
               onClick={() => setView("receive")}
@@ -441,7 +476,7 @@ export function MaterialList({ userRole, userAgencies, username }: Props) {
           )}
 
           {/* Issue Card */}
-          {canWrite && (
+          {hasIssueAccess && (
             <Card
               className="hover:shadow-lg transition-all duration-300 border hover:border-orange-200 hover:bg-orange-50/20 cursor-pointer overflow-hidden group"
               onClick={() => setView("issue")}
@@ -459,23 +494,25 @@ export function MaterialList({ userRole, userAgencies, username }: Props) {
           )}
 
           {/* Stock Card */}
-          <Card
-            className="hover:shadow-lg transition-all duration-300 border hover:border-amber-200 hover:bg-amber-50/20 cursor-pointer overflow-hidden group col-span-1"
-            onClick={() => setView("stock")}
-          >
-            <CardContent className="p-5 text-center space-y-3">
-              <div className="mx-auto w-12 h-12 bg-amber-100 rounded-full flex items-center justify-center text-amber-700 transition group-hover:scale-105">
-                <Package className="h-6 w-6" />
-              </div>
-              <div>
-                <h3 className="font-bold text-sm text-gray-900">Stock Register</h3>
-                <p className="text-[10px] text-gray-400 mt-0.5">View balance stock & histories</p>
-              </div>
-            </CardContent>
-          </Card>
+          {hasStockAccess && (
+            <Card
+              className="hover:shadow-lg transition-all duration-300 border hover:border-amber-200 hover:bg-amber-50/20 cursor-pointer overflow-hidden group col-span-1"
+              onClick={() => setView("stock")}
+            >
+              <CardContent className="p-5 text-center space-y-3">
+                <div className="mx-auto w-12 h-12 bg-amber-100 rounded-full flex items-center justify-center text-amber-700 transition group-hover:scale-105">
+                  <Package className="h-6 w-6" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm text-gray-900">Stock Register</h3>
+                  <p className="text-[10px] text-gray-400 mt-0.5">View balance stock & histories</p>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Settings Card */}
-          {canWrite && (
+          {hasSettingsAccess && (
             <Card
               className="hover:shadow-lg transition-all duration-300 border hover:border-gray-300 hover:bg-gray-50/50 cursor-pointer overflow-hidden group col-span-1"
               onClick={() => setView("settings")}
@@ -630,7 +667,7 @@ export function MaterialList({ userRole, userAgencies, username }: Props) {
       )}
 
       {/* ── 3. SETTINGS & ADMIN PANEL ── */}
-      {view === "settings" && canWrite && (
+      {view === "settings" && hasSettingsAccess && (
         <div className="space-y-4">
           {/* Sub Tab selector */}
           <div className="flex gap-2 border-b pb-2">

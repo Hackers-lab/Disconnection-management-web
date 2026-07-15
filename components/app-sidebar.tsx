@@ -144,6 +144,7 @@ export function AppSidebar({ activeView, setActiveView, userRole, isMobile = fal
         const hasAccess = item.id === "home" || (permissions && (
           permissions[item.id]?.includes("read") || 
           permissions[permKey]?.includes("read") ||
+          (item.id === "material" && permissions[item.id]?.length > 0) ||
           (item.id === "dtr-painting" && (permissions["dtr"]?.includes("read") || permissions["dtr"]?.includes("update")))
         ))
         if (!hasAccess) {

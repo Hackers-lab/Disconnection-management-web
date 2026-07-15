@@ -431,6 +431,7 @@ export function DashboardMenu({ onSelect, userRole, userAgencies = [], permissio
               const hasAccess = module.id === "home" || (permissions && (
                 permissions[module.id]?.includes("read") || 
                 permissions[permKey]?.includes("read") ||
+                (module.id === "material" && permissions[module.id]?.length > 0) ||
                 (module.id === "dtr-painting" && (permissions["dtr"]?.includes("read") || permissions["dtr"]?.includes("update")))
               ))
               if (!hasAccess) return null

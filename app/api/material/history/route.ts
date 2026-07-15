@@ -3,7 +3,7 @@ import { checkApiPermission } from "@/lib/permissions"
 import { getMaterialHistory } from "@/lib/material-service"
 
 export async function GET(req: Request) {
-  const { authorized, error, status } = await checkApiPermission("material", "read")
+  const { authorized, error, status } = await checkApiPermission("material", ["read", "stock"])
   if (!authorized) return NextResponse.json({ error }, { status: status || 403 })
 
   try {

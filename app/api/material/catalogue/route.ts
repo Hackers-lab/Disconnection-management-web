@@ -5,7 +5,7 @@ import type { MaterialUnit } from "@/lib/material-types"
 import { uploadImageToDrive } from "@/lib/google-drive"
 
 export async function GET() {
-  const { authorized, error, status } = await checkApiPermission("material", "read")
+  const { authorized, error, status } = await checkApiPermission("material", ["read", "stock", "receive", "issue", "settings"])
   if (!authorized) return NextResponse.json({ error }, { status: status || 403 })
 
   try {
@@ -18,7 +18,7 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const { authorized, error, status, session } = await checkApiPermission("material", "create")
+  const { authorized, error, status, session } = await checkApiPermission("material", ["create", "settings"])
   if (!authorized) return NextResponse.json({ error }, { status: status || 403 })
 
   try {
@@ -57,7 +57,7 @@ export async function POST(req: Request) {
 }
 
 export async function PUT(req: Request) {
-  const { authorized, error, status } = await checkApiPermission("material", "create")
+  const { authorized, error, status } = await checkApiPermission("material", ["create", "settings"])
   if (!authorized) return NextResponse.json({ error }, { status: status || 403 })
 
   try {
@@ -100,7 +100,7 @@ export async function PUT(req: Request) {
 }
 
 export async function DELETE(req: Request) {
-  const { authorized, error, status } = await checkApiPermission("material", "delete")
+  const { authorized, error, status } = await checkApiPermission("material", ["delete", "settings"])
   if (!authorized) return NextResponse.json({ error }, { status: status || 403 })
 
   try {

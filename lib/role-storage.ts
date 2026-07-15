@@ -56,7 +56,7 @@ const DEFAULT_ROLES: RolePermissions[] = [
     admin: ["read", "create", "update", "delete"],
     meter_replacement: ["read", "create", "update", "delete"],
     dtr_painting: ["read", "create", "update", "delete"],
-    material: ["read", "create", "update", "delete"],
+    material: ["read", "create", "update", "delete", "receive", "issue", "stock", "settings"],
   },
   {
     role: "viewer",
@@ -70,7 +70,7 @@ const DEFAULT_ROLES: RolePermissions[] = [
     admin: [],
     meter_replacement: ["read"],
     dtr_painting: ["read"],
-    material: ["read"],
+    material: ["read", "stock"],
   },
   {
     role: "agency",
@@ -84,7 +84,7 @@ const DEFAULT_ROLES: RolePermissions[] = [
     admin: [],
     meter_replacement: ["read", "update"],
     dtr_painting: ["read", "update"],
-    material: ["read", "update"],
+    material: ["read", "update", "receive", "issue", "stock"],
   },
   {
     role: "technical",
@@ -98,7 +98,7 @@ const DEFAULT_ROLES: RolePermissions[] = [
     admin: [],
     meter_replacement: [],
     dtr_painting: [],
-    material: [],
+    material: ["read", "create", "update", "delete", "receive", "issue", "stock", "settings"],
   },
   {
     role: "painter",
@@ -126,7 +126,7 @@ const DEFAULT_ROLES: RolePermissions[] = [
     admin: [],
     meter_replacement: ["read", "create", "update", "delete"],
     dtr_painting: ["read", "create", "update", "delete"],
-    material: ["read", "create", "update", "delete"],
+    material: ["read", "create", "update", "delete", "receive", "issue", "stock", "settings"],
   },
 ]
 

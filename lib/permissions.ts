@@ -12,7 +12,7 @@ export interface AuthResult {
  * Verifies if the active session has the requested module permission.
  * Admins bypass all checks.
  */
-export async function checkApiPermission(module: string, action: string): Promise<AuthResult> {
+export async function checkApiPermission(module: string, action: string | string[]): Promise<AuthResult> {
   const session = await verifySession()
   if (!session) {
     return { authorized: false, error: "Unauthorized", status: 401 }
@@ -30,8 +30,11 @@ export async function checkApiPermission(module: string, action: string): Promis
   }
 
   const modulePerms = permissions[module] || permissions[module.replace(/-/g, "_")] || []
-  if (!modulePerms.includes(action)) {
-    return { authorized: false, error: `Forbidden: No ${action} access to module '${module}'`, status: 403, session }
+  const actions = Array.isArray(action) ? action : [action]
+  const hasAccess = actions.some(act => modulePerms.includes(act))
+
+  if (!hasAccess) {
+    return { authorized: false, error: `Forbidden: No ${actions.join(" or ")} access to module '${module}'`, status: 403, session }
   }
 
   return { authorized: true, session }
