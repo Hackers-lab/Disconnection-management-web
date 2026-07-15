@@ -4,11 +4,16 @@ import { getCatalogue, addMaterial, deleteMaterialFromCatalogue, updateMaterial 
 import type { MaterialUnit } from "@/lib/material-types"
 import { uploadImageToDrive } from "@/lib/google-drive"
 
-export async function GET() {
+export async function GET(req: Request) {
   const { authorized, error, status } = await checkApiPermission("material", ["read", "stock", "receive", "issue", "settings"])
   if (!authorized) return NextResponse.json({ error }, { status: status || 403 })
 
   try {
+    const { searchParams } = new URL(req.url)
+    if (searchParams.get("revalidate") === "true") {
+      const { invalidateMaterialCache } = await import("@/lib/material-service")
+      invalidateMaterialCache()
+    }
     const catalogue = await getCatalogue()
     return NextResponse.json(catalogue)
   } catch (e: any) {

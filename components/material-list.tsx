@@ -125,25 +125,29 @@ export function MaterialList({ userRole, userAgencies, username, permissions }: 
   const canWrite = userRole === "admin" || userRole === "executive"
 
   // ── Caching & Fetching ──────────────────────────────────────────────────────────
-  const fetchData = useCallback(async (silent = false) => {
+  const fetchData = useCallback(async (silent = false, force = false) => {
     if (!silent) setSyncState("loading")
     try {
       setError(null)
-      // 1. Try local cache hit
-      const cached = await getFromCache<any>(CACHE_KEY)
-      if (cached && !silent) {
-        setStock(cached.stock || [])
-        setCatalogue(cached.catalogue || [])
-        setReceives(cached.receives || [])
-        setIssues(cached.issues || [])
-        setLoading(false)
+      
+      // Try local cache hit (unless forcing a hard reload)
+      if (!force) {
+        const cached = await getFromCache<any>(CACHE_KEY)
+        if (cached && !silent) {
+          setStock(cached.stock || [])
+          setCatalogue(cached.catalogue || [])
+          setReceives(cached.receives || [])
+          setIssues(cached.issues || [])
+          setLoading(false)
+        }
       }
 
       // 2. Fetch fresh
+      const revalQuery = force ? "?revalidate=true" : ""
       const [stockRes, receiveRes, issueRes] = await Promise.all([
-        fetch("/api/material"),
-        fetch("/api/material/receive"),
-        fetch("/api/material/issue"),
+        fetch(`/api/material${revalQuery}`),
+        fetch(`/api/material/receive${revalQuery}`),
+        fetch(`/api/material/issue${revalQuery}`),
       ])
 
       let freshStock: MaterialStock[] = []
@@ -566,7 +570,7 @@ export function MaterialList({ userRole, userAgencies, username, permissions }: 
             <Button
               size="sm"
               variant="outline"
-              onClick={() => fetchData(true)}
+              onClick={() => fetchData(true, true)}
               disabled={syncState === "loading"}
               className="shrink-0 rounded-xl h-9 w-9 p-0 bg-gray-50 border-gray-200 hover:bg-gray-100 transition-colors"
               title="Refresh stock data"

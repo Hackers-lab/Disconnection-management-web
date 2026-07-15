@@ -2,11 +2,15 @@ import { NextResponse } from "next/server"
 import { checkApiPermission } from "@/lib/permissions"
 import { getStock, getCatalogue } from "@/lib/material-service"
 
-export async function GET() {
+export async function GET(req: Request) {
   const { authorized, error, status } = await checkApiPermission("material", ["read", "stock", "receive", "issue", "settings"])
   if (!authorized) return NextResponse.json({ error }, { status: status || 403 })
 
   try {
+    const { searchParams } = new URL(req.url)
+    if (searchParams.get("revalidate") === "true") {
+      invalidateMaterialCache()
+    }
     const [stock, catalogue] = await Promise.all([getStock(), getCatalogue()])
     return NextResponse.json({ stock, catalogue })
   } catch (e: any) {
