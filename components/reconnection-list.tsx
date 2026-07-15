@@ -15,6 +15,7 @@ import { useToast } from "@/components/ui/use-toast"
 import type { ReconnectionRequest } from "@/lib/reconnection-service"
 import { ReconnectionCreateForm } from "@/components/reconnection-create-form"
 import { ReconnectionUpdateForm } from "@/components/reconnection-update-form"
+import { useHashState } from "@/hooks/use-hash-state"
 import { getFromCache, saveToCache } from "@/lib/indexed-db"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 // xlsx is loaded dynamically in downloadReport() to avoid bundling ~1MB upfront
@@ -76,7 +77,7 @@ export function ReconnectionList({ userRole, userAgencies, username, agencies }:
   const [tab, setTab] = useState<Tab>("pending")
   const [search, setSearch] = useState("")
   const [currentPage, setCurrentPage] = useState(1)
-  const [view, setView] = useState<"list" | "create" | "update">("list")
+  const [view, setView] = useHashState<"list" | "create" | "update">("reconnection", "list")
   const [selected, setSelected] = useState<ReconnectionRequest | null>(null)
 
   const isAdmin = userRole === "admin" || userRole === "executive"

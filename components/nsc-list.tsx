@@ -20,6 +20,7 @@ import {
   Popover, PopoverContent, PopoverTrigger,
 } from "@/components/ui/popover"
 import { useToast } from "@/components/ui/use-toast"
+import { useHashState } from "@/hooks/use-hash-state"
 import { getFromCache, saveToCache } from "@/lib/indexed-db"
 import { NSC_STATUS_COLORS, NSC_STATUS_LABELS, NSC_CLASSES } from "@/lib/nsc-types"
 import type { NSCApplication } from "@/lib/nsc-types"
@@ -93,7 +94,7 @@ export function NscList({ userRole, userAgencies, username, agencies }: Props) {
   const [apps, setApps]         = useState<NSCApplication[]>([])
   const [syncState, setSyncState] = useState<SyncState>("loading")
   const [tab, setTab]           = useState<Tab>("pending")
-  const [view, setView]         = useState<View>("list")
+  const [view, setView]         = useHashState<View>("nsc", "list")
   const [search, setSearch]     = useState("")
   const [selected, setSelected] = useState<NSCApplication | null>(null)
   const [historyApp, setHistoryApp] = useState<NSCApplication | null>(null)

@@ -20,6 +20,7 @@ import { METER_TYPES } from "@/lib/meter-types"
 import { MeterIssueForm } from "@/components/meter-issue-form"
 import { MeterCompleteForm } from "@/components/meter-complete-form"
 import { printMeterSlip } from "@/components/meter-slip"
+import { useHashState } from "@/hooks/use-hash-state"
 import { getFromCache, saveToCache } from "@/lib/indexed-db"
 // xlsx loaded dynamically to reduce initial bundle size
 const loadXLSX = () => import("xlsx")
@@ -90,7 +91,7 @@ export function MeterList({ userRole, userAgencies, username, agencies }: Props)
   const [issues, setIssues]     = useState<MeterIssue[]>([])
   const [syncState, setSyncState] = useState<SyncState>("loading")
   const [tab, setTab]           = useState<Tab>("active")
-  const [view, setView]         = useState<View>("list")
+  const [view, setView]         = useHashState<View>("meter", "list")
   const [search, setSearch]         = useState("")
   const [purposeFilter, setPurposeFilter] = useState<string>("all")
   const [selected, setSelected] = useState<MeterIssue | null>(null)

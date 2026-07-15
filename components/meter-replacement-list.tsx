@@ -14,6 +14,7 @@ import {
   MapPin, Phone, Building2, User, Upload, FileText
 } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
+import { useHashState } from "@/hooks/use-hash-state"
 import { getFromCache, saveToCache } from "@/lib/indexed-db"
 import type { ConsumerData } from "@/lib/google-sheets"
 import type { ConsumerMasterRow } from "@/components/consumer-master"
@@ -65,7 +66,7 @@ export function MeterReplacementList({ userRole, userAgencies, username, agencie
   const [tab, setTab] = useState<Tab>("all")
   const [search, setSearch] = useState("")
   const [currentPage, setCurrentPage] = useState(1)
-  const [view, setView] = useState<"list" | "create">("list")
+  const [view, setView] = useHashState<"list" | "create">("meter-replacement", "list")
   
   const isAdmin = userRole === "admin" || userRole === "executive"
   const PAGE_SIZE = 15

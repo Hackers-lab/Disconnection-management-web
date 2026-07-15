@@ -52,7 +52,56 @@ interface DashboardClientProps {
 
 export default function DashboardClient({ role, agencies }: DashboardClientProps) {
   const [showAdminPanel, setShowAdminPanel] = useState(false)
-  const [activeView, setActiveView] = useState<ViewType | "home">("home")
+  const [activeView, setActiveViewInternal] = useState<ViewType | "home">("home")
+
+  // Handle setting active view and updating hash/history
+  const setActiveView = (newView: ViewType | "home") => {
+    setActiveViewInternal(newView)
+    if (typeof window === "undefined") return
+
+    const expectedHash = newView === "home" ? "" : `#${newView}`
+    const currentHash = window.location.hash
+    const currentBaseHash = currentHash.split("/")[0]
+
+    if (currentBaseHash !== expectedHash) {
+      if (newView === "home") {
+        window.history.pushState(null, "", window.location.pathname)
+      } else {
+        window.history.pushState(null, "", expectedHash)
+      }
+    }
+  }
+
+  // Sync activeView with hash on mount/popstate/hashchange
+  useEffect(() => {
+    if (typeof window === "undefined") return
+
+    const handleHashChange = () => {
+      const hash = window.location.hash.substring(1) // e.g. "reconnection/create"
+      const [hashModule] = hash.split("/")
+
+      if (hashModule) {
+        if (hashModule !== activeView) {
+          setActiveViewInternal(hashModule as ViewType | "home")
+        }
+      } else {
+        if (activeView !== "home") {
+          setActiveViewInternal("home")
+        }
+      }
+    }
+
+    // Set initial view from hash if present
+    handleHashChange()
+
+    window.addEventListener("hashchange", handleHashChange)
+    window.addEventListener("popstate", handleHashChange)
+    return () => {
+      window.removeEventListener("hashchange", handleHashChange)
+      window.removeEventListener("popstate", handleHashChange)
+    }
+  }, [activeView])
+
   const [permissions, setPermissions] = useState<Record<string, string[]>>({})
   const [permsLoaded, setPermsLoaded] = useState(false)
 

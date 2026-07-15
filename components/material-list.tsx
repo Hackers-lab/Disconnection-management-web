@@ -18,6 +18,7 @@ import { MATERIAL_CATEGORIES } from "@/lib/material-types"
 import { MaterialReceiveForm } from "./material-receive-form"
 import { MaterialIssueForm } from "./material-issue-form"
 import { MaterialHistoryDialog } from "./material-history-dialog"
+import { useHashState } from "@/hooks/use-hash-state"
 import { getFromCache, saveToCache } from "@/lib/indexed-db"
 
 const CACHE_KEY = "material_data_cache"
@@ -32,7 +33,7 @@ interface Props {
 }
 
 export function MaterialList({ userRole, userAgencies, username }: Props) {
-  const [view, setView] = useState<MainView>("menu")
+  const [view, setView] = useHashState<MainView>("material", "menu")
   const [settingsTab, setSettingsTab] = useState<SettingsSubTab>("catalogue")
 
   const [search, setSearch] = useState("")

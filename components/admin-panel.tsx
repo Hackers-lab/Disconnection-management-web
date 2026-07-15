@@ -3,6 +3,7 @@
 
 import Papa from "papaparse";
 // xlsx loaded dynamically inside various handlers to optimize initial bundle size
+import { useHashState } from "@/hooks/use-hash-state";
 import { getFromCache, saveToCache } from "@/lib/indexed-db";
 import { Table, TableHeader, TableRow, TableHead, TableCell, TableBody } from "@/components/ui/table";
 import React, { useState, useEffect, useMemo } from "react"
@@ -321,7 +322,7 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
       })
     }
 
-  const [view, setView] = useState<ViewType>("menu")
+  const [view, setView] = useHashState<ViewType>("admin", "menu")
   const [users, setUsers] = useState<User[]>([])
   const [agencies, setAgencies] = useState<Agency[]>([])
   const [roles, setRoles] = useState<any[]>([])
