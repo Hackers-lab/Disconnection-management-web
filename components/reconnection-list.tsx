@@ -9,7 +9,7 @@ import {
   Search, X, Plus, RotateCcw, MapPin, Phone, Clock,
   CheckCircle2, Lock, XCircle, ChevronLeft, ChevronRight,
   Loader2, Download, Image as ImageIcon, RefreshCw, Check,
-  DownloadCloud, Monitor, Building2, User, Edit,
+  DownloadCloud, Monitor, Building2, User, Edit, FileDown, FileSpreadsheet
 } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
 import type { ReconnectionRequest } from "@/lib/reconnection-service"
@@ -18,6 +18,14 @@ import { ReconnectionUpdateForm } from "@/components/reconnection-update-form"
 import { useHashState } from "@/hooks/use-hash-state"
 import { getFromCache, saveToCache } from "@/lib/indexed-db"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 // xlsx is loaded dynamically in downloadReport() to avoid bundling ~1MB upfront
 
 const CACHE_KEY = "reconnection_data_cache"
@@ -79,6 +87,7 @@ export function ReconnectionList({ userRole, userAgencies, username, agencies }:
   const [currentPage, setCurrentPage] = useState(1)
   const [view, setView] = useHashState<"list" | "create" | "update">("reconnection", "list")
   const [selected, setSelected] = useState<ReconnectionRequest | null>(null)
+  const [showAgencyReport, setShowAgencyReport] = useState(false)
 
   const isAdmin = userRole === "admin" || userRole === "executive"
   const PAGE_SIZE = 15
@@ -142,6 +151,175 @@ export function ReconnectionList({ userRole, userAgencies, username, agencies }:
       }
     })
   }, [records])
+
+  const agencyStats = useMemo(() => {
+    const map: Record<string, { pending: number; overdue: number; total: number }> = {}
+    
+    processedRecords.forEach(r => {
+      const ag = r.agency ? r.agency.trim() : "Unassigned"
+      if (!map[ag]) {
+        map[ag] = { pending: 0, overdue: 0, total: 0 }
+      }
+      if (r.effectiveStatus === "pending") {
+        map[ag].pending++
+        map[ag].total++
+        if (r.isOverdue) {
+          map[ag].overdue++
+        }
+      }
+    })
+    
+    return Object.entries(map).map(([agency, stats]) => ({
+      agency,
+      ...stats
+    })).sort((a, b) => b.total - a.total)
+  }, [processedRecords])
+
+  const exportAgencyPendingPDF = async () => {
+    const { default: jsPDF } = await import("jspdf")
+    const { default: autoTable } = await import("jspdf-autotable")
+
+    const pendingRequests = processedRecords.filter(r => r.effectiveStatus === "pending")
+    const sorted = [...pendingRequests].sort((a, b) => {
+      const agComp = (a.agency || "").localeCompare(b.agency || "")
+      if (agComp !== 0) return agComp
+      return (a.createdAt || "").localeCompare(b.createdAt || "")
+    })
+
+    const doc = new jsPDF({ orientation: "landscape" })
+    const pw = doc.internal.pageSize.width
+
+    doc.setFontSize(16)
+    doc.setTextColor(30, 41, 59)
+    doc.text("Agency-wise Pending Reconnection Report", pw / 2, 14, { align: "center" })
+    
+    doc.setFontSize(9)
+    doc.setTextColor(100)
+    doc.text(
+      `Generated on: ${new Date().toLocaleDateString("en-IN")} | Total Pending: ${pendingRequests.length}`,
+      pw / 2, 20, { align: "center" }
+    )
+
+    const summaryRows = agencyStats.map((row, idx) => [
+      idx + 1,
+      row.agency,
+      row.pending,
+      row.overdue,
+      row.total
+    ])
+
+    autoTable(doc, {
+      startY: 25,
+      head: [["#", "Agency", "Pending", "Overdue", "Total Pending"]],
+      body: summaryRows,
+      styles: { fontSize: 8.5, font: "helvetica", halign: "center", cellPadding: 3 },
+      headStyles: { fillColor: [15, 23, 42], textColor: 255, fontStyle: "bold" },
+      columnStyles: { 1: { halign: "left", fontStyle: "bold" } },
+      theme: "grid"
+    })
+
+    const nextY = (doc as any).lastAutoTable.finalY + 10
+    let startY = nextY
+    if (startY > doc.internal.pageSize.height - 40) {
+      doc.addPage()
+      startY = 15
+    }
+
+    doc.setFontSize(11)
+    doc.setTextColor(15, 23, 42)
+    doc.text("Detailed Pending List (Grouped by Agency)", 14, startY)
+
+    const cols = ["#", "Request ID", "Created At", "Consumer ID", "Consumer Name", "Mobile", "Address", "Agency", "Overdue"]
+    const body = sorted.map((r, idx) => [
+      idx + 1,
+      r.requestId || "-",
+      r.createdAt || "-",
+      r.consumerId || "-",
+      r.name || "-",
+      r.mobile || "-",
+      r.address || "-",
+      r.agency || "Unassigned",
+      r.isOverdue ? "Yes" : "No"
+    ])
+
+    autoTable(doc, {
+      startY: startY + 3,
+      head: [cols],
+      body: body,
+      styles: { fontSize: 8, font: "helvetica", cellPadding: 2.5 },
+      headStyles: { fillColor: [60, 60, 60], textColor: 255 },
+      columnStyles: {
+        0: { cellWidth: 10 },
+        1: { cellWidth: 25 },
+        2: { cellWidth: 30 },
+        3: { cellWidth: 25 },
+        4: { cellWidth: 40 },
+        5: { cellWidth: 25 },
+        6: { cellWidth: 80 },
+        7: { cellWidth: 30 },
+        8: { cellWidth: 15 }
+      },
+      didDrawPage: (data) => {
+        doc.setFontSize(8)
+        doc.setTextColor(150)
+        doc.text(`Page ${doc.getNumberOfPages()}`, data.settings.margin.left, doc.internal.pageSize.height - 10)
+      },
+      theme: "grid"
+    })
+
+    doc.save(`agency-wise-pending-reconnection-report-${new Date().toISOString().slice(0, 10)}.pdf`)
+    toast({ title: "PDF Report downloaded" })
+  }
+
+  const exportAgencyPendingExcel = async () => {
+    const XLSX = await import("xlsx")
+    const wb = XLSX.utils.book_new()
+
+    const summaryRows = [
+      ["Agency-wise Pending Reconnections Progress Summary"],
+      [`Generated on: ${new Date().toLocaleDateString("en-IN")}`],
+      [],
+      ["Agency", "Pending", "Overdue", "Total Pending"]
+    ]
+
+    agencyStats.forEach(row => {
+      summaryRows.push([
+        row.agency,
+        row.pending.toString(),
+        row.overdue.toString(),
+        row.total.toString()
+      ])
+    })
+
+    const wsSummary = XLSX.utils.aoa_to_sheet(summaryRows)
+    XLSX.utils.book_append_sheet(wb, wsSummary, "Pending Summary")
+
+    const pendingRequests = processedRecords.filter(r => r.effectiveStatus === "pending")
+    const sorted = [...pendingRequests].sort((a, b) => {
+      const agComp = (a.agency || "").localeCompare(b.agency || "")
+      if (agComp !== 0) return agComp
+      return (a.createdAt || "").localeCompare(b.createdAt || "")
+    })
+
+    const detailRows = sorted.map(r => ({
+      "Request ID": r.requestId,
+      "Created At": r.createdAt,
+      "Consumer ID": r.consumerId,
+      "Consumer Name": r.name,
+      "Mobile": r.mobile,
+      "Address": r.address,
+      "Device": r.device || "",
+      "Source": r.source || "",
+      "Agency": r.agency || "Unassigned",
+      "Is Overdue": r.isOverdue ? "Yes" : "No"
+    }))
+
+    const wsDetails = XLSX.utils.json_to_sheet(detailRows)
+    XLSX.utils.book_append_sheet(wb, wsDetails, "Pending Details")
+
+    XLSX.writeFile(wb, `agency-wise-pending-reconnection-report-${new Date().toISOString().slice(0, 10)}.xlsx`)
+    toast({ title: "Excel Report downloaded" })
+  }
 
   // ── Filtering ─────────────────────────────────────────────────────────────
   const filtered = useMemo(() => {
@@ -267,6 +445,15 @@ export function ReconnectionList({ userRole, userAgencies, username, agencies }:
               <SelectItem value="all" className="text-xs font-medium">📁 All ({allCount})</SelectItem>
             </SelectContent>
           </Select>
+
+          <Button 
+            size="sm" 
+            variant="outline" 
+            onClick={() => setShowAgencyReport(true)} 
+            className="shrink-0 rounded-xl h-9 flex items-center gap-1.5 px-3 border-gray-200 text-slate-700 hover:bg-gray-105 font-semibold text-xs"
+          >
+            <Building2 className="h-4 w-4 text-blue-600" /> Agency Report
+          </Button>
 
           {isAdmin && (
             <Button size="sm" variant="outline" onClick={downloadReport} className="shrink-0 rounded-xl h-9 w-9 p-0">
@@ -464,6 +651,80 @@ export function ReconnectionList({ userRole, userAgencies, username, agencies }:
           </div>
         </div>
       )}
+
+      {/* POPUP MODAL: AGENCY RECONNECTION PENDING REPORT */}
+      <Dialog open={showAgencyReport} onOpenChange={setShowAgencyReport}>
+        <DialogContent className="max-w-3xl w-[95vw] max-h-[85vh] overflow-y-auto p-0 rounded-2xl text-slate-900 bg-white border border-slate-200 shadow-xl">
+          <DialogHeader className="bg-slate-900 text-white p-5 sticky top-0 z-40 flex flex-row items-center justify-between space-y-0">
+            <div className="flex items-center gap-3">
+              <span className="p-2 bg-slate-800 rounded-xl">
+                <Building2 className="h-5 w-5 text-blue-400" />
+              </span>
+              <div>
+                <DialogTitle className="text-base font-bold text-white tracking-tight">Agency Reconnection Pending Report</DialogTitle>
+                <DialogDescription className="text-[11px] text-slate-400">Total metrics breakdown of pending reconnection requests by agency</DialogDescription>
+              </div>
+            </div>
+            <button 
+              onClick={() => setShowAgencyReport(false)} 
+              className="text-slate-400 hover:text-white transition p-1.5 hover:bg-slate-800 rounded-lg mr-6"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </DialogHeader>
+
+          <div className="p-6 space-y-4">
+            <div className="flex justify-end gap-2">
+              <Button 
+                size="sm" 
+                variant="outline" 
+                onClick={exportAgencyPendingPDF}
+                className="h-8 rounded-lg border-slate-200 hover:bg-slate-50 text-slate-700 flex items-center gap-1 text-[11px] font-semibold"
+              >
+                <FileDown className="h-3.5 w-3.5 text-red-500" /> Export PDF
+              </Button>
+              <Button 
+                size="sm" 
+                variant="outline" 
+                onClick={exportAgencyPendingExcel}
+                className="h-8 rounded-lg border-slate-200 hover:bg-slate-50 text-slate-700 flex items-center gap-1 text-[11px] font-semibold"
+              >
+                <FileSpreadsheet className="h-3.5 w-3.5 text-green-600" /> Export Excel
+              </Button>
+            </div>
+
+            <div className="overflow-hidden rounded-xl border border-slate-200">
+              <Table className="text-xs">
+                <TableHeader className="bg-slate-50 font-bold">
+                  <TableRow>
+                    <TableHead className="font-bold text-slate-850">Agency Name</TableHead>
+                    <TableHead className="text-center font-bold text-slate-850">Pending Reconns</TableHead>
+                    <TableHead className="text-center font-bold text-slate-850 text-red-600">Overdue Reconns</TableHead>
+                    <TableHead className="text-right font-bold text-slate-850">Total Pending</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {agencyStats.map((row) => (
+                    <TableRow key={row.agency} className="hover:bg-slate-50 transition-colors">
+                      <TableCell className="font-semibold text-slate-800">{row.agency}</TableCell>
+                      <TableCell className="text-center font-bold font-mono">{row.pending}</TableCell>
+                      <TableCell className="text-center font-bold font-mono text-red-600 bg-red-50/10">{row.overdue}</TableCell>
+                      <TableCell className="text-right font-bold font-mono">{row.total}</TableCell>
+                    </TableRow>
+                  ))}
+                  {agencyStats.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={4} className="text-center py-6 text-gray-400">
+                        No pending reconnections found.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

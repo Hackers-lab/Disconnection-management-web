@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Label } from "@/components/ui/label"
 import {
   Package, Search, Plus, ArrowDownToLine, ArrowUpFromLine,
-  ListChecks, Loader2, RefreshCw, ChevronLeft, Trash2,
+  ListChecks, Loader2, RefreshCw, ChevronLeft, ChevronRight, ChevronDown, Trash2,
   FileDown, FileSpreadsheet, Eye, Settings, AlertTriangle, ArrowLeft,
   Pencil, Check, MoreVertical, X, ImageIcon
 } from "lucide-react"
@@ -56,6 +56,7 @@ export function MaterialList({ userRole, userAgencies, username, permissions }: 
 
   const [search, setSearch] = useState("")
   const [categoryFilter, setCategoryFilter] = useState<string>("all")
+  const [showOutOfStock, setShowOutOfStock] = useState(false)
 
   // Data
   const [stock, setStock] = useState<MaterialStock[]>([])
@@ -223,6 +224,19 @@ export function MaterialList({ userRole, userAgencies, username, permissions }: 
              s.category.toLowerCase().includes(q)
     })
   , [stock, q, categoryFilter])
+
+  const { inStockItems, outOfStockItems } = useMemo(() => {
+    const inStock: MaterialStock[] = []
+    const outStock: MaterialStock[] = []
+    filteredStock.forEach(s => {
+      if (s.currentStock === 0) {
+        outStock.push(s)
+      } else {
+        inStock.push(s)
+      }
+    })
+    return { inStockItems: inStock, outOfStockItems: outStock }
+  }, [filteredStock])
 
   const filteredCatalogue = useMemo(() =>
     catalogue.filter(m => {
@@ -638,7 +652,7 @@ export function MaterialList({ userRole, userAgencies, username, permissions }: 
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredStock.map((s, idx) => {
+                {inStockItems.map((s, idx) => {
                   const isLow = s.currentStock < s.threshold
                   const stockColor = isLow ? "text-red-600 font-bold" : "text-gray-900 font-semibold"
                   return (
@@ -679,6 +693,74 @@ export function MaterialList({ userRole, userAgencies, username, permissions }: 
                     </TableRow>
                   )
                 })}
+
+                {outOfStockItems.length > 0 && (
+                  <>
+                    <TableRow 
+                      className="bg-slate-50 hover:bg-slate-100 cursor-pointer select-none border-t border-b font-semibold"
+                      onClick={() => setShowOutOfStock(!showOutOfStock)}
+                    >
+                      <TableCell colSpan={2} className="text-xs py-2.5 px-4">
+                        <div className="flex items-center justify-between w-full">
+                          <div className="flex items-center gap-2 text-slate-700">
+                            {showOutOfStock ? (
+                              <ChevronDown className="h-4 w-4 text-slate-500" />
+                            ) : (
+                              <ChevronRight className="h-4 w-4 text-slate-500" />
+                            )}
+                            <span>Out of Stock Items ({outOfStockItems.length})</span>
+                          </div>
+                          <span className="text-[10px] bg-slate-200/80 text-slate-650 px-2 py-0.5 rounded-full font-mono font-medium">
+                            {showOutOfStock ? "Click to collapse" : "Click to expand"}
+                          </span>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+
+                    {showOutOfStock && outOfStockItems.map((s, idx) => {
+                      const isLow = s.currentStock < s.threshold
+                      const stockColor = isLow ? "text-red-600 font-bold" : "text-gray-900 font-semibold"
+                      return (
+                        <TableRow key={`out-${s.materialId}-${idx}`} className="hover:bg-slate-50/50 bg-red-50/10">
+                          <TableCell className="text-xs flex items-center gap-2 pl-6">
+                            {s.photoUrl ? (
+                              <img 
+                                src={getGoogleDriveDirectLink(s.photoUrl)} 
+                                alt="" 
+                                className="h-7 w-7 rounded-lg object-cover border bg-gray-50 flex-shrink-0 cursor-zoom-in hover:opacity-80 transition-opacity"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  setPreviewImage({ url: getGoogleDriveDirectLink(s.photoUrl), title: s.description })
+                                }}
+                              />
+                            ) : (
+                              <div className="h-7 w-7 rounded-lg border bg-gray-50 flex items-center justify-center flex-shrink-0 text-gray-400">
+                                <Package className="h-3.5 w-3.5" />
+                              </div>
+                            )}
+                            <span 
+                              className="text-blue-655 hover:text-blue-855 hover:underline cursor-pointer font-semibold"
+                              onClick={() => setHistoryMaterial(s)}
+                            >
+                              {s.description}
+                            </span>
+                          </TableCell>
+                          <TableCell className={`text-xs text-right ${stockColor}`}>
+                            <span className="bg-red-50 border border-red-200 px-2 py-0.5 rounded inline-block text-red-600">
+                              {s.currentStock} {s.unit}
+                            </span>
+                            {isLow && (
+                              <span className="block text-[9px] text-red-500 font-medium mt-0.5">
+                                Min Threshold: {s.threshold}
+                              </span>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })}
+                  </>
+                )}
+
                 {filteredStock.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={2} className="text-center py-10 text-xs text-gray-400">

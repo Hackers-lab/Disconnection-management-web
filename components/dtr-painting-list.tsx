@@ -37,7 +37,9 @@ import {
   Building2,
   X,
   Camera,
-  SlidersHorizontal
+  SlidersHorizontal,
+  FileDown,
+  FileSpreadsheet
 } from "lucide-react"
 
 function getGoogleDriveDirectLink(url: string): string {
@@ -281,6 +283,153 @@ export function DTRPaintingList({ userRole, userAgencies = [], username, agencie
     })).sort((a, b) => b.pct - a.pct)
   }, [records])
 
+  const exportAgencyPendingPDF = async () => {
+    const { default: jsPDF } = await import("jspdf")
+    const { default: autoTable } = await import("jspdf-autotable")
+
+    const pendingDTRs = records.filter(r => (r.painting || "").toLowerCase() !== "done")
+    
+    // Sort by agency then dtrCode
+    const sortedDTRs = [...pendingDTRs].sort((a, b) => {
+      const agComp = (a.paintingAgency || "").localeCompare(b.paintingAgency || "")
+      if (agComp !== 0) return agComp
+      return (a.dtrCode || "").localeCompare(b.dtrCode || "")
+    })
+
+    const doc = new jsPDF({ orientation: "landscape" })
+    const pw = doc.internal.pageSize.width
+
+    // Title / Header
+    doc.setFontSize(16)
+    doc.setTextColor(30, 41, 59)
+    doc.text("Agency-wise Pending DTR Painting Report", pw / 2, 14, { align: "center" })
+    
+    doc.setFontSize(9)
+    doc.setTextColor(100)
+    doc.text(
+      `Generated on: ${new Date().toLocaleDateString("en-IN")} | Total Pending DTRs: ${pendingDTRs.length}`,
+      pw / 2, 20, { align: "center" }
+    )
+
+    // Summary table
+    const summaryRows = agencyStats.map((row, idx) => [
+      idx + 1,
+      row.agency,
+      row.total,
+      row.done,
+      row.pending,
+      `${row.pct}%`
+    ])
+
+    autoTable(doc, {
+      startY: 25,
+      head: [["#", "Painting Agency", "Assigned DTRs", "Painting Completed", "Painting Pending", "Progress Rate"]],
+      body: summaryRows,
+      styles: { fontSize: 8.5, font: "helvetica", halign: "center", cellPadding: 3 },
+      headStyles: { fillColor: [15, 23, 42], textColor: 255, fontStyle: "bold" },
+      columnStyles: { 1: { halign: "left", fontStyle: "bold" } },
+      theme: "grid"
+    })
+
+    const nextY = (doc as any).lastAutoTable.finalY + 10
+    let startY = nextY
+    if (startY > doc.internal.pageSize.height - 40) {
+      doc.addPage()
+      startY = 15
+    }
+
+    doc.setFontSize(11)
+    doc.setTextColor(15, 23, 42)
+    doc.text("Detailed Pending List (Grouped by Agency)", 14, startY)
+
+    const cols = ["#", "DTR Code", "Feeder Name", "Capacity (kVA)", "Landmark / Location", "Painting Agency", "GPS Status"]
+    const body = sortedDTRs.map((r, idx) => [
+      idx + 1,
+      r.dtrCode || "-",
+      r.feederName || "-",
+      r.kvCapacity || "-",
+      r.locationName || "-",
+      r.paintingAgency || "Unassigned",
+      r.latlong ? "Available" : "Missing GPS"
+    ])
+
+    autoTable(doc, {
+      startY: startY + 3,
+      head: [cols],
+      body: body,
+      styles: { fontSize: 8, font: "helvetica", cellPadding: 2.5 },
+      headStyles: { fillColor: [60, 60, 60], textColor: 255 },
+      columnStyles: {
+        0: { cellWidth: 10 },
+        1: { cellWidth: 30 },
+        2: { cellWidth: 40 },
+        3: { cellWidth: 25 },
+        4: { cellWidth: 90 },
+        5: { cellWidth: 45 },
+        6: { cellWidth: 30 }
+      },
+      didDrawPage: (data) => {
+        doc.setFontSize(8)
+        doc.setTextColor(150)
+        doc.text(`Page ${doc.getNumberOfPages()}`, data.settings.margin.left, doc.internal.pageSize.height - 10)
+      },
+      theme: "grid"
+    })
+
+    doc.save(`agency-wise-pending-dtr-painting-report-${new Date().toISOString().slice(0, 10)}.pdf`)
+    toast({ title: "PDF Report downloaded" })
+  }
+
+  const exportAgencyPendingExcel = async () => {
+    const XLSX = await import("xlsx")
+    const wb = XLSX.utils.book_new()
+
+    // Sheet 1: Summary Sheet
+    const summaryRows = [
+      ["Agency-wise DTR Painting Progress Summary"],
+      [`Generated on: ${new Date().toLocaleDateString("en-IN")}`],
+      [],
+      ["Painting Agency", "Assigned DTRs", "Painting Completed", "Painting Pending", "Progress Rate"]
+    ]
+
+    agencyStats.forEach(row => {
+      summaryRows.push([
+        row.agency,
+        row.total.toString(),
+        row.done.toString(),
+        row.pending.toString(),
+        `${row.pct}%`
+      ])
+    })
+
+    const wsSummary = XLSX.utils.aoa_to_sheet(summaryRows)
+    XLSX.utils.book_append_sheet(wb, wsSummary, "Painting Summary")
+
+    // Sheet 2: Detailed Pending Sheet
+    const pendingDTRs = records.filter(r => (r.painting || "").toLowerCase() !== "done")
+    const sortedDTRs = [...pendingDTRs].sort((a, b) => {
+      const agComp = (a.paintingAgency || "").localeCompare(b.paintingAgency || "")
+      if (agComp !== 0) return agComp
+      return (a.dtrCode || "").localeCompare(b.dtrCode || "")
+    })
+
+    const detailRows = sortedDTRs.map(r => ({
+      "DTR Code": r.dtrCode,
+      "Feeder Name": r.feederName,
+      "Capacity (kVA)": r.kvCapacity || "",
+      "Landmark / Location": r.locationName,
+      "Supply Office": r.supplyOffice || "",
+      "Painting Agency": r.paintingAgency || "Unassigned",
+      "GPS Coordinates": r.latlong || "Missing GPS"
+    }))
+
+    const wsDetails = XLSX.utils.json_to_sheet(detailRows)
+    XLSX.utils.book_append_sheet(wb, wsDetails, "Pending Details")
+
+    XLSX.writeFile(wb, `agency-wise-pending-dtr-painting-report-${new Date().toISOString().slice(0, 10)}.xlsx`)
+    toast({ title: "Excel Report downloaded" })
+  }
+
   // Pagination
   const paginated = useMemo(() => {
     const start = (currentPage - 1) * PAGE_SIZE
@@ -325,6 +474,15 @@ export function DTRPaintingList({ userRole, userAgencies = [], username, agencie
             {syncState === "idle" && <div className="h-1.5 w-1.5 rounded-full bg-gray-400 mr-2" />}
             {syncState === "loading" ? "Syncing..." : syncState === "updated" ? "Updated" : "Idle"}
           </Badge>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button 
+            variant="outline" 
+            onClick={() => setShowAgencyReport(true)} 
+            className="h-10 rounded-xl text-slate-700 border-slate-200 hover:bg-slate-50 flex items-center gap-1.5 text-xs font-semibold"
+          >
+            <Building2 className="h-4 w-4 text-blue-600" /> Agency Report
+          </Button>
         </div>
       </div>
 
@@ -771,7 +929,26 @@ export function DTRPaintingList({ userRole, userAgencies = [], username, agencie
             </button>
           </DialogHeader>
 
-          <div className="p-6 space-y-6">
+          <div className="p-6 space-y-4">
+            <div className="flex justify-end gap-2">
+              <Button 
+                size="sm" 
+                variant="outline" 
+                onClick={exportAgencyPendingPDF}
+                className="h-8 rounded-lg border-slate-200 hover:bg-slate-50 text-slate-700 flex items-center gap-1 text-[11px] font-semibold"
+              >
+                <FileDown className="h-3.5 w-3.5 text-red-500" /> Export PDF
+              </Button>
+              <Button 
+                size="sm" 
+                variant="outline" 
+                onClick={exportAgencyPendingExcel}
+                className="h-8 rounded-lg border-slate-200 hover:bg-slate-50 text-slate-700 flex items-center gap-1 text-[11px] font-semibold"
+              >
+                <FileSpreadsheet className="h-3.5 w-3.5 text-green-600" /> Export Excel
+              </Button>
+            </div>
+
             <div className="overflow-hidden rounded-xl border border-slate-200">
               <Table className="text-xs">
                 <TableHeader className="bg-slate-50 font-bold">
