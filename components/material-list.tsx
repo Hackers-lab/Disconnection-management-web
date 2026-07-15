@@ -20,6 +20,7 @@ import { MaterialIssueForm } from "./material-issue-form"
 import { MaterialHistoryDialog } from "./material-history-dialog"
 import { useHashState } from "@/hooks/use-hash-state"
 import { getFromCache, saveToCache } from "@/lib/indexed-db"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 
 const CACHE_KEY = "material_data_cache"
 
@@ -51,6 +52,7 @@ export function MaterialList({ userRole, userAgencies, username, permissions }: 
 
   // Dialogs
   const [historyMaterial, setHistoryMaterial] = useState<MaterialStock | null>(null)
+  const [previewImage, setPreviewImage] = useState<{ url: string; title: string } | null>(null)
 
   // Add material states
   const [newMatDesc, setNewMatDesc] = useState("")
@@ -630,7 +632,11 @@ export function MaterialList({ userRole, userAgencies, username, permissions }: 
                           <img 
                             src={s.photoUrl} 
                             alt="" 
-                            className="h-7 w-7 rounded-lg object-cover border bg-gray-50 flex-shrink-0" 
+                            className="h-7 w-7 rounded-lg object-cover border bg-gray-50 flex-shrink-0 cursor-zoom-in hover:opacity-80 transition-opacity"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setPreviewImage({ url: s.photoUrl, title: s.description })
+                            }}
                           />
                         ) : (
                           <div className="h-7 w-7 rounded-lg border bg-gray-50 flex items-center justify-center flex-shrink-0 text-gray-400">
@@ -872,7 +878,15 @@ export function MaterialList({ userRole, userAgencies, username, permissions }: 
                           </TableCell>
                           <TableCell className="text-xs py-2 font-medium flex items-center gap-2">
                             {m.photoUrl ? (
-                              <img src={m.photoUrl} alt="" className="h-7 w-7 rounded-lg object-cover border bg-gray-50 flex-shrink-0" />
+                              <img 
+                                src={m.photoUrl} 
+                                alt="" 
+                                className="h-7 w-7 rounded-lg object-cover border bg-gray-50 flex-shrink-0 cursor-zoom-in hover:opacity-80 transition-opacity"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  setPreviewImage({ url: m.photoUrl, title: m.description })
+                                }}
+                              />
                             ) : (
                               <div className="h-7 w-7 rounded-lg border bg-gray-50 flex items-center justify-center flex-shrink-0 text-gray-400">
                                 <Package className="h-3.5 w-3.5" />
@@ -1023,6 +1037,23 @@ export function MaterialList({ userRole, userAgencies, username, permissions }: 
         receives={receives}
         issues={issues}
       />
+
+      <Dialog open={!!previewImage} onOpenChange={(open) => !open && setPreviewImage(null)}>
+        <DialogContent className="max-w-xl p-4 bg-white rounded-2xl border">
+          <DialogHeader className="pb-2 border-b">
+            <DialogTitle className="text-sm font-bold text-slate-800">{previewImage?.title}</DialogTitle>
+          </DialogHeader>
+          {previewImage && (
+            <div className="flex items-center justify-center pt-4 pb-2 bg-slate-50 rounded-xl overflow-hidden mt-2">
+              <img 
+                src={previewImage.url} 
+                alt={previewImage.title} 
+                className="max-w-full max-h-[60vh] object-contain rounded-lg shadow-sm"
+              />
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
