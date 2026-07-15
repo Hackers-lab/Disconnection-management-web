@@ -37,7 +37,7 @@ interface Props {
   agencies: string[]
 }
 
-type Tab = "pending" | "reconnected" | "door_locked" | "overdue" | "all"
+type Tab = "pending" | "reconnected" | "door_locked" | "overdue" | "all" | "reports"
 type SyncState = "idle" | "loading" | "updated"
 
 function formatTs(ts: string) {
@@ -87,7 +87,6 @@ export function ReconnectionList({ userRole, userAgencies, username, agencies }:
   const [currentPage, setCurrentPage] = useState(1)
   const [view, setView] = useHashState<"list" | "create" | "update">("reconnection", "list")
   const [selected, setSelected] = useState<ReconnectionRequest | null>(null)
-  const [showAgencyReport, setShowAgencyReport] = useState(false)
 
   const isAdmin = userRole === "admin" || userRole === "executive"
   const PAGE_SIZE = 15
@@ -442,18 +441,10 @@ export function ReconnectionList({ userRole, userAgencies, username, agencies }:
               <SelectItem value="reconnected" className="text-xs font-medium">✅ Reconnected ({reconnectedCount})</SelectItem>
               <SelectItem value="door_locked" className="text-xs font-medium">🔒 Door Locked ({doorLockedCount})</SelectItem>
               <SelectItem value="overdue" className="text-xs font-medium">⚠️ Overdue ({overdueCount})</SelectItem>
+              {isAdmin && <SelectItem value="reports" className="text-xs font-medium">📊 Reports</SelectItem>}
               <SelectItem value="all" className="text-xs font-medium">📁 All ({allCount})</SelectItem>
             </SelectContent>
           </Select>
-
-          <Button 
-            size="sm" 
-            variant="outline" 
-            onClick={() => setShowAgencyReport(true)} 
-            className="shrink-0 rounded-xl h-9 flex items-center gap-1.5 px-3 border-gray-200 text-slate-700 hover:bg-gray-105 font-semibold text-xs"
-          >
-            <Building2 className="h-4 w-4 text-blue-600" /> Agency Report
-          </Button>
 
           {isAdmin && (
             <Button size="sm" variant="outline" onClick={downloadReport} className="shrink-0 rounded-xl h-9 w-9 p-0">
@@ -497,8 +488,19 @@ export function ReconnectionList({ userRole, userAgencies, username, agencies }:
         </div>
       </div>
 
+      {/* Reports tab */}
+      {tab === "reports" && isAdmin && (
+        <ReconnectionReports 
+          records={processedRecords} 
+          agencyStats={agencyStats} 
+          exportAgencyPendingPDF={exportAgencyPendingPDF} 
+          exportAgencyPendingExcel={exportAgencyPendingExcel} 
+        />
+      )}
+
       {/* List */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+      {tab !== "reports" && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         {paginated.length === 0 ? (
           <div className="text-center py-16 text-gray-400 col-span-full">
             <RotateCcw className="h-10 w-10 mx-auto mb-3 opacity-30" />
@@ -626,9 +628,10 @@ export function ReconnectionList({ userRole, userAgencies, username, agencies }:
           )
         })}
       </div>
+      )}
 
       {/* Pagination */}
-      {totalPages > 1 && (
+      {totalPages > 1 && tab !== "reports" && (
         <div className="flex items-center justify-between bg-white p-4 rounded-xl shadow-sm border">
           <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="rounded-lg">
             <ChevronLeft className="h-4 w-4 mr-1" /> Previous
@@ -651,80 +654,114 @@ export function ReconnectionList({ userRole, userAgencies, username, agencies }:
           </div>
         </div>
       )}
+    </div>
+  )
+}
 
-      {/* POPUP MODAL: AGENCY RECONNECTION PENDING REPORT */}
-      <Dialog open={showAgencyReport} onOpenChange={setShowAgencyReport}>
-        <DialogContent className="max-w-3xl w-[95vw] max-h-[85vh] overflow-y-auto p-0 rounded-2xl text-slate-900 bg-white border border-slate-200 shadow-xl">
-          <DialogHeader className="bg-slate-900 text-white p-5 sticky top-0 z-40 flex flex-row items-center justify-between space-y-0">
-            <div className="flex items-center gap-3">
-              <span className="p-2 bg-slate-800 rounded-xl">
-                <Building2 className="h-5 w-5 text-blue-400" />
-              </span>
-              <div>
-                <DialogTitle className="text-base font-bold text-white tracking-tight">Agency Reconnection Pending Report</DialogTitle>
-                <DialogDescription className="text-[11px] text-slate-400">Total metrics breakdown of pending reconnection requests by agency</DialogDescription>
+function ReconnectionReports({ 
+  records, 
+  agencyStats,
+  exportAgencyPendingPDF,
+  exportAgencyPendingExcel
+}: { 
+  records: any[], 
+  agencyStats: any[],
+  exportAgencyPendingPDF: () => void,
+  exportAgencyPendingExcel: () => void
+}) {
+  const total = records.length
+  const pending = records.filter(r => r.effectiveStatus === "pending").length
+  const overdue = records.filter(r => r.isOverdue).length
+  const reconnected = records.filter(r => r.status === "reconnected").length
+  const doorLocked = records.filter(r => r.status === "door_locked").length
+
+  const StatCard = ({ label, value, color }: { label: string; value: number; color: string }) => (
+    <div className={`rounded-xl p-4 border bg-white ${color}`}>
+      <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">{label}</p>
+      <p className="text-3xl font-bold mt-1 text-slate-900">{value}</p>
+    </div>
+  )
+
+  const TableCustom = ({ title, headers, rows }: { title: string; headers: string[]; rows: (string | number)[][] }) => (
+    <div className="bg-white rounded-lg border shadow-sm overflow-hidden text-slate-900">
+      <div className="px-4 py-3 border-b bg-slate-50"><p className="font-semibold text-gray-800 text-sm">{title}</p></div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead className="bg-gray-50 border-b">
+            <tr>{headers.map((h, i) => <th key={i} className="px-3 py-2 text-left text-gray-650 font-semibold">{h}</th>)}</tr>
+          </thead>
+          <tbody className="divide-y">
+            {rows.map((row, i) => (
+              <tr key={i} className="hover:bg-gray-50">
+                {row.map((cell, j) => (
+                  <td key={j} className={`px-3 py-2 ${j > 0 ? "font-mono font-semibold" : ""}`}>
+                    {cell}
+                  </td>
+                ))}
+              </tr>
+            ))}
+            {rows.length === 0 && (
+              <tr>
+                <td colSpan={headers.length} className="text-center py-6 text-gray-400">
+                  No records available.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+
+  return (
+    <div className="space-y-6">
+      {/* Stat Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+        <StatCard label="Total Requests" value={total} color="border-gray-200" />
+        <StatCard label="Pending Reconnection" value={pending} color="border-yellow-250 bg-yellow-50/10" />
+        <StatCard label="Overdue Requests" value={overdue} color="border-red-200 bg-red-50/10" />
+        <StatCard label="Reconnected" value={reconnected} color="border-green-200 bg-green-50/10" />
+        <StatCard label="Door Locked" value={doorLocked} color="border-orange-200 bg-orange-50/10" />
+      </div>
+
+      {/* Custom Reports Panel */}
+      <Card className="border border-slate-200 shadow-sm overflow-hidden bg-white">
+        <div className="px-5 py-4 border-b bg-slate-50/50">
+          <h3 className="font-bold text-gray-950 text-sm">Download Custom Reports</h3>
+          <p className="text-xs text-gray-500 mt-0.5">Generate customized PDF reports and Excel spreadsheets with summary pages</p>
+        </div>
+        <CardContent className="p-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Card 1: Agency Pending Report */}
+            <div className="bg-slate-50/60 border border-slate-100 rounded-xl p-4 flex flex-col justify-between space-y-4 hover:border-blue-200 hover:bg-blue-50/5 transition">
+              <div className="space-y-1.5 text-slate-900">
+                <span className="text-[9px] font-bold tracking-wider text-blue-700 uppercase bg-blue-100/60 px-2 py-0.5 rounded-full">Report 1</span>
+                <h4 className="font-bold text-gray-900 text-sm">Agency Pending Reconnection Report</h4>
+                <p className="text-xs text-gray-500 leading-relaxed">
+                  List of reconnection requests pending with agencies, showing summary and detailed pending records.
+                </p>
+              </div>
+              <div className="flex gap-2 pt-1">
+                <Button size="sm" variant="outline" className="flex-1 h-8 text-xs gap-1 border-red-200 text-red-700 bg-red-50/50 hover:bg-red-100 hover:text-red-800 transition" onClick={exportAgencyPendingPDF}>
+                  <FileDown className="h-3.5 w-3.5" /> PDF
+                </Button>
+                <Button size="sm" variant="outline" className="flex-1 h-8 text-xs gap-1 border-green-200 text-green-700 bg-green-50/50 hover:bg-green-100 hover:text-green-800 transition" onClick={exportAgencyPendingExcel}>
+                  <FileSpreadsheet className="h-3.5 w-3.5" /> Excel
+                </Button>
               </div>
             </div>
-            <button 
-              onClick={() => setShowAgencyReport(false)} 
-              className="text-slate-400 hover:text-white transition p-1.5 hover:bg-slate-800 rounded-lg mr-6"
-            >
-              <X className="h-5 w-5" />
-            </button>
-          </DialogHeader>
-
-          <div className="p-6 space-y-4">
-            <div className="flex justify-end gap-2">
-              <Button 
-                size="sm" 
-                variant="outline" 
-                onClick={exportAgencyPendingPDF}
-                className="h-8 rounded-lg border-slate-200 hover:bg-slate-50 text-slate-700 flex items-center gap-1 text-[11px] font-semibold"
-              >
-                <FileDown className="h-3.5 w-3.5 text-red-500" /> Export PDF
-              </Button>
-              <Button 
-                size="sm" 
-                variant="outline" 
-                onClick={exportAgencyPendingExcel}
-                className="h-8 rounded-lg border-slate-200 hover:bg-slate-50 text-slate-700 flex items-center gap-1 text-[11px] font-semibold"
-              >
-                <FileSpreadsheet className="h-3.5 w-3.5 text-green-600" /> Export Excel
-              </Button>
-            </div>
-
-            <div className="overflow-hidden rounded-xl border border-slate-200">
-              <Table className="text-xs">
-                <TableHeader className="bg-slate-50 font-bold">
-                  <TableRow>
-                    <TableHead className="font-bold text-slate-850">Agency Name</TableHead>
-                    <TableHead className="text-center font-bold text-slate-850">Pending Reconns</TableHead>
-                    <TableHead className="text-center font-bold text-slate-850 text-red-600">Overdue Reconns</TableHead>
-                    <TableHead className="text-right font-bold text-slate-850">Total Pending</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {agencyStats.map((row) => (
-                    <TableRow key={row.agency} className="hover:bg-slate-50 transition-colors">
-                      <TableCell className="font-semibold text-slate-800">{row.agency}</TableCell>
-                      <TableCell className="text-center font-bold font-mono">{row.pending}</TableCell>
-                      <TableCell className="text-center font-bold font-mono text-red-600 bg-red-50/10">{row.overdue}</TableCell>
-                      <TableCell className="text-right font-bold font-mono">{row.total}</TableCell>
-                    </TableRow>
-                  ))}
-                  {agencyStats.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={4} className="text-center py-6 text-gray-400">
-                        No pending reconnections found.
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </div>
           </div>
-        </DialogContent>
-      </Dialog>
+        </CardContent>
+      </Card>
+
+      {/* Analytics Table */}
+      {agencyStats.length > 0 && (
+        <TableCustom 
+          title="Agency Reconnection Performance" 
+          headers={["Agency Name", "Pending Reconns", "Overdue Reconns", "Total Pending"]} 
+          rows={agencyStats.map(a => [a.agency, a.pending, a.overdue, a.total])} 
+        />
+      )}
     </div>
   )
 }
