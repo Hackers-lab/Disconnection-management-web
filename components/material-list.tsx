@@ -57,6 +57,13 @@ export function MaterialList({ userRole, userAgencies, username, permissions }: 
   const [search, setSearch] = useState("")
   const [categoryFilter, setCategoryFilter] = useState<string>("all")
   const [showOutOfStock, setShowOutOfStock] = useState(false)
+ 
+  // Stock sub-tabs & filters
+  const [stockSubTab, setStockSubTab] = useState<"register" | "history">("register")
+  const [historyMaterialFilter, setHistoryMaterialFilter] = useState<string>("all")
+  const [historyTypeFilter, setHistoryTypeFilter] = useState<"all" | "receive" | "issue">("all")
+  const [historySearch, setHistorySearch] = useState("")
+  const [historyPage, setHistoryPage] = useState(1)
 
   // Data
   const [stock, setStock] = useState<MaterialStock[]>([])
@@ -266,6 +273,126 @@ export function MaterialList({ userRole, userAgencies, username, permissions }: 
              i.purpose.toLowerCase().includes(q)
     })
   , [issues, q])
+
+  // ── Unified Stock Transaction Ledger ──────────────────────────────────────────
+  const unifiedHistory = useMemo(() => {
+    const allReceives = receives.map(r => ({
+      type: "receive" as const,
+      id: r.receiveId,
+      date: r.receivedDate,
+      materialId: r.materialId,
+      materialDesc: r.materialDesc,
+      quantity: r.quantity,
+      unit: r.unit,
+      by: r.createdBy,
+      ref: r.challanRef || "—",
+      party: r.receivedFrom,
+      remarks: r.remarks,
+      photoUrl: r.photoUrl
+    }))
+
+    const allIssues = issues.map(i => ({
+      type: "issue" as const,
+      id: i.issueId,
+      date: i.issueDate,
+      materialId: i.materialId,
+      materialDesc: i.materialDesc,
+      quantity: i.quantity,
+      unit: i.unit,
+      by: i.issuedBy,
+      ref: i.purpose || "—",
+      party: i.recipientName,
+      remarks: i.remarks,
+      photoUrl: i.photoUrl
+    }))
+
+    const combined = [...allReceives, ...allIssues]
+
+    // Sort chronologically: newest first (date format DD-MM-YYYY)
+    const parseDate = (d: string) => {
+      if (!d) return 0
+      const [dd, mm, yy] = d.split("-").map(Number)
+      return new Date(yy, mm - 1, dd).getTime()
+    }
+    combined.sort((a, b) => parseDate(b.date) - parseDate(a.date))
+    return combined
+  }, [receives, issues])
+
+  // Filtered unified history for the ledger sub-tab
+  const filteredUnifiedHistory = useMemo(() => {
+    let list = unifiedHistory
+
+    // Material Filter
+    if (historyMaterialFilter !== "all") {
+      list = list.filter(h => h.materialId === historyMaterialFilter)
+    }
+
+    // Type Filter
+    if (historyTypeFilter !== "all") {
+      list = list.filter(h => h.type === historyTypeFilter)
+    }
+
+    // Search query
+    if (historySearch) {
+      const qH = historySearch.toLowerCase()
+      list = list.filter(h => 
+        h.materialDesc.toLowerCase().includes(qH) ||
+        h.id.toLowerCase().includes(qH) ||
+        h.party.toLowerCase().includes(qH) ||
+        h.ref.toLowerCase().includes(qH) ||
+        h.by.toLowerCase().includes(qH) ||
+        (h.remarks && h.remarks.toLowerCase().includes(qH))
+      )
+    }
+
+    return list
+  }, [unifiedHistory, historyMaterialFilter, historyTypeFilter, historySearch])
+
+  // Calculate summary metrics for unified ledger
+  const ledgerMetrics = useMemo(() => {
+    if (historyMaterialFilter !== "all") {
+      // Find material unit and details
+      const matStock = stock.find(s => s.materialId === historyMaterialFilter)
+      const unit = matStock?.unit || "nos"
+      const currentStock = matStock?.currentStock || 0
+      const threshold = matStock?.threshold || 0
+      
+      const matHistory = unifiedHistory.filter(h => h.materialId === historyMaterialFilter)
+      const totalRec = matHistory.filter(h => h.type === "receive").reduce((acc, curr) => acc + curr.quantity, 0)
+      const totalIss = matHistory.filter(h => h.type === "issue").reduce((acc, curr) => acc + curr.quantity, 0)
+
+      return {
+        isMaterialSelected: true,
+        unit,
+        currentStock,
+        threshold,
+        totalReceived: totalRec,
+        totalIssued: totalIss
+      }
+    } else {
+      // Global metrics
+      const totalRec = unifiedHistory.filter(h => h.type === "receive").length
+      const totalIss = unifiedHistory.filter(h => h.type === "issue").length
+      return {
+        isMaterialSelected: false,
+        unit: "",
+        currentStock: 0,
+        threshold: 0,
+        totalReceived: totalRec, // Count of transactions
+        totalIssued: totalIss    // Count of transactions
+      }
+    }
+  }, [unifiedHistory, historyMaterialFilter, stock])
+
+  const HISTORY_PAGE_SIZE = 15
+  const totalHistoryPages = Math.ceil(filteredUnifiedHistory.length / HISTORY_PAGE_SIZE)
+  const paginatedHistory = useMemo(() => {
+    return filteredUnifiedHistory.slice((historyPage - 1) * HISTORY_PAGE_SIZE, historyPage * HISTORY_PAGE_SIZE)
+  }, [filteredUnifiedHistory, historyPage])
+
+  useEffect(() => {
+    setHistoryPage(1)
+  }, [historyMaterialFilter, historyTypeFilter, historySearch])
 
   // ── Add/Edit Catalogue Item ───────────────────────────────────────────────────
   const handleAddMaterial = async () => {
@@ -570,159 +697,120 @@ export function MaterialList({ userRole, userAgencies, username, permissions }: 
       {/* ── 2. STOCK REGISTER VIEW ── */}
       {view === "stock" && (
         <div className="space-y-4">
-          {/* Controls Bar */}
-          <div className="flex items-center gap-2">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-              <Input
-                placeholder="Search description or code..."
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                className="pl-10 pr-8 rounded-xl h-9 text-sm"
-              />
-              {search && (
-                <X 
-                  className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-red-500 cursor-pointer" 
-                  onClick={() => setSearch("")} 
-                />
-              )}
-            </div>
-
-            <select
-              value={categoryFilter}
-              onChange={e => setCategoryFilter(e.target.value)}
-              className="h-9 rounded-xl border border-gray-200 bg-gray-50 px-3 text-xs font-semibold hover:bg-gray-100 transition-colors shrink-0 outline-none"
+          {/* Sub Tab Selector */}
+          <div className="flex gap-2 border-b pb-2">
+            <button
+              onClick={() => setStockSubTab("register")}
+              className={`px-3.5 py-2 text-xs font-semibold rounded-xl transition-all ${
+                stockSubTab === "register"
+                  ? "bg-slate-900 text-white shadow-sm"
+                  : "text-slate-500 hover:text-slate-900 bg-slate-50/50 hover:bg-slate-100"
+              }`}
             >
-              <option value="all">All Categories</option>
-              {MATERIAL_CATEGORIES.map(c => (
-                <option key={c} value={c}>{c}</option>
-              ))}
-            </select>
-
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => fetchData(true, true)}
-              disabled={syncState === "loading"}
-              className="shrink-0 rounded-xl h-9 w-9 p-0 bg-gray-50 border-gray-200 hover:bg-gray-100 transition-colors"
-              title="Refresh stock data"
+              📦 Current Stock Register
+            </button>
+            <button
+              onClick={() => setStockSubTab("history")}
+              className={`px-3.5 py-2 text-xs font-semibold rounded-xl transition-all ${
+                stockSubTab === "history"
+                  ? "bg-slate-900 text-white shadow-sm"
+                  : "text-slate-500 hover:text-slate-900 bg-slate-50/50 hover:bg-slate-100"
+              }`}
             >
-              <RefreshCw className={`h-4 w-4 ${syncState === "loading" ? "animate-spin text-blue-500" : "text-gray-600"}`} />
-            </Button>
-
-            <div className="relative">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setShowExportMenu(!showExportMenu)}
-                className="shrink-0 rounded-xl h-9 w-9 p-0 bg-gray-50 border-gray-200 hover:bg-gray-100 transition-colors"
-                title="Export Options"
-              >
-                <MoreVertical className="h-4 w-4 text-gray-600" />
-              </Button>
-              {showExportMenu && (
-                <>
-                  <div className="fixed inset-0 z-40" onClick={() => setShowExportMenu(false)} />
-                  <div className="absolute right-0 mt-1.5 w-40 bg-white border border-gray-200 rounded-xl shadow-lg z-50 py-1.5 text-xs">
-                    <button
-                      onClick={() => { exportExcel(); setShowExportMenu(false) }}
-                      className="w-full text-left px-3 py-2 hover:bg-slate-50 flex items-center gap-2 font-medium text-gray-700"
-                    >
-                      <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600" /> Export Excel
-                    </button>
-                    <button
-                      onClick={() => { exportPDF(); setShowExportMenu(false) }}
-                      className="w-full text-left px-3 py-2 hover:bg-slate-50 flex items-center gap-2 font-medium text-gray-700"
-                    >
-                      <FileDown className="h-3.5 w-3.5 text-blue-600" /> Export PDF
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
+              ⏳ Transaction History / Ledger
+            </button>
           </div>
 
-          {/* Stock Table */}
-          <Card className="overflow-hidden border border-gray-200">
-            <Table>
-              <TableHeader className="bg-slate-900 hover:bg-slate-900">
-                <TableRow>
-                  <TableHead className="text-xs text-white">Item Name</TableHead>
-                  <TableHead className="text-xs text-white text-right">Available Stock</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {inStockItems.map((s, idx) => {
-                  const isLow = s.currentStock < s.threshold
-                  const stockColor = isLow ? "text-red-600 font-bold" : "text-gray-900 font-semibold"
-                  return (
-                    <TableRow key={`${s.materialId}-${idx}`} className="hover:bg-slate-50/50">
-                      <TableCell className="text-xs flex items-center gap-2">
-                        {s.photoUrl ? (
-                          <img 
-                            src={getGoogleDriveDirectLink(s.photoUrl)} 
-                            alt="" 
-                            className="h-7 w-7 rounded-lg object-cover border bg-gray-50 flex-shrink-0 cursor-zoom-in hover:opacity-80 transition-opacity"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              setPreviewImage({ url: getGoogleDriveDirectLink(s.photoUrl), title: s.description })
-                            }}
-                          />
-                        ) : (
-                          <div className="h-7 w-7 rounded-lg border bg-gray-50 flex items-center justify-center flex-shrink-0 text-gray-400">
-                            <Package className="h-3.5 w-3.5" />
-                          </div>
-                        )}
-                        <span 
-                          className="text-blue-600 hover:text-blue-800 hover:underline cursor-pointer font-semibold"
-                          onClick={() => setHistoryMaterial(s)}
+          {stockSubTab === "register" ? (
+            <>
+              {/* Controls Bar */}
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <Input
+                    placeholder="Search description or code..."
+                    value={search}
+                    onChange={e => setSearch(e.target.value)}
+                    className="pl-10 pr-8 rounded-xl h-9 text-sm"
+                  />
+                  {search && (
+                    <X 
+                      className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-red-500 cursor-pointer" 
+                      onClick={() => setSearch("")} 
+                    />
+                  )}
+                </div>
+
+                <select
+                  value={categoryFilter}
+                  onChange={e => setCategoryFilter(e.target.value)}
+                  className="h-9 rounded-xl border border-gray-200 bg-gray-50 px-3 text-xs font-semibold hover:bg-gray-100 transition-colors shrink-0 outline-none"
+                >
+                  <option value="all">All Categories</option>
+                  {MATERIAL_CATEGORIES.map(c => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => fetchData(true, true)}
+                  disabled={syncState === "loading"}
+                  className="shrink-0 rounded-xl h-9 w-9 p-0 bg-gray-50 border-gray-200 hover:bg-gray-100 transition-colors"
+                  title="Refresh stock data"
+                >
+                  <RefreshCw className={`h-4 w-4 ${syncState === "loading" ? "animate-spin text-blue-500" : "text-gray-600"}`} />
+                </Button>
+
+                <div className="relative">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setShowExportMenu(!showExportMenu)}
+                    className="shrink-0 rounded-xl h-9 w-9 p-0 bg-gray-50 border-gray-200 hover:bg-gray-100 transition-colors"
+                    title="Export Options"
+                  >
+                    <MoreVertical className="h-4 w-4 text-gray-600" />
+                  </Button>
+                  {showExportMenu && (
+                    <>
+                      <div className="fixed inset-0 z-40" onClick={() => setShowExportMenu(false)} />
+                      <div className="absolute right-0 mt-1.5 w-40 bg-white border border-gray-200 rounded-xl shadow-lg z-50 py-1.5 text-xs">
+                        <button
+                          onClick={() => { exportExcel(); setShowExportMenu(false) }}
+                          className="w-full text-left px-3 py-2 hover:bg-slate-50 flex items-center gap-2 font-medium text-gray-700"
                         >
-                          {s.description}
-                        </span>
-                      </TableCell>
-                      <TableCell className={`text-xs text-right ${stockColor}`}>
-                        <span className={isLow ? "bg-red-50 border border-red-200 px-2 py-0.5 rounded inline-block" : ""}>
-                          {s.currentStock} {s.unit}
-                        </span>
-                        {isLow && (
-                          <span className="block text-[9px] text-red-500 font-medium mt-0.5">
-                            Min Threshold: {s.threshold}
-                          </span>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  )
-                })}
+                          <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600" /> Export Excel
+                        </button>
+                        <button
+                          onClick={() => { exportPDF(); setShowExportMenu(false) }}
+                          className="w-full text-left px-3 py-2 hover:bg-slate-50 flex items-center gap-2 font-medium text-gray-700"
+                        >
+                          <FileDown className="h-3.5 w-3.5 text-blue-600" /> Export PDF
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
 
-                {outOfStockItems.length > 0 && (
-                  <>
-                    <TableRow 
-                      className="bg-slate-50 hover:bg-slate-100 cursor-pointer select-none border-t border-b font-semibold"
-                      onClick={() => setShowOutOfStock(!showOutOfStock)}
-                    >
-                      <TableCell colSpan={2} className="text-xs py-2.5 px-4">
-                        <div className="flex items-center justify-between w-full">
-                          <div className="flex items-center gap-2 text-slate-700">
-                            {showOutOfStock ? (
-                              <ChevronDown className="h-4 w-4 text-slate-500" />
-                            ) : (
-                              <ChevronRight className="h-4 w-4 text-slate-500" />
-                            )}
-                            <span>Out of Stock Items ({outOfStockItems.length})</span>
-                          </div>
-                          <span className="text-[10px] bg-slate-200/80 text-slate-650 px-2 py-0.5 rounded-full font-mono font-medium">
-                            {showOutOfStock ? "Click to collapse" : "Click to expand"}
-                          </span>
-                        </div>
-                      </TableCell>
+              {/* Stock Table */}
+              <Card className="overflow-hidden border border-gray-200">
+                <Table>
+                  <TableHeader className="bg-slate-900 hover:bg-slate-900">
+                    <TableRow>
+                      <TableHead className="text-xs text-white">Item Name</TableHead>
+                      <TableHead className="text-xs text-white text-right">Available Stock</TableHead>
                     </TableRow>
-
-                    {showOutOfStock && outOfStockItems.map((s, idx) => {
+                  </TableHeader>
+                  <TableBody>
+                    {inStockItems.map((s, idx) => {
                       const isLow = s.currentStock < s.threshold
                       const stockColor = isLow ? "text-red-600 font-bold" : "text-gray-900 font-semibold"
                       return (
-                        <TableRow key={`out-${s.materialId}-${idx}`} className="hover:bg-slate-50/50 bg-red-50/10">
-                          <TableCell className="text-xs flex items-center gap-2 pl-6">
+                        <TableRow key={`${s.materialId}-${idx}`} className="hover:bg-slate-50/50">
+                          <TableCell className="text-xs flex items-center gap-2">
                             {s.photoUrl ? (
                               <img 
                                 src={getGoogleDriveDirectLink(s.photoUrl)} 
@@ -739,14 +827,14 @@ export function MaterialList({ userRole, userAgencies, username, permissions }: 
                               </div>
                             )}
                             <span 
-                              className="text-blue-655 hover:text-blue-855 hover:underline cursor-pointer font-semibold"
+                              className="text-blue-600 hover:text-blue-800 hover:underline cursor-pointer font-semibold"
                               onClick={() => setHistoryMaterial(s)}
                             >
                               {s.description}
                             </span>
                           </TableCell>
                           <TableCell className={`text-xs text-right ${stockColor}`}>
-                            <span className="bg-red-50 border border-red-200 px-2 py-0.5 rounded inline-block text-red-600">
+                            <span className={isLow ? "bg-red-50 border border-red-200 px-2 py-0.5 rounded inline-block" : ""}>
                               {s.currentStock} {s.unit}
                             </span>
                             {isLow && (
@@ -758,19 +846,286 @@ export function MaterialList({ userRole, userAgencies, username, permissions }: 
                         </TableRow>
                       )
                     })}
-                  </>
-                )}
 
-                {filteredStock.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={2} className="text-center py-10 text-xs text-gray-400">
-                      No matching material stock found.
-                    </TableCell>
-                  </TableRow>
+                    {outOfStockItems.length > 0 && (
+                      <>
+                        <TableRow 
+                          className="bg-slate-50 hover:bg-slate-100 cursor-pointer select-none border-t border-b font-semibold"
+                          onClick={() => setShowOutOfStock(!showOutOfStock)}
+                        >
+                          <TableCell colSpan={2} className="text-xs py-2.5 px-4">
+                            <div className="flex items-center justify-between w-full">
+                              <div className="flex items-center gap-2 text-slate-700">
+                                {showOutOfStock ? (
+                                  <ChevronDown className="h-4 w-4 text-slate-500" />
+                                ) : (
+                                  <ChevronRight className="h-4 w-4 text-slate-500" />
+                                )}
+                                <span>Out of Stock Items ({outOfStockItems.length})</span>
+                              </div>
+                              <span className="text-[10px] bg-slate-200/80 text-slate-650 px-2 py-0.5 rounded-full font-mono font-medium">
+                                {showOutOfStock ? "Click to collapse" : "Click to expand"}
+                              </span>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+
+                        {showOutOfStock && outOfStockItems.map((s, idx) => {
+                          const isLow = s.currentStock < s.threshold
+                          const stockColor = isLow ? "text-red-600 font-bold" : "text-gray-900 font-semibold"
+                          return (
+                            <TableRow key={`out-${s.materialId}-${idx}`} className="hover:bg-slate-50/50 bg-red-50/10">
+                              <TableCell className="text-xs flex items-center gap-2 pl-6">
+                                {s.photoUrl ? (
+                                  <img 
+                                    src={getGoogleDriveDirectLink(s.photoUrl)} 
+                                    alt="" 
+                                    className="h-7 w-7 rounded-lg object-cover border bg-gray-50 flex-shrink-0 cursor-zoom-in hover:opacity-80 transition-opacity"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      setPreviewImage({ url: getGoogleDriveDirectLink(s.photoUrl), title: s.description })
+                                    }}
+                                  />
+                                ) : (
+                                  <div className="h-7 w-7 rounded-lg border bg-gray-50 flex items-center justify-center flex-shrink-0 text-gray-400">
+                                    <Package className="h-3.5 w-3.5" />
+                                  </div>
+                                )}
+                                <span 
+                                  className="text-blue-655 hover:text-blue-855 hover:underline cursor-pointer font-semibold"
+                                  onClick={() => setHistoryMaterial(s)}
+                                >
+                                  {s.description}
+                                </span>
+                              </TableCell>
+                              <TableCell className={`text-xs text-right ${stockColor}`}>
+                                <span className="bg-red-50 border border-red-200 px-2 py-0.5 rounded inline-block text-red-600">
+                                  {s.currentStock} {s.unit}
+                                </span>
+                                {isLow && (
+                                  <span className="block text-[9px] text-red-500 font-medium mt-0.5">
+                                    Min Threshold: {s.threshold}
+                                  </span>
+                                )}
+                              </TableCell>
+                            </TableRow>
+                          )
+                        })}
+                      </>
+                    )}
+
+                    {filteredStock.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={2} className="text-center py-10 text-xs text-gray-400">
+                          No matching material stock found.
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </Card>
+            </>
+          ) : (
+            <>
+              {/* History Ledger Controls Bar */}
+              <div className="flex items-center gap-2 flex-wrap md:flex-nowrap">
+                {/* Search */}
+                <div className="relative flex-1 min-w-[200px]">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <Input
+                    placeholder="Search recipient, challan, remarks..."
+                    value={historySearch}
+                    onChange={e => setHistorySearch(e.target.value)}
+                    className="pl-10 pr-8 rounded-xl h-9 text-sm bg-white"
+                  />
+                  {historySearch && (
+                    <X 
+                      className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-red-500 cursor-pointer" 
+                      onClick={() => setHistorySearch("")} 
+                    />
+                  )}
+                </div>
+
+                {/* Material Filter */}
+                <select
+                  value={historyMaterialFilter}
+                  onChange={e => setHistoryMaterialFilter(e.target.value)}
+                  className="h-9 rounded-xl border border-gray-200 bg-white px-3 text-xs font-semibold hover:bg-gray-55 transition-colors shrink-0 outline-none max-w-[250px]"
+                >
+                  <option value="all">All Materials</option>
+                  {catalogue.map(m => (
+                    <option key={m.materialId} value={m.materialId}>{m.description} {m.materialNo ? `(${m.materialNo})` : ""}</option>
+                  ))}
+                </select>
+
+                {/* Type Filter */}
+                <select
+                  value={historyTypeFilter}
+                  onChange={e => setHistoryTypeFilter(e.target.value as any)}
+                  className="h-9 rounded-xl border border-gray-200 bg-white px-3 text-xs font-semibold hover:bg-gray-55 transition-colors shrink-0 outline-none w-[130px]"
+                >
+                  <option value="all">All Types</option>
+                  <option value="receive">📥 Inward (Receive)</option>
+                  <option value="issue">📤 Outward (Issue)</option>
+                </select>
+              </div>
+
+              {/* Ledger Summary Cards */}
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-sm flex flex-col justify-between">
+                  <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">
+                    {ledgerMetrics.isMaterialSelected ? "Total Inward (Received)" : "Inward Entries"}
+                  </span>
+                  <p className="text-2xl font-bold mt-1 text-emerald-600">
+                    {ledgerMetrics.isMaterialSelected 
+                      ? `${ledgerMetrics.totalReceived} ${ledgerMetrics.unit}` 
+                      : `${ledgerMetrics.totalReceived} transactions`
+                    }
+                  </p>
+                </div>
+                
+                <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-sm flex flex-col justify-between">
+                  <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">
+                    {ledgerMetrics.isMaterialSelected ? "Total Outward (Issued)" : "Outward Entries"}
+                  </span>
+                  <p className="text-2xl font-bold mt-1 text-orange-600">
+                    {ledgerMetrics.isMaterialSelected 
+                      ? `${ledgerMetrics.totalIssued} ${ledgerMetrics.unit}` 
+                      : `${ledgerMetrics.totalIssued} transactions`
+                    }
+                  </p>
+                </div>
+
+                {ledgerMetrics.isMaterialSelected && (
+                  <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-sm col-span-2 md:col-span-1 flex flex-col justify-between">
+                    <div>
+                      <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Available Balance</span>
+                      <p className={`text-2xl font-bold mt-1 ${ledgerMetrics.currentStock < ledgerMetrics.threshold ? "text-red-650" : "text-gray-900"}`}>
+                        {ledgerMetrics.currentStock} {ledgerMetrics.unit}
+                      </p>
+                    </div>
+                    {ledgerMetrics.currentStock < ledgerMetrics.threshold && (
+                      <span className="text-[9px] font-bold text-red-500 block mt-1 animate-pulse">
+                        ⚠️ Below safety threshold ({ledgerMetrics.threshold})
+                      </span>
+                    )}
+                  </div>
                 )}
-              </TableBody>
-            </Table>
-          </Card>
+              </div>
+
+              {/* History Ledger Table */}
+              <Card className="overflow-hidden border border-gray-200">
+                <Table>
+                  <TableHeader className="bg-slate-900 hover:bg-slate-900">
+                    <TableRow>
+                      <TableHead className="text-xs text-white w-[100px]">Date</TableHead>
+                      <TableHead className="text-xs text-white">Item Name</TableHead>
+                      <TableHead className="text-xs text-white w-[120px]">Type</TableHead>
+                      <TableHead className="text-xs text-white text-right w-[100px]">Quantity</TableHead>
+                      <TableHead className="text-xs text-white hidden md:table-cell">Reference / Recipient</TableHead>
+                      <TableHead className="text-xs text-white text-right w-[80px]">Action</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {paginatedHistory.map((item, idx) => {
+                      const isReceive = item.type === "receive"
+                      return (
+                        <TableRow key={`${item.id}-${idx}`} className="hover:bg-slate-50/50">
+                          <TableCell className="text-xs font-mono text-gray-500">
+                            {item.date}
+                          </TableCell>
+                          <TableCell className="text-xs">
+                            <span 
+                              className="text-blue-650 hover:text-blue-855 hover:underline cursor-pointer font-semibold"
+                              onClick={() => {
+                                const mat = stock.find(s => s.materialId === item.materialId)
+                                if (mat) setHistoryMaterial(mat)
+                              }}
+                            >
+                              {item.materialDesc}
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-xs">
+                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                              isReceive 
+                                ? "bg-emerald-50 text-emerald-700 border border-emerald-200" 
+                                : "bg-orange-50 text-orange-700 border border-orange-200"
+                            }`}>
+                              {isReceive ? "📥 Inward" : "📤 Outward"}
+                            </span>
+                          </TableCell>
+                          <TableCell className={`text-xs text-right font-mono font-bold ${
+                            isReceive ? "text-emerald-700" : "text-orange-750"
+                          }`}>
+                            {isReceive ? `+${item.quantity}` : `-${item.quantity}`} {item.unit}
+                          </TableCell>
+                          <TableCell className="text-xs text-gray-500 hidden md:table-cell max-w-[200px] truncate">
+                            {isReceive ? (
+                              <span>
+                                Challan: <strong className="text-gray-700">{item.ref}</strong> from {item.party}
+                              </span>
+                            ) : (
+                              <span>
+                                To: <strong className="text-gray-700">{item.party}</strong> ({item.ref})
+                              </span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-xs text-right">
+                            {item.photoUrl ? (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 text-blue-655 hover:text-blue-855 hover:bg-blue-50"
+                                onClick={() => setPreviewImage({ url: getGoogleDriveDirectLink(item.photoUrl), title: item.materialDesc })}
+                                title="View Attached Photo"
+                              >
+                                <ImageIcon className="h-4 w-4" />
+                              </Button>
+                            ) : (
+                              <span className="text-gray-300">—</span>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })}
+
+                    {filteredUnifiedHistory.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-center py-10 text-xs text-gray-400">
+                          No transaction history found.
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </Card>
+
+              {/* Ledger Pagination */}
+              {totalHistoryPages > 1 && (
+                <div className="flex items-center justify-between bg-white p-4 rounded-xl shadow-sm border">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={() => setHistoryPage(p => Math.max(1, p - 1))} 
+                    disabled={historyPage === 1} 
+                    className="rounded-lg"
+                  >
+                    <ChevronLeft className="h-4 w-4 mr-1" /> Previous
+                  </Button>
+                  <span className="text-sm text-gray-600">Page {historyPage} of {totalHistoryPages}</span>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={() => setHistoryPage(p => Math.min(totalHistoryPages, p + 1))} 
+                    disabled={historyPage === totalHistoryPages} 
+                    className="rounded-lg"
+                  >
+                    Next <ChevronRight className="h-4 w-4 ml-1" />
+                  </Button>
+                </div>
+              )}
+            </>
+          )}
         </div>
       )}
 
