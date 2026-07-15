@@ -8,7 +8,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import {
   Search, X, Plus, RefreshCw, Check, ChevronLeft, ChevronRight,
   FileDown, Phone, MapPin, ClipboardList, Clock, FolderOpen,
-  FileInput, Pencil, Loader2, SlidersHorizontal, Eye,
+  FileInput, Pencil, Loader2, SlidersHorizontal, Eye, FileSpreadsheet,
 } from "lucide-react"
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
@@ -898,6 +898,651 @@ function NscReports({ apps }: { apps: NSCApplication[] }) {
     rejected:  apps.filter(a => a.agency === ag && a.agencyDecision === "rejected").length,
   })).sort((a, b) => b.total - a.total)
 
+  // ── Custom Reports ────────────────────────────────────────────────────────
+  
+  // 1. Agency Pending Report
+  const downloadAgencyPendingPDF = async () => {
+    const { default: jsPDF } = await import("jspdf")
+    const { default: autoTable } = await import("jspdf-autotable")
+    
+    const pendingApps = apps.filter(a =>
+      ["pending", "project_required", "project_ongoing", "meter_issued"].includes(a.status)
+    )
+
+    if (pendingApps.length === 0) {
+      toast({ title: "No pending applications found", variant: "destructive" })
+      return
+    }
+
+    pendingApps.sort((a, b) => {
+      const agComp = (a.agency || "").localeCompare(b.agency || "")
+      if (agComp !== 0) return agComp
+      return (a.receivedDate || "").localeCompare(b.receivedDate || "")
+    })
+
+    const doc = new jsPDF({ orientation: "landscape" })
+    const pw = doc.internal.pageSize.width
+
+    // Header
+    doc.setFontSize(16)
+    doc.setTextColor(40, 53, 147)
+    doc.text("NSC Agency Pending Report", pw / 2, 14, { align: "center" })
+    
+    doc.setFontSize(9)
+    doc.setTextColor(100)
+    doc.text(
+      `Generated on: ${new Date().toLocaleDateString("en-IN")} | Total Pending Applications: ${pendingApps.length}`,
+      pw / 2, 20, { align: "center" }
+    )
+
+    // Summary Section
+    const agencies = Array.from(new Set(pendingApps.map(a => a.agency).filter(Boolean))).sort()
+    const summaryRows = agencies.map((ag, idx) => {
+      const agApps = pendingApps.filter(a => a.agency === ag)
+      const pIns = agApps.filter(a => a.status === "pending").length
+      const pErect = agApps.filter(a => a.status === "project_required").length
+      const oErect = agApps.filter(a => a.status === "project_ongoing").length
+      const mIss = agApps.filter(a => a.status === "meter_issued").length
+      return [
+        idx + 1,
+        ag,
+        pIns,
+        pErect,
+        oErect,
+        mIss,
+        agApps.length
+      ]
+    })
+
+    const totalIns = pendingApps.filter(a => a.status === "pending").length
+    const totalPErect = pendingApps.filter(a => a.status === "project_required").length
+    const totalOErect = pendingApps.filter(a => a.status === "project_ongoing").length
+    const totalMIss = pendingApps.filter(a => a.status === "meter_issued").length
+    const grandTotalPending = pendingApps.length
+
+    summaryRows.push([
+      "",
+      "GRAND TOTAL",
+      totalIns,
+      totalPErect,
+      totalOErect,
+      totalMIss,
+      grandTotalPending
+    ])
+
+    autoTable(doc, {
+      startY: 25,
+      head: [["#", "Agency", "Pending Inspection", "Erection Pending", "Erection Ongoing", "Meter Issued", "Total Pending"]],
+      body: summaryRows,
+      styles: { fontSize: 8, font: "helvetica", halign: "center", cellPadding: 2.5 },
+      headStyles: { fillColor: [40, 53, 147], textColor: 255, fontStyle: "bold" },
+      columnStyles: { 1: { halign: "left", fontStyle: "bold" } },
+      didParseCell: (data) => {
+        if (data.row.index === summaryRows.length - 1) {
+          data.cell.styles.fontStyle = "bold"
+          data.cell.styles.fillColor = [230, 235, 255]
+          data.cell.styles.textColor = [40, 53, 147]
+        }
+      },
+      theme: "grid"
+    })
+
+    const nextY = (doc as any).lastAutoTable.finalY + 10
+    doc.setFontSize(11)
+    doc.setTextColor(40, 53, 147)
+    doc.text("Detailed Pending List", 14, nextY)
+
+    const cols = ["#", "Receive No", "Office Ref", "Applicant Name", "Agency", "Mobile", "Class & Phase", "Pending Stage", "Received Date", "Address"]
+    const body = pendingApps.map((a, i) => [
+      i + 1,
+      a.receiveNo || "-",
+      a.officeRefNo || "-",
+      a.applicantName || "-",
+      a.agency || "-",
+      a.mobile || "-",
+      `${CLASS_LABELS[a.appliedClass] || a.appliedClass} (${a.phase || "-"})`,
+      NSC_STATUS_LABELS[a.status] || a.status,
+      a.receivedDate || "-",
+      a.address ? a.address.substring(0, 30) + (a.address.length > 30 ? "..." : "") : "-"
+    ])
+
+    autoTable(doc, {
+      startY: nextY + 3,
+      head: [cols],
+      body: body,
+      styles: { fontSize: 7, font: "helvetica" },
+      headStyles: { fillColor: [60, 60, 60], textColor: 255 },
+      columnStyles: {
+        0: { cellWidth: 8 },
+        1: { cellWidth: 20 },
+        2: { cellWidth: 18 },
+        3: { cellWidth: 35 },
+        4: { cellWidth: 25 },
+        5: { cellWidth: 18 },
+        6: { cellWidth: 30 },
+        7: { cellWidth: 30 },
+        8: { cellWidth: 18 },
+        9: { cellWidth: 50 }
+      },
+      didDrawPage: (data) => {
+        doc.setFontSize(8)
+        doc.setTextColor(150)
+        doc.text(`Page ${doc.getNumberOfPages()}`, data.settings.margin.left, doc.internal.pageSize.height - 10)
+      }
+    })
+
+    doc.save(`NSC_Agency_Pending_Report_${new Date().toISOString().slice(0, 10)}.pdf`)
+    toast({ title: "Agency Pending PDF exported successfully" })
+  }
+
+  const downloadAgencyPendingExcel = async () => {
+    const XLSX = await import("xlsx")
+    
+    const pendingApps = apps.filter(a =>
+      ["pending", "project_required", "project_ongoing", "meter_issued"].includes(a.status)
+    )
+
+    if (pendingApps.length === 0) {
+      toast({ title: "No pending applications found", variant: "destructive" })
+      return
+    }
+
+    const wb = XLSX.utils.book_new()
+
+    // Sheet 1: Summary
+    const agencies = Array.from(new Set(pendingApps.map(a => a.agency).filter(Boolean))).sort()
+    const summaryRows = [
+      ["Agency Pending Summary Report"],
+      [`Generated on: ${new Date().toLocaleDateString("en-IN")}`],
+      [],
+      ["#", "Agency", "Pending Inspection", "Erection Pending", "Erection Ongoing", "Meter Issued", "Total Pending"]
+    ]
+
+    agencies.forEach((ag, idx) => {
+      const agApps = pendingApps.filter(a => a.agency === ag)
+      const pIns = agApps.filter(a => a.status === "pending").length
+      const pErect = agApps.filter(a => a.status === "project_required").length
+      const oErect = agApps.filter(a => a.status === "project_ongoing").length
+      const mIss = agApps.filter(a => a.status === "meter_issued").length
+      summaryRows.push([
+        String(idx + 1),
+        ag,
+        String(pIns),
+        String(pErect),
+        String(oErect),
+        String(mIss),
+        String(agApps.length)
+      ])
+    })
+
+    const totalIns = pendingApps.filter(a => a.status === "pending").length
+    const totalPErect = pendingApps.filter(a => a.status === "project_required").length
+    const totalOErect = pendingApps.filter(a => a.status === "project_ongoing").length
+    const totalMIss = pendingApps.filter(a => a.status === "meter_issued").length
+    summaryRows.push([
+      "",
+      "GRAND TOTAL",
+      String(totalIns),
+      String(totalPErect),
+      String(totalOErect),
+      String(totalMIss),
+      String(pendingApps.length)
+    ])
+
+    const wsSummary = XLSX.utils.aoa_to_sheet(summaryRows)
+    wsSummary["!cols"] = [
+      { wch: 5 },
+      { wch: 25 },
+      { wch: 20 },
+      { wch: 20 },
+      { wch: 20 },
+      { wch: 20 },
+      { wch: 15 }
+    ]
+    XLSX.utils.book_append_sheet(wb, wsSummary, "Summary")
+
+    // Sheet 2: Detailed Records
+    const detailRows = pendingApps.map((a, i) => ({
+      "#": i + 1,
+      "Receive No": a.receiveNo || "",
+      "Office Ref No": a.officeRefNo || "",
+      "Applicant Name": a.applicantName || "",
+      "C/O": a.careOf || "",
+      "Address": a.address || "",
+      "Mobile": a.mobile || "",
+      "Class": CLASS_LABELS[a.appliedClass] || a.appliedClass || "",
+      "Phase": a.phase || "",
+      "Agency": a.agency || "",
+      "Pending Level": NSC_STATUS_LABELS[a.status] || a.status || "",
+      "Received Date": a.receivedDate || "",
+      "Load (kW)": a.load || "",
+      "Pole Required": a.poleRequired || "",
+      "Project ID": a.projectId || ""
+    }))
+
+    const wsDetail = XLSX.utils.json_to_sheet(detailRows)
+    wsDetail["!cols"] = [
+      { wch: 5 },
+      { wch: 15 },
+      { wch: 15 },
+      { wch: 25 },
+      { wch: 20 },
+      { wch: 35 },
+      { wch: 15 },
+      { wch: 15 },
+      { wch: 10 },
+      { wch: 20 },
+      { wch: 20 },
+      { wch: 15 },
+      { wch: 10 },
+      { wch: 15 },
+      { wch: 25 }
+    ]
+    XLSX.utils.book_append_sheet(wb, wsDetail, "Pending Records")
+
+    XLSX.writeFile(wb, `NSC_Agency_Pending_Report_${new Date().toISOString().slice(0, 10)}.xlsx`)
+    toast({ title: "Agency Pending Excel exported successfully" })
+  }
+
+  // 2. All Status Report
+  const downloadAllStatusPDF = async () => {
+    const { default: jsPDF } = await import("jspdf")
+    const { default: autoTable } = await import("jspdf-autotable")
+
+    if (apps.length === 0) {
+      toast({ title: "No applications found", variant: "destructive" })
+      return
+    }
+
+    const doc = new jsPDF({ orientation: "landscape" })
+    const pw = doc.internal.pageSize.width
+
+    // Header
+    doc.setFontSize(16)
+    doc.setTextColor(40, 53, 147)
+    doc.text("NSC Comprehensive Status Report", pw / 2, 14, { align: "center" })
+
+    doc.setFontSize(9)
+    doc.setTextColor(100)
+    doc.text(
+      `Generated on: ${new Date().toLocaleDateString("en-IN")} | Total Applications: ${apps.length}`,
+      pw / 2, 20, { align: "center" }
+    )
+
+    const statuses = Object.keys(NSC_STATUS_LABELS)
+    const statusCounts = statuses.map(st => ({
+      label: NSC_STATUS_LABELS[st],
+      count: apps.filter(a => a.status === st).length
+    }))
+
+    const summaryRows = statusCounts.map((sc, idx) => [
+      idx + 1,
+      sc.label,
+      sc.count
+    ])
+    
+    summaryRows.push([
+      "",
+      "TOTAL",
+      apps.length
+    ])
+
+    autoTable(doc, {
+      startY: 25,
+      head: [["#", "Status Level", "Count"]],
+      body: summaryRows,
+      styles: { fontSize: 8, font: "helvetica", halign: "center", cellPadding: 2 },
+      headStyles: { fillColor: [40, 53, 147], textColor: 255, fontStyle: "bold" },
+      columnStyles: { 1: { halign: "left", fontStyle: "bold" } },
+      didParseCell: (data) => {
+        if (data.row.index === summaryRows.length - 1) {
+          data.cell.styles.fontStyle = "bold"
+          data.cell.styles.fillColor = [230, 235, 255]
+          data.cell.styles.textColor = [40, 53, 147]
+        }
+      },
+      theme: "grid",
+      margin: { left: 40, right: 40 }
+    })
+
+    const nextY = (doc as any).lastAutoTable.finalY + 10
+    doc.setFontSize(11)
+    doc.setTextColor(40, 53, 147)
+    doc.text("Detailed Applications List", 14, nextY)
+
+    const sortedApps = [...apps].sort((a, b) => {
+      const stComp = (a.status || "").localeCompare(b.status || "")
+      if (stComp !== 0) return stComp
+      return (a.agency || "").localeCompare(b.agency || "")
+    })
+
+    const cols = ["#", "Receive No", "Office Ref", "Applicant Name", "Agency", "Mobile", "Class & Phase", "Current Status", "Received Date", "Address"]
+    const body = sortedApps.map((a, i) => [
+      i + 1,
+      a.receiveNo || "-",
+      a.officeRefNo || "-",
+      a.applicantName || "-",
+      a.agency || "-",
+      a.mobile || "-",
+      `${CLASS_LABELS[a.appliedClass] || a.appliedClass} (${a.phase || "-"})`,
+      NSC_STATUS_LABELS[a.status] || a.status,
+      a.receivedDate || "-",
+      a.address ? a.address.substring(0, 30) + (a.address.length > 30 ? "..." : "") : "-"
+    ])
+
+    autoTable(doc, {
+      startY: nextY + 3,
+      head: [cols],
+      body: body,
+      styles: { fontSize: 7, font: "helvetica" },
+      headStyles: { fillColor: [60, 60, 60], textColor: 255 },
+      columnStyles: {
+        0: { cellWidth: 8 },
+        1: { cellWidth: 20 },
+        2: { cellWidth: 18 },
+        3: { cellWidth: 35 },
+        4: { cellWidth: 25 },
+        5: { cellWidth: 18 },
+        6: { cellWidth: 30 },
+        7: { cellWidth: 30 },
+        8: { cellWidth: 18 },
+        9: { cellWidth: 50 }
+      },
+      didDrawPage: (data) => {
+        doc.setFontSize(8)
+        doc.setTextColor(150)
+        doc.text(`Page ${doc.getNumberOfPages()}`, data.settings.margin.left, doc.internal.pageSize.height - 10)
+      }
+    })
+
+    doc.save(`NSC_All_Status_Report_${new Date().toISOString().slice(0, 10)}.pdf`)
+    toast({ title: "All Status PDF exported successfully" })
+  }
+
+  const downloadAllStatusExcel = async () => {
+    const XLSX = await import("xlsx")
+
+    if (apps.length === 0) {
+      toast({ title: "No applications found", variant: "destructive" })
+      return
+    }
+
+    const wb = XLSX.utils.book_new()
+
+    // Sheet 1: Summary matrix
+    const agencies = Array.from(new Set(apps.map(a => a.agency).filter(Boolean))).sort()
+    const statuses = Object.keys(NSC_STATUS_LABELS)
+    
+    const matrixHeader = ["Agency", ...statuses.map(st => NSC_STATUS_LABELS[st]), "Total"]
+    const matrixRows = [
+      ["NSC Status Distribution Per Agency"],
+      [`Generated on: ${new Date().toLocaleDateString("en-IN")}`],
+      [],
+      matrixHeader
+    ]
+
+    agencies.forEach(ag => {
+      const agApps = apps.filter(a => a.agency === ag)
+      const counts = statuses.map(st => String(agApps.filter(a => a.status === st).length))
+      matrixRows.push([
+        ag,
+        ...counts,
+        String(agApps.length)
+      ])
+    })
+
+    const grandTotals = statuses.map(st => String(apps.filter(a => a.status === st).length))
+    matrixRows.push([
+      "GRAND TOTAL",
+      ...grandTotals,
+      String(apps.length)
+    ])
+
+    const wsSummary = XLSX.utils.aoa_to_sheet(matrixRows)
+    wsSummary["!cols"] = [
+      { wch: 25 },
+      ...statuses.map(() => ({ wch: 18 })),
+      { wch: 12 }
+    ]
+    XLSX.utils.book_append_sheet(wb, wsSummary, "Status Summary")
+
+    // Sheet 2: Detailed Records
+    const detailRows = apps.map((a, i) => ({
+      "#": i + 1,
+      "Receive No": a.receiveNo || "",
+      "Office Ref No": a.officeRefNo || "",
+      "Applicant Name": a.applicantName || "",
+      "C/O": a.careOf || "",
+      "Address": a.address || "",
+      "Mobile": a.mobile || "",
+      "Class": CLASS_LABELS[a.appliedClass] || a.appliedClass || "",
+      "Phase": a.phase || "",
+      "Agency": a.agency || "",
+      "Status": NSC_STATUS_LABELS[a.status] || a.status || "",
+      "Received Date": a.receivedDate || "",
+      "Load (kW)": a.load || "",
+      "Pole Required": a.poleRequired || "",
+      "Project ID": a.projectId || "",
+      "Agency Decision": a.agencyDecision || "",
+      "Admin Decision": a.adminDecision || "",
+      "Application No": a.applicationNo || "",
+      "Memo No": a.memoNo || ""
+    }))
+
+    const wsDetail = XLSX.utils.json_to_sheet(detailRows)
+    wsDetail["!cols"] = [
+      { wch: 5 },
+      { wch: 15 },
+      { wch: 15 },
+      { wch: 25 },
+      { wch: 20 },
+      { wch: 35 },
+      { wch: 15 },
+      { wch: 15 },
+      { wch: 10 },
+      { wch: 20 },
+      { wch: 20 },
+      { wch: 15 },
+      { wch: 10 },
+      { wch: 15 },
+      { wch: 25 },
+      { wch: 15 },
+      { wch: 15 },
+      { wch: 15 },
+      { wch: 15 }
+    ]
+    XLSX.utils.book_append_sheet(wb, wsDetail, "All Records")
+
+    XLSX.writeFile(wb, `NSC_All_Status_Report_${new Date().toISOString().slice(0, 10)}.xlsx`)
+    toast({ title: "All Status Excel exported successfully" })
+  }
+
+  // 3. Inspection Pending Report
+  const downloadInspectionPendingPDF = async () => {
+    const { default: jsPDF } = await import("jspdf")
+    const { default: autoTable } = await import("jspdf-autotable")
+
+    const pendingInsApps = apps.filter(a => a.status === "pending")
+
+    if (pendingInsApps.length === 0) {
+      toast({ title: "No inspection pending applications found", variant: "destructive" })
+      return
+    }
+
+    pendingInsApps.sort((a, b) => {
+      const agComp = (a.agency || "").localeCompare(b.agency || "")
+      if (agComp !== 0) return agComp
+      return (a.receivedDate || "").localeCompare(b.receivedDate || "")
+    })
+
+    const doc = new jsPDF({ orientation: "landscape" })
+    const pw = doc.internal.pageSize.width
+
+    // Header
+    doc.setFontSize(16)
+    doc.setTextColor(40, 53, 147)
+    doc.text("NSC Inspection Pending Report", pw / 2, 14, { align: "center" })
+
+    doc.setFontSize(9)
+    doc.setTextColor(100)
+    doc.text(
+      `Generated on: ${new Date().toLocaleDateString("en-IN")} | Total Pending Inspections: ${pendingInsApps.length}`,
+      pw / 2, 20, { align: "center" }
+    )
+
+    const agencies = Array.from(new Set(pendingInsApps.map(a => a.agency).filter(Boolean))).sort()
+    const summaryRows = agencies.map((ag, idx) => [
+      idx + 1,
+      ag,
+      pendingInsApps.filter(a => a.agency === ag).length
+    ])
+
+    summaryRows.push([
+      "",
+      "TOTAL PENDING INSPECTIONS",
+      pendingInsApps.length
+    ])
+
+    autoTable(doc, {
+      startY: 25,
+      head: [["#", "Agency", "Pending Inspections"]],
+      body: summaryRows,
+      styles: { fontSize: 8, font: "helvetica", halign: "center", cellPadding: 2 },
+      headStyles: { fillColor: [40, 53, 147], textColor: 255, fontStyle: "bold" },
+      columnStyles: { 1: { halign: "left", fontStyle: "bold" } },
+      didParseCell: (data) => {
+        if (data.row.index === summaryRows.length - 1) {
+          data.cell.styles.fontStyle = "bold"
+          data.cell.styles.fillColor = [230, 235, 255]
+          data.cell.styles.textColor = [40, 53, 147]
+        }
+      },
+      theme: "grid",
+      margin: { left: 50, right: 50 }
+    })
+
+    const nextY = (doc as any).lastAutoTable.finalY + 10
+    doc.setFontSize(11)
+    doc.setTextColor(40, 53, 147)
+    doc.text("Detailed Inspection Pending List", 14, nextY)
+
+    const cols = ["#", "Receive No", "Applicant Name", "Agency", "Mobile", "Class & Phase", "Received Date", "Address"]
+    const body = pendingInsApps.map((a, i) => [
+      i + 1,
+      a.receiveNo || "-",
+      a.applicantName || "-",
+      a.agency || "-",
+      a.mobile || "-",
+      `${CLASS_LABELS[a.appliedClass] || a.appliedClass} (${a.phase || "-"})`,
+      a.receivedDate || "-",
+      a.address ? a.address.substring(0, 40) + (a.address.length > 40 ? "..." : "") : "-"
+    ])
+
+    autoTable(doc, {
+      startY: nextY + 3,
+      head: [cols],
+      body: body,
+      styles: { fontSize: 7, font: "helvetica" },
+      headStyles: { fillColor: [60, 60, 60], textColor: 255 },
+      columnStyles: {
+        0: { cellWidth: 10 },
+        1: { cellWidth: 25 },
+        2: { cellWidth: 40 },
+        3: { cellWidth: 30 },
+        4: { cellWidth: 20 },
+        5: { cellWidth: 35 },
+        6: { cellWidth: 25 },
+        7: { cellWidth: 80 }
+      },
+      didDrawPage: (data) => {
+        doc.setFontSize(8)
+        doc.setTextColor(150)
+        doc.text(`Page ${doc.getNumberOfPages()}`, data.settings.margin.left, doc.internal.pageSize.height - 10)
+      }
+    })
+
+    doc.save(`NSC_Inspection_Pending_Report_${new Date().toISOString().slice(0, 10)}.pdf`)
+    toast({ title: "Inspection Pending PDF exported successfully" })
+  }
+
+  const downloadInspectionPendingExcel = async () => {
+    const XLSX = await import("xlsx")
+
+    const pendingInsApps = apps.filter(a => a.status === "pending")
+
+    if (pendingInsApps.length === 0) {
+      toast({ title: "No inspection pending applications found", variant: "destructive" })
+      return
+    }
+
+    const wb = XLSX.utils.book_new()
+
+    // Sheet 1: Summary
+    const agencies = Array.from(new Set(pendingInsApps.map(a => a.agency).filter(Boolean))).sort()
+    const summaryRows = [
+      ["NSC Inspection Pending Summary Report"],
+      [`Generated on: ${new Date().toLocaleDateString("en-IN")}`],
+      [],
+      ["#", "Agency", "Pending Inspections"]
+    ]
+
+    agencies.forEach((ag, idx) => {
+      summaryRows.push([
+        String(idx + 1),
+        ag,
+        String(pendingInsApps.filter(a => a.agency === ag).length)
+      ])
+    })
+
+    summaryRows.push([
+      "",
+      "GRAND TOTAL",
+      String(pendingInsApps.length)
+    ])
+
+    const wsSummary = XLSX.utils.aoa_to_sheet(summaryRows)
+    wsSummary["!cols"] = [
+      { wch: 5 },
+      { wch: 25 },
+      { wch: 20 }
+    ]
+    XLSX.utils.book_append_sheet(wb, wsSummary, "Summary")
+
+    // Sheet 2: Detailed Records
+    const detailRows = pendingInsApps.map((a, i) => ({
+      "#": i + 1,
+      "Receive No": a.receiveNo || "",
+      "Applicant Name": a.applicantName || "",
+      "C/O": a.careOf || "",
+      "Address": a.address || "",
+      "Mobile": a.mobile || "",
+      "Class": CLASS_LABELS[a.appliedClass] || a.appliedClass || "",
+      "Phase": a.phase || "",
+      "Agency": a.agency || "",
+      "Received Date": a.receivedDate || "",
+      "Load (kW)": a.load || ""
+    }))
+
+    const wsDetail = XLSX.utils.json_to_sheet(detailRows)
+    wsDetail["!cols"] = [
+      { wch: 5 },
+      { wch: 15 },
+      { wch: 25 },
+      { wch: 20 },
+      { wch: 35 },
+      { wch: 15 },
+      { wch: 15 },
+      { wch: 10 },
+      { wch: 20 },
+      { wch: 15 },
+      { wch: 10 }
+    ]
+    XLSX.utils.book_append_sheet(wb, wsDetail, "Inspection Pending")
+
+    XLSX.writeFile(wb, `NSC_Inspection_Pending_Report_${new Date().toISOString().slice(0, 10)}.xlsx`)
+    toast({ title: "Inspection Pending Excel exported successfully" })
+  }
+
   const exportReport = async () => {
     const XLSX = await import("xlsx")
     const wb = XLSX.utils.book_new()
@@ -963,8 +1608,9 @@ function NscReports({ apps }: { apps: NSCApplication[] }) {
   )
 
   return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-3">
+    <div className="space-y-6">
+      {/* Stat Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
         <StatCard label="Total Applications"        value={total}     color="bg-gray-50 border-gray-200" />
         <StatCard label="Pending Inspection"        value={pending}   color="bg-yellow-50 border-yellow-200" />
         <StatCard label="Inspection Completed"      value={inspected} color="bg-blue-50 border-blue-200" />
@@ -973,6 +1619,77 @@ function NscReports({ apps }: { apps: NSCApplication[] }) {
         <StatCard label="Accepted by Agency"        value={apps.filter(a => a.agencyDecision === "accepted").length} color="bg-teal-50 border-teal-200" />
       </div>
 
+      {/* Custom Reports Panel */}
+      <Card className="border border-slate-200 shadow-sm overflow-hidden bg-white">
+        <div className="px-5 py-4 border-b bg-slate-50/50">
+          <h3 className="font-bold text-gray-950 text-sm">Download Custom Reports</h3>
+          <p className="text-xs text-gray-500 mt-0.5">Generate customized PDF reports and Excel spreadsheets with summary pages</p>
+        </div>
+        <CardContent className="p-5">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            
+            {/* Card 1: Agency Pending Report */}
+            <div className="bg-slate-50/60 border border-slate-100 rounded-xl p-4 flex flex-col justify-between space-y-4 hover:border-blue-200 hover:bg-blue-50/5 transition">
+              <div className="space-y-1.5">
+                <span className="text-[9px] font-bold tracking-wider text-blue-700 uppercase bg-blue-100/60 px-2 py-0.5 rounded-full">Report 1</span>
+                <h4 className="font-bold text-gray-900 text-sm">Agency Pending Report</h4>
+                <p className="text-xs text-gray-500 leading-relaxed">
+                  List of NSC applications pending with agencies at any stage (Inspection, Erection, or Meter Installation).
+                </p>
+              </div>
+              <div className="flex gap-2 pt-1">
+                <Button size="sm" variant="outline" className="flex-1 h-8 text-xs gap-1 border-red-200 text-red-700 bg-red-50/50 hover:bg-red-100 hover:text-red-800 transition" onClick={downloadAgencyPendingPDF}>
+                  <FileDown className="h-3.5 w-3.5" /> PDF
+                </Button>
+                <Button size="sm" variant="outline" className="flex-1 h-8 text-xs gap-1 border-green-200 text-green-700 bg-green-50/50 hover:bg-green-100 hover:text-green-800 transition" onClick={downloadAgencyPendingExcel}>
+                  <FileSpreadsheet className="h-3.5 w-3.5" /> Excel
+                </Button>
+              </div>
+            </div>
+
+            {/* Card 2: All Status Report */}
+            <div className="bg-slate-50/60 border border-slate-100 rounded-xl p-4 flex flex-col justify-between space-y-4 hover:border-blue-200 hover:bg-blue-50/5 transition">
+              <div className="space-y-1.5">
+                <span className="text-[9px] font-bold tracking-wider text-indigo-700 uppercase bg-indigo-100/60 px-2 py-0.5 rounded-full">Report 2</span>
+                <h4 className="font-bold text-gray-900 text-sm">All Status Report</h4>
+                <p className="text-xs text-gray-500 leading-relaxed">
+                  Comprehensive listing and matrix breakdown of all applications across all statuses and assigned agencies.
+                </p>
+              </div>
+              <div className="flex gap-2 pt-1">
+                <Button size="sm" variant="outline" className="flex-1 h-8 text-xs gap-1 border-red-200 text-red-700 bg-red-50/50 hover:bg-red-100 hover:text-red-800 transition" onClick={downloadAllStatusPDF}>
+                  <FileDown className="h-3.5 w-3.5" /> PDF
+                </Button>
+                <Button size="sm" variant="outline" className="flex-1 h-8 text-xs gap-1 border-green-200 text-green-700 bg-green-50/50 hover:bg-green-100 hover:text-green-800 transition" onClick={downloadAllStatusExcel}>
+                  <FileSpreadsheet className="h-3.5 w-3.5" /> Excel
+                </Button>
+              </div>
+            </div>
+
+            {/* Card 3: Inspection Pending Report */}
+            <div className="bg-slate-50/60 border border-slate-100 rounded-xl p-4 flex flex-col justify-between space-y-4 hover:border-blue-200 hover:bg-blue-50/5 transition">
+              <div className="space-y-1.5">
+                <span className="text-[9px] font-bold tracking-wider text-amber-700 uppercase bg-amber-100/60 px-2 py-0.5 rounded-full">Report 3</span>
+                <h4 className="font-bold text-gray-900 text-sm">Inspection Pending Report</h4>
+                <p className="text-xs text-gray-500 leading-relaxed">
+                  Focused list and summary of applications currently awaiting their initial site inspections by agencies.
+                </p>
+              </div>
+              <div className="flex gap-2 pt-1">
+                <Button size="sm" variant="outline" className="flex-1 h-8 text-xs gap-1 border-red-200 text-red-700 bg-red-50/50 hover:bg-red-100 hover:text-red-800 transition" onClick={downloadInspectionPendingPDF}>
+                  <FileDown className="h-3.5 w-3.5" /> PDF
+                </Button>
+                <Button size="sm" variant="outline" className="flex-1 h-8 text-xs gap-1 border-green-200 text-green-700 bg-green-50/50 hover:bg-green-100 hover:text-green-800 transition" onClick={downloadInspectionPendingExcel}>
+                  <FileSpreadsheet className="h-3.5 w-3.5" /> Excel
+                </Button>
+              </div>
+            </div>
+
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Analytics Tables */}
       <Table title="By Applied Class"   headers={["Class", "Total", "Pending", "Inspected", "Completed"]} rows={byClass.map(c => [c.label, c.total, c.pending, c.inspected, c.done])} />
       <Table title="By Phase"           headers={["Phase", "Total", "Pending", "Inspected", "Completed"]} rows={byPhase.map(p => [p.phase, p.total, p.pending, p.inspected, p.done])} />
       {byAgency.length > 0 && (
@@ -981,7 +1698,7 @@ function NscReports({ apps }: { apps: NSCApplication[] }) {
       )}
 
       <Button className="w-full bg-slate-950 hover:bg-slate-900 text-white h-11" onClick={exportReport}>
-        <FileDown className="h-4 w-4 mr-2" /> Export Full Report (Excel)
+        <FileDown className="h-4 w-4 mr-2" /> Export Full System Raw Data (Excel)
       </Button>
     </div>
   )
