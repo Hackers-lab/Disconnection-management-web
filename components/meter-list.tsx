@@ -12,7 +12,7 @@ import {
   Search, X, Plus, RefreshCw, Loader2, Check, AlertCircle,
   Printer, ChevronLeft, ChevronRight, RotateCcw, Package,
   ArrowLeft, Upload, ChevronDown, ChevronUp, FileDown, ClipboardCheck,
-  MapPin, Phone, Building2,
+  MapPin, Phone, Building2, FileSpreadsheet,
 } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
 import type { MeterStock, MeterIssue, StockSummary, MeterTypeLabel } from "@/lib/meter-types"
@@ -877,6 +877,194 @@ function ReportsPanel({ issues, summary, onExport }: { issues: MeterIssue[]; sum
   const totalInstalled       = issues.filter(i => i.status === "installed").length
   const totalReturned        = issues.filter(i => i.status === "returned").length
 
+  const exportAgencyPendingPDF = async () => {
+    const { default: jsPDF } = await import("jspdf")
+    const { default: autoTable } = await import("jspdf-autotable")
+
+    const pendingIssues = issues.filter(i => i.status === "issued" || i.status === "installation_done")
+    
+    // Sort pending issues by agency then issueDate
+    const sortedIssues = [...pendingIssues].sort((a, b) => {
+      const agComp = (a.agency || "").localeCompare(b.agency || "")
+      if (agComp !== 0) return agComp
+      return (a.issueDate || "").localeCompare(b.issueDate || "")
+    })
+
+    const doc = new jsPDF({ orientation: "landscape" })
+    const pw = doc.internal.pageSize.width
+
+    // Header
+    doc.setFontSize(16)
+    doc.setTextColor(180, 83, 9)
+    doc.text("Agency-wise Pending Meter Issues Report", pw / 2, 14, { align: "center" })
+    
+    doc.setFontSize(9)
+    doc.setTextColor(100)
+    doc.text(
+      `Generated on: ${new Date().toLocaleDateString("en-IN")} | Total Pending: ${pendingIssues.length} (Issued: ${totalIssued}, Pending Finalization: ${totalPendingFinal})`,
+      pw / 2, 20, { align: "center" }
+    )
+
+    // Summary table per agency
+    const agencies = Array.from(new Set(pendingIssues.map(i => i.agency).filter(Boolean))).sort()
+    const summaryRows = agencies.map((ag, idx) => {
+      const agIssues = pendingIssues.filter(i => i.agency === ag)
+      const pInstall = agIssues.filter(i => i.status === "issued").length
+      const pFinal = agIssues.filter(i => i.status === "installation_done").length
+      return [
+        idx + 1,
+        ag,
+        pInstall,
+        pFinal,
+        agIssues.length
+      ]
+    })
+
+    // Grand total row
+    summaryRows.push([
+      "",
+      "GRAND TOTAL",
+      totalIssued,
+      totalPendingFinal,
+      totalIssued + totalPendingFinal
+    ])
+
+    autoTable(doc, {
+      startY: 25,
+      head: [["#", "Agency", "Pending Installation (Issued)", "Pending Finalization (Inst. Done)", "Total Pending"]],
+      body: summaryRows,
+      styles: { fontSize: 8.5, font: "helvetica", halign: "center", cellPadding: 3 },
+      headStyles: { fillColor: [180, 83, 9], textColor: 255, fontStyle: "bold" },
+      columnStyles: { 1: { halign: "left", fontStyle: "bold" } },
+      didParseCell: (data) => {
+        if (data.row.index === summaryRows.length - 1) {
+          data.cell.styles.fontStyle = "bold"
+          data.cell.styles.fillColor = [254, 243, 199]
+          data.cell.styles.textColor = [180, 83, 9]
+        }
+      },
+      theme: "grid"
+    })
+
+    const nextY = (doc as any).lastAutoTable.finalY + 10
+    
+    let startY = nextY
+    if (startY > doc.internal.pageSize.height - 40) {
+      doc.addPage()
+      startY = 15
+    }
+
+    doc.setFontSize(11)
+    doc.setTextColor(180, 83, 9)
+    doc.text("Detailed Pending List (Grouped by Agency)", 14, startY)
+
+    const cols = ["#", "Issue ID", "Issue Date", "Consumer ID", "Consumer Name", "Serial No", "Meter Type", "Purpose", "Agency", "Current Status"]
+    const body = sortedIssues.map((i, idx) => [
+      idx + 1,
+      i.issueId || "-",
+      i.issueDate || "-",
+      i.consumerId || "-",
+      i.consumerName || "-",
+      i.serialNo || "-",
+      i.meterType || "-",
+      PURPOSE_LABELS[i.purpose] || i.purpose || "-",
+      i.agency || "-",
+      STATUS_LABELS[i.status] || i.status || "-"
+    ])
+
+    autoTable(doc, {
+      startY: startY + 3,
+      head: [cols],
+      body: body,
+      styles: { fontSize: 7.5, font: "helvetica", cellPadding: 2 },
+      headStyles: { fillColor: [60, 60, 60], textColor: 255 },
+      columnStyles: {
+        0: { cellWidth: 8 },
+        1: { cellWidth: 20 },
+        2: { cellWidth: 20 },
+        3: { cellWidth: 22 },
+        4: { cellWidth: 45 },
+        5: { cellWidth: 25 },
+        6: { cellWidth: 25 },
+        7: { cellWidth: 35 },
+        8: { cellWidth: 35 },
+        9: { cellWidth: 35 }
+      },
+      didDrawPage: (data) => {
+        doc.setFontSize(8)
+        doc.setTextColor(150)
+        doc.text(`Page ${doc.getNumberOfPages()}`, data.settings.margin.left, doc.internal.pageSize.height - 10)
+      },
+      theme: "grid"
+    })
+
+    doc.save(`agency-wise-pending-meter-report-${new Date().toISOString().slice(0, 10)}.pdf`)
+    toast({ title: "PDF Report downloaded" })
+  }
+
+  const exportAgencyPendingExcel = async () => {
+    const XLSX = await loadXLSX()
+    const wb = XLSX.utils.book_new()
+
+    const pendingIssues = issues.filter(i => i.status === "issued" || i.status === "installation_done")
+
+    const agencies = Array.from(new Set(pendingIssues.map(i => i.agency).filter(Boolean))).sort()
+    const summaryRows = [
+      ["Agency-wise Pending Meter Issues Summary"],
+      [`Generated on: ${new Date().toLocaleDateString("en-IN")}`],
+      [],
+      ["Agency", "Pending Installation (Issued)", "Pending Finalization (Inst. Done)", "Total Pending"]
+    ]
+
+    agencies.forEach(ag => {
+      const agIssues = pendingIssues.filter(i => i.agency === ag)
+      const pInstall = agIssues.filter(i => i.status === "issued").length
+      const pFinal = agIssues.filter(i => i.status === "installation_done").length
+      summaryRows.push([
+        ag,
+        pInstall.toString(),
+        pFinal.toString(),
+        agIssues.length.toString()
+      ])
+    })
+
+    summaryRows.push([
+      "GRAND TOTAL",
+      totalIssued.toString(),
+      totalPendingFinal.toString(),
+      (totalIssued + totalPendingFinal).toString()
+    ])
+
+    const wsSummary = XLSX.utils.aoa_to_sheet(summaryRows)
+    XLSX.utils.book_append_sheet(wb, wsSummary, "Pending Summary")
+
+    const sortedIssues = [...pendingIssues].sort((a, b) => {
+      const agComp = (a.agency || "").localeCompare(b.agency || "")
+      if (agComp !== 0) return agComp
+      return (a.issueDate || "").localeCompare(b.issueDate || "")
+    })
+
+    const rawRows = sortedIssues.map(i => ({
+      "Issue ID": i.issueId,
+      "Issue Date": i.issueDate,
+      "Consumer ID": i.consumerId,
+      "Consumer Name": i.consumerName,
+      "Serial No": i.serialNo,
+      "Meter Type": i.meterType,
+      "Purpose": PURPOSE_LABELS[i.purpose] || i.purpose,
+      "Agency": i.agency,
+      "Status": STATUS_LABELS[i.status] || i.status,
+      "NSC No": i.nscReceiveNo || "",
+      "Remarks": i.remarks || ""
+    }))
+
+    const wsDetails = XLSX.utils.json_to_sheet(rawRows)
+    XLSX.utils.book_append_sheet(wb, wsDetails, "Pending Details")
+
+    XLSX.writeFile(wb, `agency-wise-pending-meter-report-${new Date().toISOString().slice(0, 10)}.xlsx`)
+    toast({ title: "Excel Report downloaded" })
+  }
+
   const purposeBreakdown = [
     { label: "Faulty Replacement",  key: "faulty_replacement" },
     { label: "Burnt Replacement",   key: "burnt_replacement" },
@@ -1051,6 +1239,44 @@ function ReportsPanel({ issues, summary, onExport }: { issues: MeterIssue[]; sum
           rows={agencyBreakdown}
         />
       )}
+
+      {/* Agency Wise Pending Report Card */}
+      <div className="bg-white rounded-xl border border-amber-200 shadow-sm overflow-hidden p-4 space-y-4">
+        <div className="flex items-center gap-3">
+          <div className="p-2.5 rounded-xl bg-amber-50 text-amber-700">
+            <Building2 className="h-5 w-5" />
+          </div>
+          <div>
+            <h3 className="font-semibold text-gray-900 text-sm">Agency-wise Pending Report</h3>
+            <p className="text-xs text-gray-500 mt-0.5">Generate PDF or Excel containing details of all pending meter installations & finalizations grouped by agency.</p>
+          </div>
+        </div>
+
+        {/* Mini stats preview */}
+        <div className="grid grid-cols-3 gap-2 text-center bg-amber-50/50 rounded-lg p-2.5 border border-amber-100 text-xs">
+          <div>
+            <p className="text-gray-500 font-medium">Pending Install</p>
+            <p className="font-bold text-amber-700 text-lg mt-0.5">{totalIssued}</p>
+          </div>
+          <div>
+            <p className="text-gray-500 font-medium">Pending Finalization</p>
+            <p className="font-bold text-teal-700 text-lg mt-0.5">{totalPendingFinal}</p>
+          </div>
+          <div>
+            <p className="text-gray-500 font-medium">Total Pending</p>
+            <p className="font-bold text-slate-900 text-lg mt-0.5">{totalIssued + totalPendingFinal}</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          <Button size="sm" variant="outline" className="border-amber-200 hover:bg-amber-50 text-amber-800 w-full" onClick={exportAgencyPendingPDF}>
+            <FileDown className="h-4 w-4 mr-1 text-red-600" /> Export PDF
+          </Button>
+          <Button size="sm" variant="outline" className="border-amber-200 hover:bg-amber-50 text-amber-800 w-full" onClick={exportAgencyPendingExcel}>
+            <FileSpreadsheet className="h-4 w-4 mr-1 text-green-600" /> Export Excel
+          </Button>
+        </div>
+      </div>
 
       {/* Export */}
       <Button className="w-full bg-indigo-600 hover:bg-indigo-700 text-white h-11" onClick={exportReport}>
