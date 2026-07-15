@@ -218,6 +218,7 @@ export function MeterList({ userRole, userAgencies, username, agencies }: Props)
         i.nscReceiveNo.toLowerCase().includes(q)
       )
     }
+    return data
   }, [issues, tab, search, purposeFilter, isAdmin, userAgencies])
 
   const filteredReplacements = useMemo(() => {
