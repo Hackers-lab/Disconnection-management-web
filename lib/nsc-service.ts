@@ -2,7 +2,7 @@
 import { google } from "googleapis"
 import { unstable_cache, revalidateTag } from "next/cache"
 import { auth } from "./google-drive"
-import { getSpreadsheetId } from "./google-sheets-api"
+import { getSpreadsheetId, ensureHeaders, findColumn, colLetter } from "./google-sheets-api"
 import type { NSCApplication } from "./nsc-types"
 import { nowTs, currentFY } from "./date-utils"
 
@@ -12,7 +12,7 @@ const sheets = google.sheets({ version: "v4", auth })
 
 export const NSC_TAB = "NSC_Applications"
 
-// 46 columns A–AU
+// 48 columns A–AV
 const NSC_HEADERS = [
   "Receive No", "Received Date", "Applicant Name", "C/O", "Address",
   "Mobile", "Applied Class", "Phase", "Agency", "Status",
@@ -35,6 +35,57 @@ const NSC_HEADERS = [
   // Added columns (AS–AV) — safe to append, never break existing data
   "Office Ref No", "Project ID", "Is Legacy", "Existing Consumer ID",
 ]
+
+const NSC_FIELD_MAP: Record<keyof NSCApplication, string[]> = {
+  receiveNo:         ["Receive No", "receiveNo", "receive_no"],
+  receivedDate:      ["Received Date", "receivedDate", "received_date"],
+  applicantName:     ["Applicant Name", "applicantName", "applicant_name"],
+  careOf:            ["C/O", "careOf", "care_of"],
+  address:           ["Address", "address"],
+  mobile:            ["Mobile", "mobile"],
+  appliedClass:      ["Applied Class", "appliedClass", "applied_class"],
+  phase:             ["Phase", "phase"],
+  agency:            ["Agency", "agency"],
+  status:            ["Status", "status"],
+  createdBy:         ["Created By", "createdBy", "created_by"],
+  createdAt:         ["Created At", "createdAt", "created_at"],
+  verifyName:        ["Verify Name", "verifyName", "verify_name"],
+  verifyCO:          ["Verify C/O", "verifyCO", "verify_c_o", "verifyco"],
+  verifyAddress:     ["Verify Address", "verifyAddress", "verify_address"],
+  verifyClass:       ["Verify Class", "verifyClass", "verify_class"],
+  existingMeter:     ["Existing Meter", "existingMeter", "existing_meter"],
+  existingMeterNo:   ["Existing Meter No", "existingMeterNo", "existing_meter_no"],
+  existingMeterImg:  ["Existing Meter Image", "existingMeterImg", "existing_meter_image"],
+  validPartition:    ["Valid Partition", "validPartition", "valid_partition"],
+  partitionImg:      ["Partition Image", "partitionImg", "partition_image"],
+  dispute:           ["Dispute", "dispute"],
+  load:              ["Load (kW)", "load", "load_kw"],
+  serviceLength:     ["Service Length (m)", "serviceLength", "service_length"],
+  poleRequired:      ["Pole Required", "poleRequired", "pole_required"],
+  poleDrawingImg:    ["Pole Drawing Image", "poleDrawingImg", "pole_drawing_image"],
+  dtrCapacity:       ["DTR Capacity", "dtrCapacity", "dtr_capacity"],
+  dtrLoad:           ["DTR Load", "dtrLoad", "dtr_load"],
+  siteImg:           ["Site Image", "siteImg", "site_image"],
+  inspectionFormImg: ["Inspection Form Image", "inspectionFormImg", "inspection_form_image"],
+  agencyDecision:    ["Agency Decision", "agencyDecision", "agency_decision"],
+  agencyRemarks:     ["Agency Remarks", "agencyRemarks", "agency_remarks"],
+  inspectedAt:       ["Inspected At", "inspectedAt", "inspected_at"],
+  inspectedBy:       ["Inspected By", "inspectedBy", "inspected_by"],
+  adminDecision:     ["Admin Decision", "adminDecision", "admin_decision"],
+  adminRemarks:      ["Admin Remarks", "adminRemarks", "admin_remarks"],
+  finalAction:       ["Final Action", "finalAction", "final_action"],
+  memoNo:            ["Memo No", "memoNo", "memo_no"],
+  applicationNo:     ["Application No", "applicationNo", "application_id", "application_no"],
+  finalizedAt:          ["Finalized At", "finalizedAt", "finalized_at"],
+  finalizedBy:          ["Finalized By", "finalizedBy", "finalized_by"],
+  meterIssuedAt:        ["Meter Issued At", "meterIssuedAt", "meter_issued_at"],
+  connectionEffectedAt: ["Connection Effected At", "connectionEffectedAt", "connection_effected_at"],
+  meterSerialNo:        ["Meter Serial No", "meterSerialNo", "meter_serial_no"],
+  officeRefNo:          ["Office Ref No", "officeRefNo", "office_ref_no"],
+  projectId:            ["Project ID", "projectId", "project_id"],
+  isLegacy:             ["Is Legacy", "isLegacy", "is_legacy"],
+  existingConsumerId:   ["Existing Consumer ID", "existingConsumerId", "existing_consumer_id", "existingconsumerid"],
+}
 
 // ─── Shared cross-instance cache (Next.js Data Cache) ─────────────────────────
 // Read paths use the cached wrapper; write paths use the raw fetch so row
@@ -65,65 +116,74 @@ async function ensureTab(id: string) {
 }
 
 // ─── Parser ──────────────────────────────────────────────────────────────────
-function parseRow(r: string[]): NSCApplication {
+function parseRow(r: string[], headers: string[]): NSCApplication {
+  const getVal = (field: keyof NSCApplication) => {
+    const candidates = NSC_FIELD_MAP[field]
+    if (!candidates) return ""
+    const idx = findColumn(headers, candidates)
+    if (idx === -1) return ""
+    return r[idx] || ""
+  }
+
   return {
-    receiveNo:         r[0]  || "",
-    receivedDate:      r[1]  || "",
-    applicantName:     r[2]  || "",
-    careOf:            r[3]  || "",
-    address:           r[4]  || "",
-    mobile:            r[5]  || "",
-    appliedClass:      r[6]  || "",
-    phase:             r[7]  || "",
-    agency:            r[8]  || "",
-    status:            r[9]  || "pending",
-    createdBy:         r[10] || "",
-    createdAt:         r[11] || "",
-    verifyName:        r[12] || "",
-    verifyCO:          r[13] || "",
-    verifyAddress:     r[14] || "",
-    verifyClass:       r[15] || "",
-    existingMeter:     r[16] || "",
-    existingMeterNo:   r[17] || "",
-    existingMeterImg:  r[18] || "",
-    validPartition:    r[19] || "",
-    partitionImg:      r[20] || "",
-    dispute:           r[21] || "",
-    load:              r[22] || "",
-    serviceLength:     r[23] || "",
-    poleRequired:      r[24] || "",
-    poleDrawingImg:    r[25] || "",
-    dtrCapacity:       r[26] || "",
-    dtrLoad:           r[27] || "",
-    siteImg:           r[28] || "",
-    inspectionFormImg: r[29] || "",
-    agencyDecision:    r[30] || "",
-    agencyRemarks:     r[31] || "",
-    inspectedAt:       r[32] || "",
-    inspectedBy:       r[33] || "",
-    adminDecision:     r[34] || "",
-    adminRemarks:      r[35] || "",
-    finalAction:       r[36] || "",
-    memoNo:            r[37] || "",
-    applicationNo:     r[38] || "",
-    finalizedAt:          r[39] || "",
-    finalizedBy:          r[40] || "",
-    meterIssuedAt:        r[41] || "",
-    connectionEffectedAt: r[42] || "",
-    meterSerialNo:        r[43] || "",
-    officeRefNo:          r[44] || "",
-    projectId:            r[45] || "",
-    isLegacy:             r[46] || "",
-    existingConsumerId:   r[47] || "",
+    receiveNo:            getVal("receiveNo"),
+    receivedDate:         getVal("receivedDate"),
+    applicantName:        getVal("applicantName"),
+    careOf:               getVal("careOf"),
+    address:              getVal("address"),
+    mobile:               getVal("mobile"),
+    appliedClass:         getVal("appliedClass"),
+    phase:                getVal("phase"),
+    agency:               getVal("agency"),
+    status:               getVal("status") || "pending",
+    createdBy:            getVal("createdBy"),
+    createdAt:            getVal("createdAt"),
+    verifyName:           getVal("verifyName"),
+    verifyCO:             getVal("verifyCO"),
+    verifyAddress:        getVal("verifyAddress"),
+    verifyClass:          getVal("verifyClass"),
+    existingMeter:        getVal("existingMeter"),
+    existingMeterNo:      getVal("existingMeterNo"),
+    existingMeterImg:     getVal("existingMeterImg"),
+    validPartition:       getVal("validPartition"),
+    partitionImg:         getVal("partitionImg"),
+    dispute:              getVal("dispute"),
+    load:                 getVal("load"),
+    serviceLength:        getVal("serviceLength"),
+    poleRequired:         getVal("poleRequired"),
+    poleDrawingImg:       getVal("poleDrawingImg"),
+    dtrCapacity:          getVal("dtrCapacity"),
+    dtrLoad:              getVal("dtrLoad"),
+    siteImg:              getVal("siteImg"),
+    inspectionFormImg:    getVal("inspectionFormImg"),
+    agencyDecision:       getVal("agencyDecision"),
+    agencyRemarks:        getVal("agencyRemarks"),
+    inspectedAt:          getVal("inspectedAt"),
+    inspectedBy:          getVal("inspectedBy"),
+    adminDecision:        getVal("adminDecision"),
+    adminRemarks:         getVal("adminRemarks"),
+    finalAction:          getVal("finalAction"),
+    memoNo:               getVal("memoNo"),
+    applicationNo:        getVal("applicationNo"),
+    finalizedAt:          getVal("finalizedAt"),
+    finalizedBy:          getVal("finalizedBy"),
+    meterIssuedAt:        getVal("meterIssuedAt"),
+    connectionEffectedAt: getVal("connectionEffectedAt"),
+    meterSerialNo:        getVal("meterSerialNo"),
+    officeRefNo:          getVal("officeRefNo"),
+    projectId:            getVal("projectId"),
+    isLegacy:             getVal("isLegacy"),
+    existingConsumerId:   getVal("existingConsumerId"),
   }
 }
 
 // ─── Fetch ────────────────────────────────────────────────────────────────────
 async function _fetchApplicationsRaw(): Promise<NSCApplication[]> {
   const id = getSpreadsheetId()
-  await ensureTab(id)
-  const res = await sheets.spreadsheets.values.get({ spreadsheetId: id, range: `${NSC_TAB}!A:AV` })
-  return (res.data.values || []).slice(1).filter(r => r[0]).map(r => parseRow(r.map(String)))
+  const headers = await ensureHeaders(id, NSC_TAB, NSC_HEADERS)
+  const lastColLetter = colLetter(headers.length - 1)
+  const res = await sheets.spreadsheets.values.get({ spreadsheetId: id, range: `${NSC_TAB}!A:${lastColLetter}` })
+  return (res.data.values || []).slice(1).filter(r => r[0]).map(r => parseRow(r.map(String), headers))
 }
 
 // Cached read for list/count endpoints (notifications, GET).
@@ -158,7 +218,6 @@ async function nextReceiveNo(id: string, phase: string): Promise<string> {
   return `${newPrefix}${String(max + 1).padStart(4, "0")}`
 }
 
-
 // ─── Create application ───────────────────────────────────────────────────────
 export async function createApplication(req: {
   applicantName: string
@@ -172,25 +231,34 @@ export async function createApplication(req: {
   officeRefNo?:  string
 }): Promise<string> {
   const id = getSpreadsheetId()
-  await ensureTab(id)
+  const headers = await ensureHeaders(id, NSC_TAB, NSC_HEADERS)
   const receiveNo = await nextReceiveNo(id, req.phase)
   const now = nowTs()
-  const row = new Array(48).fill("")
-  row[0]  = receiveNo
-  row[1]  = now.split(" ")[0]
-  row[2]  = req.applicantName
-  row[3]  = req.careOf
-  row[4]  = req.address
-  row[5]  = req.mobile
-  row[6]  = req.appliedClass
-  row[7]  = req.phase
-  row[8]  = req.agency
-  row[9]  = "pending"
-  row[10] = req.createdBy
-  row[11] = now
-  row[44] = req.officeRefNo || ""
+
+  const row = new Array(headers.length).fill("")
+  const setVal = (field: keyof NSCApplication, value: string) => {
+    const idx = findColumn(headers, NSC_FIELD_MAP[field])
+    if (idx !== -1) row[idx] = value
+  }
+
+  setVal("receiveNo", receiveNo)
+  setVal("receivedDate", now.split(" ")[0])
+  setVal("applicantName", req.applicantName)
+  setVal("careOf", req.careOf)
+  setVal("address", req.address)
+  setVal("mobile", req.mobile)
+  setVal("appliedClass", req.appliedClass)
+  setVal("phase", req.phase)
+  setVal("agency", req.agency)
+  setVal("status", "pending")
+  setVal("createdBy", req.createdBy)
+  setVal("createdAt", now)
+  setVal("officeRefNo", req.officeRefNo || "")
+
+  const lastColLetter = colLetter(headers.length - 1)
   await sheets.spreadsheets.values.append({
-    spreadsheetId: id, range: `${NSC_TAB}!A:AV`,
+    spreadsheetId: id,
+    range: `${NSC_TAB}!A:${lastColLetter}`,
     valueInputOption: "RAW",
     requestBody: { values: [row] },
   })
@@ -224,41 +292,53 @@ export async function submitInspection(req: {
   inspectedBy:       string
 }): Promise<void> {
   const id = getSpreadsheetId()
-  await ensureTab(id)
+  const headers = await ensureHeaders(id, NSC_TAB, NSC_HEADERS)
   const all = await _fetchApplicationsRaw()
   const idx = all.findIndex(a => a.receiveNo === req.receiveNo)
   if (idx === -1) throw new Error("Application not found")
   const row = idx + 2
   const now = nowTs()
+
+  const data: any[] = []
+  const addUpdate = (field: keyof NSCApplication, value: string) => {
+    const colIdx = findColumn(headers, NSC_FIELD_MAP[field])
+    if (colIdx !== -1) {
+      data.push({
+        range: `${NSC_TAB}!${colLetter(colIdx)}${row}`,
+        values: [[value]]
+      })
+    }
+  }
+
+  addUpdate("status", "inspected")
+  addUpdate("verifyName", req.verifyName)
+  addUpdate("verifyCO", req.verifyCO)
+  addUpdate("verifyAddress", req.verifyAddress)
+  addUpdate("verifyClass", req.verifyClass)
+  addUpdate("existingMeter", req.existingMeter)
+  addUpdate("existingMeterNo", req.existingMeterNo)
+  addUpdate("existingMeterImg", req.existingMeterImg)
+  addUpdate("validPartition", req.validPartition)
+  addUpdate("partitionImg", req.partitionImg)
+  addUpdate("dispute", req.dispute)
+  addUpdate("load", req.load)
+  addUpdate("serviceLength", req.serviceLength)
+  addUpdate("poleRequired", req.poleRequired)
+  addUpdate("poleDrawingImg", req.poleDrawingImg)
+  addUpdate("dtrCapacity", req.dtrCapacity)
+  addUpdate("dtrLoad", req.dtrLoad)
+  addUpdate("siteImg", req.siteImg)
+  addUpdate("inspectionFormImg", req.inspectionFormImg)
+  addUpdate("agencyDecision", req.agencyDecision)
+  addUpdate("agencyRemarks", req.agencyRemarks)
+  addUpdate("inspectedAt", now)
+  addUpdate("inspectedBy", req.inspectedBy)
+
   await sheets.spreadsheets.values.batchUpdate({
     spreadsheetId: id,
     requestBody: {
       valueInputOption: "RAW",
-      data: [
-        { range: `${NSC_TAB}!J${row}`,  values: [["inspected"]] },
-        { range: `${NSC_TAB}!M${row}`,  values: [[req.verifyName]] },
-        { range: `${NSC_TAB}!N${row}`,  values: [[req.verifyCO]] },
-        { range: `${NSC_TAB}!O${row}`,  values: [[req.verifyAddress]] },
-        { range: `${NSC_TAB}!P${row}`,  values: [[req.verifyClass]] },
-        { range: `${NSC_TAB}!Q${row}`,  values: [[req.existingMeter]] },
-        { range: `${NSC_TAB}!R${row}`,  values: [[req.existingMeterNo]] },
-        { range: `${NSC_TAB}!S${row}`,  values: [[req.existingMeterImg]] },
-        { range: `${NSC_TAB}!T${row}`,  values: [[req.validPartition]] },
-        { range: `${NSC_TAB}!U${row}`,  values: [[req.partitionImg]] },
-        { range: `${NSC_TAB}!V${row}`,  values: [[req.dispute]] },
-        { range: `${NSC_TAB}!W${row}`,  values: [[req.load]] },
-        { range: `${NSC_TAB}!X${row}`,  values: [[req.serviceLength]] },
-        { range: `${NSC_TAB}!Y${row}`,  values: [[req.poleRequired]] },
-        { range: `${NSC_TAB}!Z${row}`,  values: [[req.poleDrawingImg]] },
-        { range: `${NSC_TAB}!AA${row}`, values: [[req.dtrCapacity]] },
-        { range: `${NSC_TAB}!AB${row}`, values: [[req.dtrLoad]] },
-        { range: `${NSC_TAB}!AC${row}`, values: [[req.siteImg]] },
-        { range: `${NSC_TAB}!AD${row}`, values: [[req.inspectionFormImg]] },
-        { range: `${NSC_TAB}!AE${row}`, values: [[req.agencyDecision]] },
-        { range: `${NSC_TAB}!AF${row}`, values: [[req.agencyRemarks]] },
-        { range: `${NSC_TAB}!AG${row}`, values: [[now]] },
-        { range: `${NSC_TAB}!AH${row}`, values: [[req.inspectedBy]] },
-      ],
+      data,
     },
   })
   invalidateNSCCache()
@@ -277,7 +357,7 @@ export async function processApplication(req: {
   finalizedBy:        string
 }): Promise<void> {
   const id = getSpreadsheetId()
-  await ensureTab(id)
+  const headers = await ensureHeaders(id, NSC_TAB, NSC_HEADERS)
   const all = await _fetchApplicationsRaw()
   const idx = all.findIndex(a => a.receiveNo === req.receiveNo)
   if (idx === -1) throw new Error("Application not found")
@@ -288,46 +368,66 @@ export async function processApplication(req: {
     req.finalAction === "quotation"      ? "quotation_issued" :
     req.finalAction === "dispute_letter" ? "dispute_issued"   : "pending"
 
-  const updates: any[] = [
-    { range: `${NSC_TAB}!J${row}`,  values: [[newStatus]] },
-    { range: `${NSC_TAB}!AI${row}`, values: [[req.adminDecision]] },
-    { range: `${NSC_TAB}!AJ${row}`, values: [[req.adminRemarks]] },
-    { range: `${NSC_TAB}!AK${row}`, values: [[req.finalAction]] },
-    { range: `${NSC_TAB}!AN${row}`, values: [[now]] },
-    { range: `${NSC_TAB}!AO${row}`, values: [[req.finalizedBy]] },
-  ]
-  if (req.memoNo)            updates.push({ range: `${NSC_TAB}!AL${row}`, values: [[req.memoNo]] })
-  if (req.applicationNo)     updates.push({ range: `${NSC_TAB}!AM${row}`, values: [[req.applicationNo]] })
-  if (req.newAgency)         updates.push({ range: `${NSC_TAB}!I${row}`,  values: [[req.newAgency]] })
+  const data: any[] = []
+  const addUpdate = (field: keyof NSCApplication, value: string) => {
+    const colIdx = findColumn(headers, NSC_FIELD_MAP[field])
+    if (colIdx !== -1) {
+      data.push({
+        range: `${NSC_TAB}!${colLetter(colIdx)}${row}`,
+        values: [[value]]
+      })
+    }
+  }
+
+  addUpdate("status", newStatus)
+  addUpdate("adminDecision", req.adminDecision)
+  addUpdate("adminRemarks", req.adminRemarks)
+  addUpdate("finalAction", req.finalAction)
+  addUpdate("finalizedAt", now)
+  addUpdate("finalizedBy", req.finalizedBy)
+
+  if (req.memoNo)            addUpdate("memoNo", req.memoNo)
+  if (req.applicationNo)     addUpdate("applicationNo", req.applicationNo)
+  if (req.newAgency)         addUpdate("agency", req.newAgency)
   if (req.existingConsumerId !== undefined)
-    updates.push({ range: `${NSC_TAB}!AV${row}`, values: [[req.existingConsumerId]] })
+    addUpdate("existingConsumerId", req.existingConsumerId)
 
   await sheets.spreadsheets.values.batchUpdate({
     spreadsheetId: id,
-    requestBody: { valueInputOption: "RAW", data: updates },
+    requestBody: { valueInputOption: "RAW", data },
   })
   invalidateNSCCache()
 }
-
-// ─── Called by meter-service when a meter is issued for NSC ──────────────────
 export async function updateNSCMeterIssued(receiveNo: string, serialNo: string, agency: string): Promise<void> {
   if (!receiveNo) return
   const id = getSpreadsheetId()
-  await ensureTab(id)
+  const headers = await ensureHeaders(id, NSC_TAB, NSC_HEADERS)
   const all = await _fetchApplicationsRaw()
   const idx = all.findIndex(a => a.receiveNo === receiveNo)
   if (idx === -1) return
   const row = idx + 2
+
+  const data: any[] = []
+  const addUpdate = (field: keyof NSCApplication, value: string) => {
+    const colIdx = findColumn(headers, NSC_FIELD_MAP[field])
+    if (colIdx !== -1) {
+      data.push({
+        range: `${NSC_TAB}!${colLetter(colIdx)}${row}`,
+        values: [[value]]
+      })
+    }
+  }
+
+  addUpdate("status", "meter_issued")
+  addUpdate("meterIssuedAt", nowTs())
+  addUpdate("meterSerialNo", serialNo)
+  addUpdate("agency", agency)
+
   await sheets.spreadsheets.values.batchUpdate({
     spreadsheetId: id,
     requestBody: {
       valueInputOption: "RAW",
-      data: [
-        { range: `${NSC_TAB}!J${row}`,  values: [["meter_issued"]] },
-        { range: `${NSC_TAB}!AP${row}`, values: [[nowTs()]] },
-        { range: `${NSC_TAB}!AR${row}`, values: [[serialNo]] },
-        { range: `${NSC_TAB}!I${row}`,  values: [[agency]] },
-      ],
+      data,
     },
   })
   invalidateNSCCache()
@@ -337,19 +437,31 @@ export async function updateNSCMeterIssued(receiveNo: string, serialNo: string, 
 export async function updateNSCConnectionEffected(receiveNo: string): Promise<void> {
   if (!receiveNo) return
   const id = getSpreadsheetId()
-  await ensureTab(id)
+  const headers = await ensureHeaders(id, NSC_TAB, NSC_HEADERS)
   const all = await _fetchApplicationsRaw()
   const idx = all.findIndex(a => a.receiveNo === receiveNo)
   if (idx === -1) return
   const row = idx + 2
+
+  const data: any[] = []
+  const addUpdate = (field: keyof NSCApplication, value: string) => {
+    const colIdx = findColumn(headers, NSC_FIELD_MAP[field])
+    if (colIdx !== -1) {
+      data.push({
+        range: `${NSC_TAB}!${colLetter(colIdx)}${row}`,
+        values: [[value]]
+      })
+    }
+  }
+
+  addUpdate("status", "connection_effected")
+  addUpdate("connectionEffectedAt", nowTs())
+
   await sheets.spreadsheets.values.batchUpdate({
     spreadsheetId: id,
     requestBody: {
       valueInputOption: "RAW",
-      data: [
-        { range: `${NSC_TAB}!J${row}`,  values: [["connection_effected"]] },
-        { range: `${NSC_TAB}!AQ${row}`, values: [[nowTs()]] },
-      ],
+      data,
     },
   })
   invalidateNSCCache()
@@ -359,47 +471,64 @@ export async function updateNSCConnectionEffected(receiveNo: string): Promise<vo
 export async function updateNSCMeterReturned(receiveNo: string): Promise<void> {
   if (!receiveNo) return
   const id = getSpreadsheetId()
-  await ensureTab(id)
+  const headers = await ensureHeaders(id, NSC_TAB, NSC_HEADERS)
   const all = await _fetchApplicationsRaw()
   const idx = all.findIndex(a => a.receiveNo === receiveNo)
   if (idx === -1) return
   const row = idx + 2
-  await sheets.spreadsheets.values.update({
-    spreadsheetId: id, range: `${NSC_TAB}!J${row}`,
-    valueInputOption: "RAW",
-    requestBody: { values: [["meter_returned"]] },
-  })
+  const statusCol = findColumn(headers, NSC_FIELD_MAP["status"])
+  if (statusCol !== -1) {
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: id, range: `${NSC_TAB}!${colLetter(statusCol)}${row}`,
+      valueInputOption: "RAW",
+      requestBody: { values: [["meter_returned"]] },
+    })
+  }
   invalidateNSCCache()
 }
 
 // ─── Update office reference number (always editable) ────────────────────────
 export async function updateOfficeRefNo(receiveNo: string, officeRefNo: string): Promise<void> {
   const id = getSpreadsheetId()
-  await ensureTab(id)
+  const headers = await ensureHeaders(id, NSC_TAB, NSC_HEADERS)
   const all = await _fetchApplicationsRaw()
   const idx = all.findIndex(a => a.receiveNo === receiveNo)
   if (idx === -1) throw new Error("Application not found")
   const row = idx + 2
-  await sheets.spreadsheets.values.update({
-    spreadsheetId: id, range: `${NSC_TAB}!AS${row}`,
-    valueInputOption: "RAW",
-    requestBody: { values: [[officeRefNo]] },
-  })
+  const officeRefCol = findColumn(headers, NSC_FIELD_MAP["officeRefNo"])
+  if (officeRefCol !== -1) {
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: id, range: `${NSC_TAB}!${colLetter(officeRefCol)}${row}`,
+      valueInputOption: "RAW",
+      requestBody: { values: [[officeRefNo]] },
+    })
+  }
   invalidateNSCCache()
 }
 
 // ─── Link an application to a project ────────────────────────────────────────
 export async function updateNSCProjectLink(receiveNo: string, projectId: string, newStatus?: string): Promise<void> {
   const id = getSpreadsheetId()
-  await ensureTab(id)
+  const headers = await ensureHeaders(id, NSC_TAB, NSC_HEADERS)
   const all = await _fetchApplicationsRaw()
   const idx = all.findIndex(a => a.receiveNo === receiveNo)
   if (idx === -1) throw new Error("Application not found")
   const row = idx + 2
-  const updates: any[] = [
-    { range: `${NSC_TAB}!AT${row}`, values: [[projectId]] },
-  ]
-  if (newStatus) updates.push({ range: `${NSC_TAB}!J${row}`, values: [[newStatus]] })
+
+  const updates: any[] = []
+  const addUpdate = (field: keyof NSCApplication, value: string) => {
+    const colIdx = findColumn(headers, NSC_FIELD_MAP[field])
+    if (colIdx !== -1) {
+      updates.push({
+        range: `${NSC_TAB}!${colLetter(colIdx)}${row}`,
+        values: [[value]]
+      })
+    }
+  }
+
+  addUpdate("projectId", projectId)
+  if (newStatus) addUpdate("status", newStatus)
+
   await sheets.spreadsheets.values.batchUpdate({
     spreadsheetId: id,
     requestBody: { valueInputOption: "RAW", data: updates },
@@ -424,7 +553,7 @@ export interface LegacyImportRow {
 
 export async function importLegacyApplications(rows: LegacyImportRow[]): Promise<number> {
   const id = getSpreadsheetId()
-  await ensureTab(id)
+  const headers = await ensureHeaders(id, NSC_TAB, NSC_HEADERS)
   const existing = await _fetchApplicationsRaw()
   const fy = currentFY()
   const prefix = `NSC/${fy}/`
@@ -437,29 +566,35 @@ export async function importLegacyApplications(rows: LegacyImportRow[]): Promise
   const values = rows.map(r => {
     counter++
     const receiveNo = `${prefix}${String(counter).padStart(4, "0")}`
-    const row = new Array(48).fill("")
-    row[0]  = receiveNo
-    row[1]  = r.receivedDate
-    row[2]  = r.applicantName
-    row[3]  = r.careOf
-    row[4]  = r.address
-    row[5]  = r.mobile
-    row[6]  = r.appliedClass
-    row[7]  = r.phase
-    row[8]  = r.agency
-    row[9]  = r.status || "pending"
-    row[10] = r.createdBy
-    row[11] = nowTs()
-    row[44] = r.officeRefNo
-    row[46] = "true"   // isLegacy
+    const row = new Array(headers.length).fill("")
+    const setVal = (field: keyof NSCApplication, value: string) => {
+      const colIdx = findColumn(headers, NSC_FIELD_MAP[field])
+      if (colIdx !== -1) row[colIdx] = value
+    }
+
+    setVal("receiveNo", receiveNo)
+    setVal("receivedDate", r.receivedDate)
+    setVal("applicantName", r.applicantName)
+    setVal("careOf", r.careOf)
+    setVal("address", r.address)
+    setVal("mobile", r.mobile)
+    setVal("appliedClass", r.appliedClass)
+    setVal("phase", r.phase)
+    setVal("agency", r.agency)
+    setVal("status", r.status || "pending")
+    setVal("createdBy", r.createdBy)
+    setVal("createdAt", nowTs())
+    setVal("officeRefNo", r.officeRefNo)
+    setVal("isLegacy", "true")
     return row
   })
 
   // Append in batches
   const BATCH = 200
+  const lastColLetter = colLetter(headers.length - 1)
   for (let i = 0; i < values.length; i += BATCH) {
     await sheets.spreadsheets.values.append({
-      spreadsheetId: id, range: `${NSC_TAB}!A:AV`,
+      spreadsheetId: id, range: `${NSC_TAB}!A:${lastColLetter}`,
       valueInputOption: "RAW",
       requestBody: { values: values.slice(i, i + BATCH) },
     })
