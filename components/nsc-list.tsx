@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
-import { Card, CardContent } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   Search, X, Plus, RefreshCw, Check, ChevronLeft, ChevronRight,
   FileDown, Phone, MapPin, ClipboardList, Clock, FolderOpen,
@@ -496,106 +496,129 @@ export function NscList({ userRole, userAgencies, username, agencies }: Props) {
               <p className="font-semibold">No NSC applications found</p>
             </div>
           ) : paginated.map(app => (
-            <Card key={app.receiveNo} className="hover:shadow-lg transition-all duration-300 overflow-hidden border border-slate-200 hover:border-blue-300 rounded-2xl shadow-sm bg-white hover:-translate-y-0.5">
-              <CardContent className="p-6">
-
-                {/* Top row: receive no + phase chip + status badge + agency pill */}
-                <div className="flex items-start justify-between gap-3 flex-wrap border-b pb-3 mb-3 border-slate-100">
-                  <div className="flex items-center gap-2 flex-wrap min-w-0">
-                    <span className="font-mono text-xs text-slate-450 font-bold bg-slate-50 px-2 py-0.5 rounded border border-slate-100">{app.receiveNo}</span>
-                    {app.officeRefNo && (
-                      <>
-                        <span className="text-xs text-slate-200">|</span>
-                        <span className="font-mono text-xs text-blue-600 font-bold">Ref: {app.officeRefNo}</span>
-                      </>
+            <Card key={app.receiveNo} className={`shadow-md hover:shadow-lg transition-all duration-200 overflow-hidden max-w-full ${app.dispute ? "ring-2 ring-red-500 border-red-300" : "hover:border-blue-200"}`}>
+              <CardHeader className="pb-3 break-words whitespace-normal">
+                <div className="flex items-start justify-between w-full gap-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <CardTitle className="text-lg break-words whitespace-normal line-clamp-2 leading-tight font-semibold text-gray-900">
+                        {app.applicantName}
+                      </CardTitle>
+                      {app.dispute && (
+                        <span className="shrink-0 text-[10px] font-bold uppercase tracking-wide bg-red-650 text-white px-1.5 py-0.5 rounded animate-pulse">DISPUTE</span>
+                      )}
+                    </div>
+                    {app.careOf && (
+                      <p className="text-xs text-gray-500 font-medium mt-0.5">C/O {app.careOf}</p>
                     )}
-                    {app.isLegacy === "true" && <Badge variant="outline" className="text-xs py-0.5 px-2 text-amber-700 border-amber-200 bg-amber-50/30 rounded-lg">Legacy</Badge>}
-                    {/* Phase pill */}
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${app.phase === "3P" ? "bg-purple-50 text-purple-750 border border-purple-100" : "bg-blue-50 text-blue-750 border border-blue-100"}`}>
-                      {app.phase}
-                    </span>
-                    {app.poleRequired === "yes" && (
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-orange-50 text-orange-750 border border-orange-100">Pole Required</span>
-                    )}
-                    {app.dispute && (
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-50 text-red-750 border border-red-100">⚠ Dispute</span>
-                    )}
+                    <p className="text-sm text-gray-600 font-mono mt-1">ID: {app.existingConsumerId || "—"}</p>
+                    <div className="flex items-center gap-1.5 flex-wrap mt-2">
+                      <span className="font-mono text-[10px] text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">Rcv: {app.receiveNo}</span>
+                      {app.officeRefNo && (
+                        <span className="font-mono text-[10px] text-blue-600 font-bold bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">Ref: {app.officeRefNo}</span>
+                      )}
+                      <span className="text-[10px] text-indigo-700 bg-indigo-50 border border-indigo-150 px-2 py-0.5 rounded-full font-medium">
+                        {CLASS_LABELS[app.appliedClass] || app.appliedClass}
+                      </span>
+                    </div>
                   </div>
-                  {/* Agency pill — right side */}
-                  <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full shrink-0 border ${agencyColor(app.agency)}`}>
-                    {app.agency}
-                  </span>
-                </div>
-
-                {/* Project link */}
-                {app.projectId && (
-                  <p className="text-xs text-orange-700 font-mono mt-2 bg-orange-50/50 border border-orange-100 rounded-lg px-2.5 py-1 inline-block">
-                    <FolderOpen className="inline h-3.5 w-3.5 mr-1" />Project: {app.projectId}
-                  </p>
-                )}
-
-                {/* Applicant info */}
-                <div className="mt-3.5 space-y-2.5">
-                  <div className="flex items-start justify-between gap-3">
-                    <p className="font-extrabold text-slate-905 text-base tracking-tight">{app.applicantName}</p>
-                    <Badge className={`shrink-0 text-[10px] px-2 py-0.5 font-bold rounded-lg border ${NSC_STATUS_COLORS[app.status] || "bg-slate-100 text-slate-700 border-slate-200"}`}>
+                  <div className="flex flex-col items-end space-y-1.5 shrink-0">
+                    <Badge className={`shrink-0 text-[10px] px-2.5 py-0.5 font-bold rounded-full border ${NSC_STATUS_COLORS[app.status] || "bg-slate-100 text-slate-700 border-slate-200"}`}>
                       {NSC_STATUS_LABELS[app.status] || app.status}
                     </Badge>
+                    <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full shrink-0 border ${agencyColor(app.agency)}`}>
+                      {app.agency}
+                    </span>
                   </div>
-                  {app.careOf && <p className="text-xs text-slate-500 font-medium -mt-1.5">C/O {app.careOf}</p>}
-                  
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-slate-700 font-semibold bg-slate-50 border border-slate-100 px-2 py-0.5 rounded-lg">{CLASS_LABELS[app.appliedClass] || app.appliedClass}</span>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-3 break-words whitespace-normal">
+                {app.projectId && (
+                  <div className="flex items-center space-x-2">
+                    <FolderOpen className="h-4 w-4 text-orange-500 flex-shrink-0" />
+                    <div className="flex-1">
+                      <p className="text-sm font-bold text-orange-700 font-mono">Project: {app.projectId}</p>
+                    </div>
                   </div>
-                  
-                  <div className="flex items-start gap-2 text-slate-655">
-                    <MapPin className="h-4 w-4 text-slate-400 shrink-0 mt-0.5" />
-                    <p className="text-xs leading-relaxed font-medium">{app.address}</p>
+                )}
+                {app.address && (
+                  <div className="flex items-start space-x-2 min-w-0">
+                    <MapPin className="h-4 w-4 text-gray-400 mt-0.5 flex-shrink-0" />
+                    <p className="text-sm text-gray-600 line-clamp-2" title={app.address}>{app.address}</p>
                   </div>
-                  
-                  <div className="flex items-center gap-3 pt-1 flex-wrap">
-                    <a href={`tel:${app.mobile}`} className="flex items-center gap-1.5 text-xs text-blue-600 font-bold bg-blue-50/50 hover:bg-blue-50 border border-blue-100 px-2.5 py-1 rounded-lg transition-colors">
-                      <Phone className="h-3.5 w-3.5" />{app.mobile}
-                    </a>
-                    {app.existingConsumerId && (
-                      <span className="text-xs font-mono font-bold text-amber-700 bg-amber-50/50 border border-amber-100 px-2.5 py-1 rounded-lg">
-                        Consumer ID: {app.existingConsumerId}
-                      </span>
-                    )}
-                  </div>
+                )}
+                {app.mobile && (
+                  <a href={`tel:${app.mobile}`} className="flex items-center space-x-2 hover:underline">
+                    <Phone className="h-4 w-4 text-gray-400" />
+                    <p className="text-sm text-blue-600">{app.mobile}</p>
+                  </a>
+                )}
+
+                {/* Badges / Chips for legacy, phase, pole, etc. */}
+                <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${app.phase === "3P" ? "bg-purple-50 text-purple-750 border border-purple-100" : "bg-blue-50 text-blue-750 border border-blue-100"}`}>
+                    Phase: {app.phase}
+                  </span>
+                  {app.poleRequired === "yes" && (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-orange-50 text-orange-755 border border-orange-100">
+                      Pole Required
+                    </span>
+                  )}
+                  {app.isLegacy === "true" && (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-755 border border-amber-100">
+                      Legacy
+                    </span>
+                  )}
                 </div>
 
                 {/* Processing summary */}
                 {app.status !== "pending" && (
-                  <div className="mt-3 p-2.5 bg-slate-50 rounded-xl border border-slate-100 text-xs text-slate-505 space-y-1 sm:space-y-0 sm:space-x-2">
+                  <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-100 text-xs text-slate-550 space-y-1">
                     {app.agencyDecision && (
-                      <span className={`inline-block font-semibold ${app.agencyDecision === "accepted" ? "text-green-600" : "text-red-600"}`}>
-                        Agency: {app.agencyDecision}
-                      </span>
+                      <div>
+                        <span className="font-semibold text-gray-500">Agency Decision:</span>{" "}
+                        <span className={`font-bold ${app.agencyDecision === "accepted" ? "text-green-650" : "text-red-650"}`}>
+                          {app.agencyDecision}
+                        </span>
+                      </div>
                     )}
                     {app.adminDecision && (
-                      <span className={`inline-block ${app.adminDecision === "accepted" ? "text-green-700 font-bold" : "text-red-700 font-bold"}`}>
-                        Admin: {app.adminDecision}
-                      </span>
+                      <div>
+                        <span className="font-semibold text-gray-500">Admin Decision:</span>{" "}
+                        <span className={`font-bold ${app.adminDecision === "accepted" ? "text-green-755" : "text-red-755"}`}>
+                          {app.adminDecision}
+                        </span>
+                      </div>
                     )}
-                    {app.applicationNo && <span className="inline-block font-mono text-green-700 font-bold">App# {app.applicationNo}</span>}
-                    {app.memoNo        && <span className="inline-block font-mono text-orange-700 font-bold">Memo: {app.memoNo}</span>}
+                    {app.applicationNo && (
+                      <div>
+                        <span className="font-semibold text-gray-500">App No:</span>{" "}
+                        <span className="font-mono text-green-700 font-bold">{app.applicationNo}</span>
+                      </div>
+                    )}
+                    {app.memoNo && (
+                      <div>
+                        <span className="font-semibold text-gray-500">Memo No:</span>{" "}
+                        <span className="font-mono text-orange-700 font-bold">{app.memoNo}</span>
+                      </div>
+                    )}
                   </div>
                 )}
 
                 {app.meterSerialNo && (
-                  <div className="mt-3 p-2.5 bg-purple-50/50 rounded-xl border border-purple-100 flex items-center gap-2 text-xs">
+                  <div className="p-2.5 bg-purple-50/50 rounded-xl border border-purple-100 flex items-center gap-2 text-xs">
                     <span className="font-mono font-bold text-purple-755">Meter Serial: {app.meterSerialNo}</span>
                     <span className="text-purple-300">|</span>
                     <span className="text-purple-755 font-bold">{app.agency}</span>
                   </div>
                 )}
 
-                <div className="flex items-center justify-between mt-4 text-[11px] text-slate-400 font-bold border-t pt-2 border-slate-50">
-                  <span>Received Date</span>
-                  <span>{app.receivedDate}</span>
+                <div className="grid grid-cols-2 gap-2 text-[11px] text-gray-400 pt-2 border-t border-dashed">
+                  <div>
+                    <span className="font-semibold text-gray-500">Received Date:</span> {app.receivedDate}
+                  </div>
                 </div>
-
+                
                 {/* ─ Action buttons ─────────────────────────────────────────── */}
                 <div className="flex gap-2 mt-4 pt-4 border-t border-slate-100 flex-wrap">
 

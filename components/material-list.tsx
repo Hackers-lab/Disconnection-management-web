@@ -1160,132 +1160,120 @@ export function MaterialList({ userRole, userAgencies, username, permissions }: 
                 )}
               </div>
 
-              {/* History Ledger Table */}
-              <Card className="overflow-hidden border border-gray-200">
-                <Table>
-                  <TableHeader className="bg-slate-900 hover:bg-slate-900">
-                    <TableRow>
-                      <TableHead className="text-xs text-white w-[100px]">Date</TableHead>
-                      <TableHead className="text-xs text-white">Item Name</TableHead>
-                      <TableHead className="text-xs text-white w-[120px]">Type</TableHead>
-                      <TableHead className="text-xs text-white text-right w-[100px]">Quantity</TableHead>
-                      <TableHead className="text-xs text-white hidden md:table-cell">Reference / Recipient</TableHead>
-                      <TableHead className="text-xs text-white text-right w-[80px]">Action</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {paginatedHistory.map((item, idx) => {
-                      const isReceive = item.type === "receive"
-                      return (
-                        <TableRow key={`${item.id}-${idx}`} className="hover:bg-slate-50/50">
-                          <TableCell className="text-xs font-mono text-gray-500">
-                            {item.date}
-                          </TableCell>
-                          <TableCell className="text-xs">
-                            <span 
-                              className="text-blue-650 hover:text-blue-855 hover:underline cursor-pointer font-semibold"
-                              onClick={() => {
-                                const mat = stock.find(s => s.materialId === item.materialId)
-                                if (mat) setHistoryMaterial(mat)
-                              }}
-                            >
-                              {item.materialDesc}
-                            </span>
-                          </TableCell>
-                          <TableCell className="text-xs">
-                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                              isReceive 
-                                ? "bg-emerald-50 text-emerald-700 border border-emerald-200" 
-                                : "bg-orange-50 text-orange-700 border border-orange-200"
-                            }`}>
-                              {isReceive ? "📥 Inward" : "📤 Outward"}
-                            </span>
-                          </TableCell>
-                          <TableCell className={`text-xs text-right font-mono font-bold ${
-                            isReceive ? "text-emerald-700" : "text-orange-750"
-                          }`}>
-                            {isReceive ? `+${item.quantity}` : `-${item.quantity}`} {item.unit}
-                          </TableCell>
-                          <TableCell className="text-xs text-gray-500 hidden md:table-cell max-w-[200px] truncate">
-                            {isReceive ? (
-                              <span>
-                                Challan: <strong className="text-gray-700">{item.ref}</strong> from {item.party}
-                              </span>
-                            ) : (
-                              <span>
-                                To: <strong className="text-gray-700">{item.party}</strong> ({item.ref})
-                              </span>
+              {/* History Ledger Cards Layout */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                
+                {/* Left Column: Inward Receipts (Receive Logs) */}
+                {(historyTypeFilter === "all" || historyTypeFilter === "receive") && (
+                  <div className={`space-y-2.5 ${historyTypeFilter === "receive" ? "col-span-full" : ""}`}>
+                    <p className="text-xs font-bold text-slate-800 flex items-center gap-1.5 px-1">
+                      <ArrowDownToLine className="h-4 w-4 text-emerald-600" />
+                      Inward Receipts (Challan Logs)
+                    </p>
+                    <div className="border border-slate-100 rounded-2xl bg-slate-50/50 p-2.5 space-y-2.5 max-h-[60vh] overflow-y-auto shadow-inner">
+                      {filteredUnifiedHistory.filter(h => h.type === "receive").map((r, idx) => (
+                        <div key={`${r.id}-${idx}`} className="p-3.5 text-xs bg-white border border-slate-100 rounded-xl space-y-1.5 relative group shadow-sm">
+                          <div className="flex items-start justify-between pr-8">
+                            <div>
+                              <p className="font-semibold text-slate-900">{r.materialDesc}</p>
+                              <p className="text-[10px] text-slate-500 font-mono">
+                                ID: {r.id} · Qty: <span className="font-bold text-emerald-700">+{r.quantity} {r.unit}</span>
+                              </p>
+                            </div>
+                            {r.photoUrl && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 text-blue-650 hover:text-blue-855 hover:bg-blue-50 absolute top-3 right-3"
+                                onClick={() => setPreviewImage({ url: getGoogleDriveDirectLink(r.photoUrl || ""), title: r.materialDesc })}
+                                title="View Attached Photo"
+                              >
+                                <ImageIcon className="h-4 w-4" />
+                              </Button>
                             )}
-                          </TableCell>
-                          <TableCell className="text-xs text-right">
-                            <div className="flex justify-end items-center gap-1">
-                              {item.photoUrl && (
+                          </div>
+                          <div className="grid grid-cols-2 gap-x-2 text-[10px] text-slate-450 border-t pt-1.5 border-dashed border-slate-100">
+                            <div><span className="font-semibold text-slate-600">Challan:</span> {r.ref || "—"}</div>
+                            <div><span className="font-semibold text-slate-600">From:</span> {r.party}</div>
+                            <div><span className="font-semibold text-slate-600">Date:</span> {r.date}</div>
+                            <div><span className="font-semibold text-slate-600">By:</span> {r.by}</div>
+                          </div>
+                          {r.remarks && (
+                            <div className="text-[10px] text-slate-500 bg-slate-50 border border-slate-100 p-2 rounded-lg italic">
+                              Remarks: {r.remarks}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                      {filteredUnifiedHistory.filter(h => h.type === "receive").length === 0 && (
+                        <p className="text-center py-10 text-xs text-slate-450 bg-white border border-dashed rounded-xl">No inward records found</p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Right Column: Outward Handovers (Issue Logs) */}
+                {(historyTypeFilter === "all" || historyTypeFilter === "issue") && (
+                  <div className={`space-y-2.5 ${historyTypeFilter === "issue" ? "col-span-full" : ""}`}>
+                    <p className="text-xs font-bold text-slate-800 flex items-center gap-1.5 px-1">
+                      <ArrowUpFromLine className="h-4 w-4 text-orange-600" />
+                      Outward Handovers (Issues Logs)
+                    </p>
+                    <div className="border border-slate-100 rounded-2xl bg-slate-50/50 p-2.5 space-y-2.5 max-h-[60vh] overflow-y-auto shadow-inner">
+                      {filteredUnifiedHistory.filter(h => h.type === "issue").map((i, idx) => (
+                        <div key={`${i.id}-${idx}`} className="p-3.5 text-xs bg-white border border-slate-100 rounded-xl space-y-1.5 relative group shadow-sm">
+                          <div className="flex items-start justify-between pr-8">
+                            <div>
+                              <p className="font-semibold text-slate-900">{i.materialDesc}</p>
+                              <p className="text-[10px] text-slate-500 font-mono">
+                                ID: {i.id} · Qty: <span className="font-bold text-orange-700">-{i.quantity} {i.unit}</span>
+                              </p>
+                            </div>
+                            <div className="absolute top-3 right-3 flex items-center gap-1">
+                              {i.photoUrl && (
                                 <Button
                                   variant="ghost"
                                   size="icon"
-                                  className="h-7 w-7 text-blue-650 hover:text-blue-850 hover:bg-blue-50"
-                                  onClick={() => setPreviewImage({ url: getGoogleDriveDirectLink(item.photoUrl), title: item.materialDesc })}
+                                  className="h-7 w-7 text-blue-650 hover:text-blue-855 hover:bg-blue-50"
+                                  onClick={() => setPreviewImage({ url: getGoogleDriveDirectLink(i.photoUrl || ""), title: i.materialDesc })}
                                   title="View Attached Photo"
                                 >
                                   <ImageIcon className="h-4 w-4" />
                                 </Button>
                               )}
-                              {item.type === "issue" && (
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-7 w-7 text-slate-500 hover:text-slate-700 hover:bg-slate-50"
-                                  onClick={() => handlePrintSlip(item.id)}
-                                  title="Print Requisition Note"
-                                >
-                                  <Printer className="h-4 w-4" />
-                                </Button>
-                              )}
-                              {!item.photoUrl && item.type === "receive" && (
-                                <span className="text-gray-300">—</span>
-                              )}
+                              <Button
+                                variant="outline"
+                                size="icon"
+                                className="h-7 w-7 text-slate-500 hover:text-slate-700 bg-white border-slate-200 hover:bg-slate-50"
+                                onClick={() => handlePrintSlip(i.id)}
+                                title="Print Requisition Note"
+                              >
+                                <Printer className="h-3.5 w-3.5" />
+                              </Button>
                             </div>
-                          </TableCell>
-                        </TableRow>
-                      )
-                    })}
+                          </div>
+                          <div className="grid grid-cols-2 gap-x-2 text-[10px] text-slate-450 border-t pt-1.5 border-dashed border-slate-100">
+                            <div><span className="font-semibold text-slate-600">To:</span> {i.party}</div>
+                            <div><span className="font-semibold text-slate-600">Purpose:</span> {i.ref || "—"}</div>
+                            <div><span className="font-semibold text-slate-600">Date:</span> {i.date}</div>
+                            <div><span className="font-semibold text-slate-600">By:</span> {i.by}</div>
+                          </div>
+                          {i.remarks && (
+                            <div className="text-[10px] text-slate-500 bg-slate-50 border border-slate-100 p-2 rounded-lg italic">
+                              Remarks: {i.remarks}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                      {filteredUnifiedHistory.filter(h => h.type === "issue").length === 0 && (
+                        <p className="text-center py-10 text-xs text-slate-450 bg-white border border-dashed rounded-xl">No outward records found</p>
+                      )}
+                    </div>
+                  </div>
+                )}
 
-                    {filteredUnifiedHistory.length === 0 && (
-                      <TableRow>
-                        <TableCell colSpan={6} className="text-center py-10 text-xs text-gray-400">
-                          No transaction history found.
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              </Card>
-
-              {/* Ledger Pagination */}
-              {totalHistoryPages > 1 && (
-                <div className="flex items-center justify-between bg-white p-4 rounded-xl shadow-sm border">
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    onClick={() => setHistoryPage(p => Math.max(1, p - 1))} 
-                    disabled={historyPage === 1} 
-                    className="rounded-lg"
-                  >
-                    <ChevronLeft className="h-4 w-4 mr-1" /> Previous
-                  </Button>
-                  <span className="text-sm text-gray-600">Page {historyPage} of {totalHistoryPages}</span>
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    onClick={() => setHistoryPage(p => Math.min(totalHistoryPages, p + 1))} 
-                    disabled={historyPage === totalHistoryPages} 
-                    className="rounded-lg"
-                  >
-                    Next <ChevronRight className="h-4 w-4 ml-1" />
-                  </Button>
-                </div>
-              )}
-            </>
+              </div>
+</>
           )}
         </div>
       )}
