@@ -29,7 +29,7 @@ function getGoogleDriveDirectLink(url: string): string {
 interface Props {
   catalogue: Material[]
   stock: MaterialStock[]
-  onSuccess: () => void
+  onSuccess: (issueId?: string) => void
   onCancel: () => void
 }
 
@@ -141,6 +141,7 @@ export function MaterialIssueForm({ catalogue, stock, onSuccess, onCancel }: Pro
 
       const res = await fetch("/api/material/issue", { method: "POST", body: fd })
       if (!res.ok) throw new Error((await res.json()).error || "Failed to submit")
+      const result = await res.json()
 
       // Reset
       setItems([])
@@ -149,7 +150,7 @@ export function MaterialIssueForm({ catalogue, stock, onSuccess, onCancel }: Pro
       setRemarks("")
       setPhoto(null)
       setPhotoPreview(null)
-      onSuccess()
+      onSuccess(result?.issueId)
     } catch (e: any) {
       alert(e.message)
     } finally {

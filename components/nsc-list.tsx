@@ -496,12 +496,8 @@ export function NscList({ userRole, userAgencies, username, agencies }: Props) {
               <p className="font-semibold">No NSC applications found</p>
             </div>
           ) : paginated.map(app => (
-            <Card key={app.receiveNo} className="shadow-md hover:shadow-lg transition-all duration-200 overflow-hidden border border-gray-200 hover:border-blue-200">
-              <CardContent className="p-4">
-=======
             <Card key={app.receiveNo} className="hover:shadow-lg transition-all duration-300 overflow-hidden border border-slate-200 hover:border-blue-300 rounded-2xl shadow-sm bg-white hover:-translate-y-0.5">
               <CardContent className="p-6">
->>>>>>> 14f0976 (UI improvements and reports section for DTR verification, painting, dashboard layouts, and NSC/reconnection list desktop columns)
 
                 {/* Top row: receive no + phase chip + status badge + agency pill */}
                 <div className="flex items-start justify-between gap-3 flex-wrap border-b pb-3 mb-3 border-slate-100">
@@ -675,38 +671,38 @@ export function NscList({ userRole, userAgencies, username, agencies }: Props) {
                     </Button>
                   )}
 
-                  {/*                   {/* Admin actions: edit ref & history icons only */}
+                  {/* Admin: pending — reassign */}
+                  {isAdmin && app.status === "pending" && (
+                    <Button size="sm" className="flex-1 h-10 bg-slate-950 hover:bg-slate-900 text-white text-xs font-semibold rounded-xl shadow-sm transition-colors"
+                      onClick={() => { setSelected(app); setView("process") }}>
+                      Reassign
+                    </Button>
+                  )}
+
+                  {/* Admin: meter issued / connection effected — view only */}
+                  {isAdmin && (app.status === "meter_issued" || app.status === "connection_effected") && (
+                    <p className="text-xs text-teal-700 flex items-center gap-1 font-semibold bg-teal-50 px-3 py-2 border border-teal-100 rounded-xl">
+                      <Check className="h-4 w-4" />
+                      {app.status === "connection_effected" ? "Connection effected" : "Meter issued — awaiting installation"}
+                    </p>
+                  )}
+
+                  {/* Admin actions: edit ref & history icons only */}
                   {isAdmin && (
                     <div className="ml-auto flex items-center gap-1">
                       <button
-                        className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-slate-50 rounded-xl border border-transparent hover:border-slate-200 transition-all font-semibold"
+                        className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-slate-55 rounded-xl border border-transparent hover:border-slate-200 transition-all font-semibold"
                         onClick={() => { setEditingRefApp(app); setRefNoInput(app.officeRefNo || "") }}
                         title={app.officeRefNo ? `Edit Ref: ${app.officeRefNo}` : "Add Ref"}>
                         <Pencil className="h-3.5 w-3.5" />
                       </button>
                       <button
-                        className="p-1.5 text-slate-400 hover:text-slate-655 hover:bg-slate-50 rounded-xl border border-transparent hover:border-slate-200 transition-all font-semibold"
+                        className="p-1.5 text-slate-400 hover:text-slate-655 hover:bg-slate-55 rounded-xl border border-transparent hover:border-slate-200 transition-all font-semibold"
                         onClick={() => setHistoryApp(app)}
                         title="View history">
                         <Clock className="h-3.5 w-3.5" />
                       </button>
                     </div>
-                  )}             <button
-                      className="flex items-center gap-1 text-xs text-slate-400 hover:text-blue-600 ml-auto font-semibold"
-                      onClick={() => { setEditingRefApp(app); setRefNoInput(app.officeRefNo || "") }}
-                      title="Edit office reference number">
-                      <Pencil className="h-3 w-3" /> {app.officeRefNo ? "Ref" : "Add Ref"}
-                    </button>
-                  )}
-
-                  {/* Admin: history button */}
-                  {isAdmin && (
-                    <button
-                      className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600 font-semibold"
-                      onClick={() => setHistoryApp(app)}>
-                      <Clock className="h-3 w-3" /> History
-                    </button>
->>>>>>> 14f0976 (UI improvements and reports section for DTR verification, painting, dashboard layouts, and NSC/reconnection list desktop columns)
                   )}
                 </div>
               </CardContent>

@@ -11,8 +11,9 @@ import {
   Package, Search, Plus, ArrowDownToLine, ArrowUpFromLine,
   ListChecks, Loader2, RefreshCw, ChevronLeft, ChevronRight, ChevronDown, Trash2,
   FileDown, FileSpreadsheet, Eye, Settings, AlertTriangle, ArrowLeft,
-  Pencil, Check, MoreVertical, X, ImageIcon
+  Pencil, Check, MoreVertical, X, ImageIcon, Printer
 } from "lucide-react"
+import { useToast } from "@/hooks/use-toast"
 import type { Material, MaterialStock, MaterialReceive, MaterialIssue } from "@/lib/material-types"
 import { MATERIAL_CATEGORIES } from "@/lib/material-types"
 import { MaterialReceiveForm } from "./material-receive-form"
@@ -51,6 +52,7 @@ interface Props {
 }
 
 export function MaterialList({ userRole, userAgencies, username, permissions }: Props) {
+  const { toast } = useToast()
   const [view, setView] = useHashState<MainView>("material", "menu")
   const [settingsTab, setSettingsTab] = useState<SettingsSubTab>("catalogue")
 
@@ -218,6 +220,151 @@ export function MaterialList({ userRole, userAgencies, username, permissions }: 
   useEffect(() => {
     fetchData()
   }, [fetchData])
+
+  const handlePrintSlip = (issueId: string) => {
+    const itemsToPrint = issues.filter(i => i.issueId === issueId)
+    if (itemsToPrint.length === 0) {
+      toast({ title: "No items found for this Issue ID" })
+      return
+    }
+
+    const first = itemsToPrint[0]
+    const win = window.open("", "_blank")
+    if (!win) {
+      alert("Pop-up blocked. Please allow pop-ups.")
+      return
+    }
+
+    const rows = itemsToPrint.map((item, idx) => `
+      <tr>
+        <td style="border: 1px solid #cbd5e1; padding: 10px; text-align: center;">${idx + 1}</td>
+        <td style="border: 1px solid #cbd5e1; padding: 10px; font-family: monospace; font-weight: bold;">${item.materialId}</td>
+        <td style="border: 1px solid #cbd5e1; padding: 10px; font-weight: 600;">${item.materialDesc}</td>
+        <td style="border: 1px solid #cbd5e1; padding: 10px; text-align: right; font-weight: bold; color: #c2410c;">${item.quantity} ${item.unit}</td>
+        <td style="border: 1px solid #cbd5e1; padding: 10px; font-style: italic; color: #64748b;">${item.remarks || "—"}</td>
+      </tr>
+    `).join("")
+
+    win.document.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Store Requisition & Issue Note (SRIN)</title>
+        <style>
+          * { box-sizing: border-box; margin: 0; padding: 0; }
+          body { font-family: 'Segoe UI', system-ui, sans-serif; padding: 40px; color: #1e293b; background-color: #fff; font-size: 13px; line-height: 1.5; }
+          .container { max-width: 800px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px; padding: 30px; }
+          .header { text-align: center; margin-bottom: 25px; border-bottom: 2px solid #0f172a; padding-bottom: 15px; }
+          .header h1 { font-size: 20px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: #0f172a; }
+          .header h2 { font-size: 12px; color: #64748b; margin-top: 5px; font-weight: 600; }
+          .meta-grid { display: grid; grid-template-cols: 1fr 1fr; gap: 15px; margin-bottom: 25px; background: #f8fafc; border: 1px solid #f1f5f9; border-radius: 8px; padding: 15px; }
+          .meta-item { display: flex; justify-content: space-between; border-bottom: 1px dashed #e2e8f0; padding-bottom: 4px; }
+          .meta-item:last-child { border-bottom: none; }
+          .meta-label { font-weight: 700; color: #475569; text-transform: uppercase; font-size: 11px; }
+          .meta-value { font-weight: 600; color: #0f172a; }
+          table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
+          th { background: #0f172a; color: #fff; padding: 10px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; border: 1px solid #0f172a; }
+          .footer-signs { display: flex; justify-content: space-between; margin-top: 60px; gap: 20px; }
+          .sign-box { flex: 1; text-align: center; }
+          .sign-line { width: 100%; border-top: 1px solid #0f172a; margin: 45px auto 8px; }
+          .sign-title { font-weight: 700; font-size: 11px; color: #475569; text-transform: uppercase; }
+          .sign-subtitle { font-size: 10px; color: #94a3b8; margin-top: 2px; }
+          .notice { background: #fffbeb; border: 1px solid #fef3c7; color: #b45309; padding: 10px 15px; font-size: 11px; margin-bottom: 25px; border-radius: 8px; font-weight: 500; display: flex; gap: 10px; align-items: center; }
+          @media print {
+            body { padding: 0; }
+            .container { border: none; padding: 0; }
+            .no-print { display: none; }
+            @page { size: A4 portrait; margin: 15mm; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1>Store Requisition & Issue Note</h1>
+            <h2>SRIN • Material Management Slip</h2>
+          </div>
+          
+          <div class="notice">
+            <span>⚠️</span>
+            <span>Important: This note must be filed and registered at the central store database. Obtain all physical signatures before dispatch.</span>
+          </div>
+
+          <div class="meta-grid">
+            <div style="display: flex; flex-direction: column; gap: 6px;">
+              <div class="meta-item">
+                <span class="meta-label">Requisition ID:</span>
+                <span class="meta-value" style="font-family: monospace; color: #2563eb;">${first.issueId}</span>
+              </div>
+              <div class="meta-item">
+                <span class="meta-label">Recipient Name:</span>
+                <span class="meta-value">${first.recipientName}</span>
+              </div>
+              <div class="meta-item">
+                <span class="meta-label">Purpose:</span>
+                <span class="meta-value">${first.purpose || "—"}</span>
+              </div>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 6px;">
+              <div class="meta-item">
+                <span class="meta-label">Date of Issue:</span>
+                <span class="meta-value">${first.issueDate}</span>
+              </div>
+              <div class="meta-item">
+                <span class="meta-label">Issued By (User):</span>
+                <span class="meta-value">${first.issuedBy}</span>
+              </div>
+              <div class="meta-item">
+                <span class="meta-label">Print Time:</span>
+                <span class="meta-value">${new Date().toLocaleString("en-IN")}</span>
+              </div>
+            </div>
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 50px;">#</th>
+                <th style="width: 120px;">Material No</th>
+                <th>Material Description</th>
+                <th style="width: 100px; text-align: right;">Quantity</th>
+                <th style="width: 200px;">Remarks</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows}
+            </tbody>
+          </table>
+
+          <div class="footer-signs">
+            <div class="sign-box">
+              <div class="sign-line"></div>
+              <div class="sign-title">Issued By</div>
+              <div class="sign-subtitle">(Store Keeper / Clerk)</div>
+            </div>
+            <div class="sign-box">
+              <div class="sign-line"></div>
+              <div class="sign-title">Received By</div>
+              <div class="sign-subtitle">(Recipient Signature)</div>
+            </div>
+            <div class="sign-box">
+              <div class="sign-line"></div>
+              <div class="sign-title">Authorized By</div>
+              <div class="sign-subtitle">(Officer-in-Charge)</div>
+            </div>
+          </div>
+        </div>
+        <script>
+          window.onload = function() {
+            window.focus();
+            window.print();
+          }
+        </script>
+      </body>
+      </html>
+    `)
+    win.document.close()
+  }
 
   // ── Filters & Search ───────────────────────────────────────────────────────────
   const q = search.toLowerCase()
@@ -818,7 +965,7 @@ export function MaterialList({ userRole, userAgencies, username, permissions }: 
                                 className="h-7 w-7 rounded-lg object-cover border bg-gray-50 flex-shrink-0 cursor-zoom-in hover:opacity-80 transition-opacity"
                                 onClick={(e) => {
                                   e.stopPropagation()
-                                  setPreviewImage({ url: getGoogleDriveDirectLink(s.photoUrl), title: s.description })
+                                  setPreviewImage({ url: getGoogleDriveDirectLink(s.photoUrl || ""), title: s.description })
                                 }}
                               />
                             ) : (
@@ -883,7 +1030,7 @@ export function MaterialList({ userRole, userAgencies, username, permissions }: 
                                     className="h-7 w-7 rounded-lg object-cover border bg-gray-50 flex-shrink-0 cursor-zoom-in hover:opacity-80 transition-opacity"
                                     onClick={(e) => {
                                       e.stopPropagation()
-                                      setPreviewImage({ url: getGoogleDriveDirectLink(s.photoUrl), title: s.description })
+                                      setPreviewImage({ url: getGoogleDriveDirectLink(s.photoUrl || ""), title: s.description })
                                     }}
                                   />
                                 ) : (
@@ -1071,19 +1218,33 @@ export function MaterialList({ userRole, userAgencies, username, permissions }: 
                             )}
                           </TableCell>
                           <TableCell className="text-xs text-right">
-                            {item.photoUrl ? (
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-7 w-7 text-blue-655 hover:text-blue-855 hover:bg-blue-50"
-                                onClick={() => setPreviewImage({ url: getGoogleDriveDirectLink(item.photoUrl), title: item.materialDesc })}
-                                title="View Attached Photo"
-                              >
-                                <ImageIcon className="h-4 w-4" />
-                              </Button>
-                            ) : (
-                              <span className="text-gray-300">—</span>
-                            )}
+                            <div className="flex justify-end items-center gap-1">
+                              {item.photoUrl && (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7 text-blue-650 hover:text-blue-850 hover:bg-blue-50"
+                                  onClick={() => setPreviewImage({ url: getGoogleDriveDirectLink(item.photoUrl), title: item.materialDesc })}
+                                  title="View Attached Photo"
+                                >
+                                  <ImageIcon className="h-4 w-4" />
+                                </Button>
+                              )}
+                              {item.type === "issue" && (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7 text-slate-500 hover:text-slate-700 hover:bg-slate-50"
+                                  onClick={() => handlePrintSlip(item.id)}
+                                  title="Print Requisition Note"
+                                >
+                                  <Printer className="h-4 w-4" />
+                                </Button>
+                              )}
+                              {!item.photoUrl && item.type === "receive" && (
+                                <span className="text-gray-300">—</span>
+                              )}
+                            </div>
                           </TableCell>
                         </TableRow>
                       )
@@ -1337,7 +1498,7 @@ export function MaterialList({ userRole, userAgencies, username, permissions }: 
                                 className="h-7 w-7 rounded-lg object-cover border bg-gray-50 flex-shrink-0 cursor-zoom-in hover:opacity-80 transition-opacity"
                                 onClick={(e) => {
                                   e.stopPropagation()
-                                  setPreviewImage({ url: getGoogleDriveDirectLink(m.photoUrl), title: m.description })
+                                  setPreviewImage({ url: getGoogleDriveDirectLink(m.photoUrl || ""), title: m.description })
                                 }}
                               />
                             ) : (
@@ -1437,14 +1598,27 @@ export function MaterialList({ userRole, userAgencies, username, permissions }: 
                             ID: {i.issueId} · Qty: <span className="font-bold text-orange-700">-{i.quantity} {i.unit}</span>
                           </p>
                         </div>
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          className="h-7 w-7 text-red-500 hover:text-red-700 bg-white border-red-100 hover:bg-red-50 absolute top-3 right-3 opacity-80 group-hover:opacity-100"
-                          onClick={() => handleDeleteIssue(i.issueId)}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
+                        <div className="absolute top-3 right-3 flex items-center gap-1 opacity-80 group-hover:opacity-100">
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-7 w-7 text-slate-500 hover:text-slate-700 bg-white border-slate-200 hover:bg-slate-50"
+                            onClick={() => handlePrintSlip(i.issueId)}
+                            title="Print Requisition Note"
+                          >
+                            <Printer className="h-3.5 w-3.5" />
+                          </Button>
+                          {canWrite && (
+                            <Button
+                              variant="outline"
+                              size="icon"
+                              className="h-7 w-7 text-red-500 hover:text-red-700 bg-white border-red-100 hover:bg-red-50"
+                              onClick={() => handleDeleteIssue(i.issueId)}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
+                        </div>
                       </div>
                       <div className="grid grid-cols-2 gap-x-2 text-[10px] text-gray-400">
                         <div><span className="font-medium text-gray-500">To:</span> {i.recipientName} ({i.recipientDesignation || "—"})</div>
@@ -1478,7 +1652,15 @@ export function MaterialList({ userRole, userAgencies, username, permissions }: 
            <MaterialIssueForm
              catalogue={catalogue.filter(m => m.isActive)}
              stock={stock}
-             onSuccess={() => { setView("menu"); fetchData(true) }}
+             onSuccess={(issueId) => { 
+                setView("menu")
+                fetchData(true)
+                if (issueId) {
+                  setTimeout(() => {
+                    handlePrintSlip(issueId)
+                  }, 500)
+                }
+              }}
              onCancel={() => setView("menu")}
            />
          )}
