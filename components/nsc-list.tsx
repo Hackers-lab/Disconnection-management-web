@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import {
   Search, X, Plus, RefreshCw, Check, ChevronLeft, ChevronRight,
   FileDown, Phone, MapPin, ClipboardList, Clock, FolderOpen,
@@ -489,173 +489,156 @@ export function NscList({ userRole, userAgencies, username, agencies }: Props) {
 
       {/* Application cards */}
       {tab !== "reports" && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
           {paginated.length === 0 ? (
-            <div className="text-center py-16 text-gray-400 col-span-full bg-white border rounded-2xl">
+            <div className="text-center py-16 text-gray-400 col-span-full">
               <ClipboardList className="h-10 w-10 mx-auto mb-3 opacity-30" />
-              <p className="font-semibold">No NSC applications found</p>
+              <p>No NSC applications found</p>
             </div>
           ) : paginated.map(app => (
-            <Card key={app.receiveNo} className={`shadow-md hover:shadow-lg transition-all duration-200 overflow-hidden max-w-full ${app.dispute ? "ring-2 ring-red-500 border-red-300" : "hover:border-blue-200"}`}>
-              <CardHeader className="pb-3 break-words whitespace-normal">
-                <div className="flex items-start justify-between w-full gap-2">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <CardTitle className="text-lg break-words whitespace-normal line-clamp-2 leading-tight font-semibold text-gray-900">
-                        {app.applicantName}
-                      </CardTitle>
-                      {app.dispute && (
-                        <span className="shrink-0 text-[10px] font-bold uppercase tracking-wide bg-red-650 text-white px-1.5 py-0.5 rounded animate-pulse">DISPUTE</span>
-                      )}
-                    </div>
-                    {app.careOf && (
-                      <p className="text-xs text-gray-500 font-medium mt-0.5">C/O {app.careOf}</p>
+            <Card key={app.receiveNo} className="hover:shadow-md transition-all duration-200 overflow-hidden border border-gray-200 hover:border-blue-200">
+              <CardContent className="p-4">
+
+                {/* Top row: receive no + phase chip + status badge + agency pill */}
+                <div className="flex items-start justify-between gap-2 flex-wrap">
+                  <div className="flex items-center gap-2 flex-wrap min-w-0">
+                    <span className="font-mono text-xs text-gray-400">{app.receiveNo}</span>
+                    {app.officeRefNo && (
+                      <>
+                        <span className="text-xs text-gray-300">|</span>
+                        <span className="font-mono text-xs text-blue-600 font-medium">Ref: {app.officeRefNo}</span>
+                      </>
                     )}
-                    <p className="text-sm text-gray-600 font-mono mt-1">ID: {app.existingConsumerId || "—"}</p>
-                    <div className="flex items-center gap-1.5 flex-wrap mt-2">
-                      <span className="font-mono text-[10px] text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">Rcv: {app.receiveNo}</span>
-                      {app.officeRefNo && (
-                        <span className="font-mono text-[10px] text-blue-600 font-bold bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">Ref: {app.officeRefNo}</span>
-                      )}
-                      <span className="text-[10px] text-indigo-700 bg-indigo-50 border border-indigo-150 px-2 py-0.5 rounded-full font-medium">
-                        {CLASS_LABELS[app.appliedClass] || app.appliedClass}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="flex flex-col items-end space-y-1.5 shrink-0">
-                    <Badge className={`shrink-0 text-[10px] px-2.5 py-0.5 font-bold rounded-full border ${NSC_STATUS_COLORS[app.status] || "bg-slate-100 text-slate-700 border-slate-200"}`}>
-                      {NSC_STATUS_LABELS[app.status] || app.status}
-                    </Badge>
-                    <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full shrink-0 border ${agencyColor(app.agency)}`}>
-                      {app.agency}
+                    {app.isLegacy === "true" && <Badge variant="outline" className="text-xs py-0 px-1 text-amber-700 border-amber-300">Legacy</Badge>}
+                    {/* Phase pill */}
+                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${app.phase === "3P" ? "bg-purple-100 text-purple-700" : "bg-blue-100 text-blue-700"}`}>
+                      {app.phase}
                     </span>
+                    {app.poleRequired === "yes" && (
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-orange-100 text-orange-700">Pole</span>
+                    )}
+                    {app.dispute && (
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">⚠ Dispute</span>
+                    )}
                   </div>
+                  {/* Agency pill — right side */}
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${agencyColor(app.agency)}`}>
+                    {app.agency}
+                  </span>
                 </div>
-              </CardHeader>
-              <CardContent className="space-y-3 break-words whitespace-normal">
+
+                {/* Project link */}
                 {app.projectId && (
-                  <div className="flex items-center space-x-2">
-                    <FolderOpen className="h-4 w-4 text-orange-500 flex-shrink-0" />
-                    <div className="flex-1">
-                      <p className="text-sm font-bold text-orange-700 font-mono">Project: {app.projectId}</p>
-                    </div>
-                  </div>
-                )}
-                {app.address && (
-                  <div className="flex items-start space-x-2 min-w-0">
-                    <MapPin className="h-4 w-4 text-gray-400 mt-0.5 flex-shrink-0" />
-                    <p className="text-sm text-gray-600 line-clamp-2" title={app.address}>{app.address}</p>
-                  </div>
-                )}
-                {app.mobile && (
-                  <a href={`tel:${app.mobile}`} className="flex items-center space-x-2 hover:underline">
-                    <Phone className="h-4 w-4 text-gray-400" />
-                    <p className="text-sm text-blue-600">{app.mobile}</p>
-                  </a>
+                  <p className="text-xs text-orange-600 font-mono mt-0.5">
+                    <FolderOpen className="inline h-3 w-3 mr-1" />{app.projectId}
+                  </p>
                 )}
 
-                {/* Badges / Chips for legacy, phase, pole, etc. */}
-                <div className="flex items-center gap-1.5 flex-wrap pt-1">
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${app.phase === "3P" ? "bg-purple-50 text-purple-750 border border-purple-100" : "bg-blue-50 text-blue-750 border border-blue-100"}`}>
-                    Phase: {app.phase}
-                  </span>
-                  {app.poleRequired === "yes" && (
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-orange-50 text-orange-755 border border-orange-100">
-                      Pole Required
-                    </span>
+                {/* Applicant info */}
+                <div className="mt-1.5">
+                  <div className="flex items-center justify-between gap-1">
+                    <p className="font-bold text-gray-900">{app.applicantName}</p>
+                    <Badge className={`shrink-0 text-[10px] px-1.5 py-0 ${NSC_STATUS_COLORS[app.status] || "bg-gray-100 text-gray-700"}`}>
+                      {NSC_STATUS_LABELS[app.status] || app.status}
+                    </Badge>
+                  </div>
+                  {app.careOf && (
+                    <>
+                      <p className="text-xs text-gray-500">C/O {app.careOf}</p>
+                      <hr className="my-1.5 border-gray-100" />
+                    </>
                   )}
-                  {app.isLegacy === "true" && (
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-755 border border-amber-100">
-                      Legacy
-                    </span>
-                  )}
+
+                  <div className="flex items-start gap-1 mt-0.5">
+                    <MapPin className="h-3 w-3 text-gray-400 shrink-0 mt-0.5" />
+                    <p className="text-xs text-gray-600">{app.address}</p>
+                  </div>
+                  <div className="flex items-center gap-3 mt-1 flex-wrap">
+                    <a href={`tel:${app.mobile}`} className="flex items-center gap-1 text-xs text-blue-600 font-mono">
+                      <Phone className="h-3 w-3" />{app.mobile}
+                    </a>
+                    {app.existingConsumerId && (
+                      <span className="text-xs font-mono text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded">
+                        ConsID: {app.existingConsumerId}
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 {/* Processing summary */}
                 {app.status !== "pending" && (
-                  <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-100 text-xs text-slate-550 space-y-1">
+                  <div className="mt-1 text-xs text-gray-400">
                     {app.agencyDecision && (
-                      <div>
-                        <span className="font-semibold text-gray-500">Agency Decision:</span>{" "}
-                        <span className={`font-bold ${app.agencyDecision === "accepted" ? "text-green-650" : "text-red-650"}`}>
-                          {app.agencyDecision}
-                        </span>
-                      </div>
+                      <span className={`mr-2 ${app.agencyDecision === "accepted" ? "text-green-600" : "text-red-600"}`}>
+                        Agency: {app.agencyDecision}
+                      </span>
                     )}
                     {app.adminDecision && (
-                      <div>
-                        <span className="font-semibold text-gray-500">Admin Decision:</span>{" "}
-                        <span className={`font-bold ${app.adminDecision === "accepted" ? "text-green-755" : "text-red-755"}`}>
-                          {app.adminDecision}
-                        </span>
-                      </div>
+                      <span className={app.adminDecision === "accepted" ? "text-green-700 font-medium" : "text-red-700 font-medium"}>
+                        Admin: {app.adminDecision}
+                      </span>
                     )}
-                    {app.applicationNo && (
-                      <div>
-                        <span className="font-semibold text-gray-500">App No:</span>{" "}
-                        <span className="font-mono text-green-700 font-bold">{app.applicationNo}</span>
-                      </div>
-                    )}
-                    {app.memoNo && (
-                      <div>
-                        <span className="font-semibold text-gray-500">Memo No:</span>{" "}
-                        <span className="font-mono text-orange-700 font-bold">{app.memoNo}</span>
-                      </div>
-                    )}
+                    {app.applicationNo && <span className="ml-2 font-mono text-green-700">App# {app.applicationNo}</span>}
+                    {app.memoNo        && <span className="ml-2 font-mono text-orange-700">Memo: {app.memoNo}</span>}
                   </div>
                 )}
 
                 {app.meterSerialNo && (
-                  <div className="p-2.5 bg-purple-50/50 rounded-xl border border-purple-100 flex items-center gap-2 text-xs">
-                    <span className="font-mono font-bold text-purple-755">Meter Serial: {app.meterSerialNo}</span>
-                    <span className="text-purple-300">|</span>
-                    <span className="text-purple-755 font-bold">{app.agency}</span>
+                  <div className="mt-1 flex items-center gap-2 text-xs">
+                    <span className="font-mono font-bold text-purple-700">{app.meterSerialNo}</span>
+                    <span className="text-gray-400">→</span>
+                    <span className="text-gray-600">{app.agency}</span>
                   </div>
                 )}
 
-                <div className="grid grid-cols-2 gap-2 text-[11px] text-gray-400 pt-2 border-t border-dashed">
-                  <div>
-                    <span className="font-semibold text-gray-500">Received Date:</span> {app.receivedDate}
-                  </div>
+                <div className="flex items-center justify-between text-xs text-gray-400 mt-1">
+                  <span>{app.receivedDate}</span>
+                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold border ${
+                    app.appliedClass === "LT" ? "bg-indigo-50 text-indigo-700 border-indigo-200" :
+                    app.appliedClass === "HT" ? "bg-purple-50 text-purple-700 border-purple-200" :
+                    "bg-slate-50 text-slate-700 border-slate-200"
+                  }`}>
+                    {CLASS_LABELS[app.appliedClass] || app.appliedClass}
+                  </span>
                 </div>
-                
+
                 {/* ─ Action buttons ─────────────────────────────────────────── */}
-                <div className="flex gap-2 mt-4 pt-4 border-t border-slate-100 flex-wrap">
+                <div className="flex gap-2 mt-3 pt-3 border-t flex-wrap">
 
                   {/* View button — always visible */}
                   <button
-                    className="flex items-center gap-1.5 text-xs text-slate-650 hover:text-slate-900 bg-slate-50 hover:bg-slate-150 rounded-xl px-3.5 py-2 border border-slate-200/80 transition-all font-semibold"
+                    className="flex items-center gap-1 text-xs text-gray-500 hover:text-slate-900 bg-gray-50 hover:bg-gray-100 rounded-lg px-2.5 py-1.5 border border-gray-200 transition"
                     onClick={() => setViewApp(app)}
                     title="View full details"
                   >
-                    <Eye className="h-3.5 w-3.5" /> View Details
+                    <Eye className="h-3.5 w-3.5" /> View
                   </button>
 
                   {/* Agency: inspect pending */}
                   {isAgency && app.status === "pending" && (
-                    <Button size="sm" className="flex-1 bg-slate-950 hover:bg-slate-900 text-white text-xs font-semibold h-10 rounded-xl shadow-sm transition-colors"
+                    <Button size="sm" className="flex-1 bg-slate-950 hover:bg-slate-900 text-white text-xs font-semibold h-9 rounded-lg shadow-sm transition-colors"
                       onClick={() => { setSelected(app); setView("inspect") }}>
                       Start Inspection
                     </Button>
                   )}
                   {/* Agency: inspection submitted */}
                   {isAgency && app.status !== "pending" && (
-                    <p className="text-xs text-green-650 font-bold bg-green-50 px-3 py-2 rounded-xl border border-green-100 flex items-center gap-1">
-                      <Check className="h-3.5 w-3.5 text-green-605" /> Inspection submitted
+                    <p className="text-xs text-gray-500 flex items-center gap-1">
+                      <Check className="h-3 w-3 text-green-600" /> Inspection submitted
                     </p>
                   )}
 
                   {/* Admin: process inspected */}
                   {isAdmin && app.status === "inspected" && (
-                    <Button size="sm" className="flex-1 bg-slate-950 hover:bg-slate-900 text-white text-xs font-semibold h-10 rounded-xl shadow-sm transition-colors"
+                    <Button size="sm" className="flex-1 bg-slate-950 hover:bg-slate-900 text-white text-xs font-semibold h-9 rounded-lg shadow-sm transition-colors"
                       onClick={() => { setSelected(app); setView("process") }}>
-                      Process Application
+                      Process
                     </Button>
                   )}
 
                   {/* Admin: view/reprocess quotation or dispute */}
                   {isAdmin && (app.status === "quotation_issued" || app.status === "dispute_issued") && (
-                    <Button size="sm" variant="outline" className="flex-1 h-10 text-xs font-semibold rounded-xl shadow-sm bg-slate-950 hover:bg-slate-900 text-white border-slate-900 transition-colors"
+                    <Button size="sm" variant="outline" className="flex-1 h-9 text-xs font-semibold rounded-lg shadow-sm bg-slate-950 hover:bg-slate-900 text-white border-slate-900 transition-colors"
                       onClick={() => { setSelected(app); setView("process") }}>
                       View / Override
                     </Button>
@@ -663,23 +646,23 @@ export function NscList({ userRole, userAgencies, username, agencies }: Props) {
 
                   {/* Admin: create project from quotation */}
                   {isAdmin && app.status === "quotation_issued" && !app.projectId && (
-                    <Button size="sm" variant="outline" className="h-10 text-orange-705 border-orange-200 bg-orange-50/20 hover:bg-orange-50 text-xs font-semibold rounded-xl shadow-sm transition-colors"
+                    <Button size="sm" variant="outline" className="h-9 text-orange-700 border-orange-200 text-xs font-semibold rounded-lg shadow-sm transition-colors"
                       onClick={() => setProjectDialogApp(app)}>
-                      <FolderOpen className="h-3.5 w-3.5 mr-1" /> Create Project
+                      <FolderOpen className="h-3 w-3 mr-1" /> Create Project
                     </Button>
                   )}
 
                   {/* Admin: project statuses */}
                   {isAdmin && ["project_required", "project_ongoing", "project_done"].includes(app.status) && (
-                    <Button size="sm" variant="outline" className="flex-1 h-10 text-orange-705 border-orange-200 bg-orange-50/20 hover:bg-orange-50 text-xs font-semibold rounded-xl shadow-sm transition-colors"
+                    <Button size="sm" variant="outline" className="flex-1 h-9 text-orange-700 border-orange-200 text-xs font-semibold rounded-lg shadow-sm transition-colors"
                       onClick={() => { setTab("projects") }}>
-                      <FolderOpen className="h-3.5 w-3.5 mr-1" /> View Projects
+                      <FolderOpen className="h-3 w-3 mr-1" /> View Projects
                     </Button>
                   )}
 
                   {/* Admin: approve project if done */}
                   {isAdmin && app.status === "project_ongoing" && projectMap[app.receiveNo]?.status === "done" && (
-                    <Button size="sm" className="h-10 bg-slate-950 hover:bg-slate-900 text-white text-xs font-semibold rounded-xl shadow-sm transition-colors"
+                    <Button size="sm" className="h-9 bg-slate-950 hover:bg-slate-900 text-white text-xs font-semibold rounded-lg shadow-sm transition-colors"
                       onClick={() => { setSelectedProject(projectMap[app.receiveNo]); setProjectAction("approve") }}>
                       Approve Project
                     </Button>
@@ -688,7 +671,7 @@ export function NscList({ userRole, userAgencies, username, agencies }: Props) {
                   {/* Agency: mark project complete */}
                   {isAgency && ["project_required", "project_ongoing"].includes(app.status) && app.projectId &&
                     projectMap[app.receiveNo]?.status === "ongoing" && projectMap[app.receiveNo]?.poNumber && (
-                    <Button size="sm" className="h-10 bg-slate-950 hover:bg-slate-900 text-white text-xs font-semibold rounded-xl shadow-sm transition-colors"
+                    <Button size="sm" className="h-9 bg-slate-950 hover:bg-slate-900 text-white text-xs font-semibold rounded-lg shadow-sm transition-colors"
                       onClick={() => { setSelectedProject(projectMap[app.receiveNo]); setProjectAction("complete") }}>
                       Mark Work Done
                     </Button>
@@ -696,7 +679,7 @@ export function NscList({ userRole, userAgencies, username, agencies }: Props) {
 
                   {/* Admin: pending — reassign */}
                   {isAdmin && app.status === "pending" && (
-                    <Button size="sm" className="flex-1 h-10 bg-slate-950 hover:bg-slate-900 text-white text-xs font-semibold rounded-xl shadow-sm transition-colors"
+                    <Button size="sm" className="flex-1 h-9 bg-slate-950 hover:bg-slate-900 text-white text-xs font-semibold rounded-lg shadow-sm transition-colors"
                       onClick={() => { setSelected(app); setView("process") }}>
                       Reassign
                     </Button>
@@ -704,28 +687,30 @@ export function NscList({ userRole, userAgencies, username, agencies }: Props) {
 
                   {/* Admin: meter issued / connection effected — view only */}
                   {isAdmin && (app.status === "meter_issued" || app.status === "connection_effected") && (
-                    <p className="text-xs text-teal-700 flex items-center gap-1 font-semibold bg-teal-50 px-3 py-2 border border-teal-100 rounded-xl">
-                      <Check className="h-4 w-4" />
+                    <p className="text-xs text-teal-700 flex items-center gap-1 font-medium">
+                      <Check className="h-3 w-3" />
                       {app.status === "connection_effected" ? "Connection effected" : "Meter issued — awaiting installation"}
                     </p>
                   )}
 
-                  {/* Admin actions: edit ref & history icons only */}
+                  {/* Admin: edit office ref no */}
                   {isAdmin && (
-                    <div className="ml-auto flex items-center gap-1">
-                      <button
-                        className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-slate-55 rounded-xl border border-transparent hover:border-slate-200 transition-all font-semibold"
-                        onClick={() => { setEditingRefApp(app); setRefNoInput(app.officeRefNo || "") }}
-                        title={app.officeRefNo ? `Edit Ref: ${app.officeRefNo}` : "Add Ref"}>
-                        <Pencil className="h-3.5 w-3.5" />
-                      </button>
-                      <button
-                        className="p-1.5 text-slate-400 hover:text-slate-655 hover:bg-slate-55 rounded-xl border border-transparent hover:border-slate-200 transition-all font-semibold"
-                        onClick={() => setHistoryApp(app)}
-                        title="View history">
-                        <Clock className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
+                    <button
+                      className="flex items-center gap-1 text-xs text-gray-400 hover:text-blue-600 ml-auto"
+                      onClick={() => { setEditingRefApp(app); setRefNoInput(app.officeRefNo || "") }}
+                      title="Edit office reference number">
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+
+                  {/* Admin: history button */}
+                  {isAdmin && (
+                    <button
+                      className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600"
+                      onClick={() => setHistoryApp(app)}
+                      title="View history logs">
+                      <Clock className="h-3.5 w-3.5" />
+                    </button>
                   )}
                 </div>
               </CardContent>
