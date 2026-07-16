@@ -593,7 +593,7 @@ export function DTRPaintingList({ userRole, userAgencies = [], username, agencie
             return (
               <Card 
                 key={r.dtrCode} 
-                className={`overflow-hidden hover:shadow-md transition-shadow relative border flex flex-col justify-between ${
+                className={`overflow-hidden shadow-md hover:shadow-lg transition-all relative border flex flex-col justify-between ${
                   isPainted ? "border-green-150" : "border-gray-200"
                 }`}
               >

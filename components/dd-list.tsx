@@ -527,7 +527,7 @@ export function DDList({ userRole, userAgencies }: DDListProps) {
           {paginatedConsumers.map(consumer => (
             <Card
               key={consumer.consumerId}
-              className={`hover:shadow-md transition-shadow overflow-hidden max-w-full ${
+              className={`shadow-md hover:shadow-lg transition-shadow overflow-hidden max-w-full ${
                 consumer._syncStatus === 'error' ? "border-red-400 border-2" : ""
               }`}
             >

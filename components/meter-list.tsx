@@ -551,7 +551,7 @@ export function MeterList({ userRole, userAgencies, username, agencies }: Props)
               <p>No meter issues found</p>
             </div>
           ) : paginated.map(issue => (
-            <Card key={issue.issueId} className={`hover:shadow-md transition-shadow overflow-hidden max-w-full ${issue.status === "issued" && isAdmin ? "cursor-pointer" : ""}`}>
+            <Card key={issue.issueId} className={`shadow-md hover:shadow-lg transition-shadow overflow-hidden max-w-full ${issue.status === "issued" && isAdmin ? "cursor-pointer" : ""}`}>
               <CardHeader className="pb-3">
                 <div className="flex justify-between items-start">
                   <div>
@@ -742,7 +742,7 @@ export function MeterList({ userRole, userAgencies, username, agencies }: Props)
           ) : (
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {filteredReplacements.map(rep => (
-                <Card key={rep.replacementId} className="hover:shadow-md transition-shadow overflow-hidden max-w-full">
+                <Card key={rep.replacementId} className="shadow-md hover:shadow-lg transition-shadow overflow-hidden max-w-full">
                   <CardHeader className="pb-3">
                     <div className="flex justify-between items-start">
                       <div>

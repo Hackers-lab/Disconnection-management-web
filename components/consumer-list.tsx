@@ -1368,7 +1368,7 @@ const ConsumerList = React.forwardRef<ConsumerListRef, ConsumerListProps>(
       {viewMode === "card" ? (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {paginatedConsumers.map((consumer) => (
-            <Card id={`consumer-card-${consumer.consumerId}`} key={consumer.consumerId} className={`hover:shadow-md transition-shadow overflow-hidden max-w-full ${(consumer.priority || "").toLowerCase() === "urgent" ? "ring-2 ring-red-500 border-red-300" : ""}`}>
+            <Card id={`consumer-card-${consumer.consumerId}`} key={consumer.consumerId} className={`shadow-md hover:shadow-lg transition-shadow overflow-hidden max-w-full ${(consumer.priority || "").toLowerCase() === "urgent" ? "ring-2 ring-red-500 border-red-300" : ""}`}>
               <CardHeader className="pb-3 break-words whitespace-normal">
                 <div className="flex items-start justify-between w-full gap-2">
                   <div className="min-w-0 flex-1">

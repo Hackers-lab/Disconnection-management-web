@@ -496,7 +496,7 @@ export function NscList({ userRole, userAgencies, username, agencies }: Props) {
               <p>No NSC applications found</p>
             </div>
           ) : paginated.map(app => (
-            <Card key={app.receiveNo} className="hover:shadow-md transition-all duration-200 overflow-hidden border border-gray-200 hover:border-blue-200">
+            <Card key={app.receiveNo} className="shadow-md hover:shadow-lg transition-all duration-200 overflow-hidden border border-gray-200 hover:border-blue-200">
               <CardContent className="p-4">
 
                 {/* Top row: receive no + phase chip + status badge + agency pill */}
@@ -681,23 +681,22 @@ export function NscList({ userRole, userAgencies, username, agencies }: Props) {
                     </p>
                   )}
 
-                  {/* Admin: edit office ref no */}
+                  {/* Admin actions: edit ref & history icons only */}
                   {isAdmin && (
-                    <button
-                      className="flex items-center gap-1 text-xs text-gray-400 hover:text-blue-600 ml-auto"
-                      onClick={() => { setEditingRefApp(app); setRefNoInput(app.officeRefNo || "") }}
-                      title="Edit office reference number">
-                      <Pencil className="h-3 w-3" /> {app.officeRefNo ? "Ref" : "Add Ref"}
-                    </button>
-                  )}
-
-                  {/* Admin: history button */}
-                  {isAdmin && (
-                    <button
-                      className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600"
-                      onClick={() => setHistoryApp(app)}>
-                      <Clock className="h-3 w-3" /> History
-                    </button>
+                    <div className="ml-auto flex items-center gap-1">
+                      <button
+                        className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-gray-50 rounded-lg border border-transparent hover:border-gray-200 transition"
+                        onClick={() => { setEditingRefApp(app); setRefNoInput(app.officeRefNo || "") }}
+                        title={app.officeRefNo ? `Edit Ref: ${app.officeRefNo}` : "Add Ref"}>
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded-lg border border-transparent hover:border-gray-200 transition"
+                        onClick={() => setHistoryApp(app)}
+                        title="View history">
+                        <Clock className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
                   )}
                 </div>
               </CardContent>

@@ -510,7 +510,7 @@ export function ReconnectionList({ userRole, userAgencies, username, agencies }:
           const overdueFlag = r.isOverdue
           const hrs = r.overdueHours
           return (
-            <Card key={r.requestId} className={`hover:shadow-md transition-all duration-200 overflow-hidden max-w-full ${overdueFlag ? "ring-2 ring-red-500 border-red-300" : "hover:border-blue-200"
+            <Card key={r.requestId} className={`shadow-md hover:shadow-lg transition-all duration-200 overflow-hidden max-w-full ${overdueFlag ? "ring-2 ring-red-500 border-red-300" : "hover:border-blue-200"
               }`}>
               <CardHeader className="pb-3 break-words whitespace-normal">
                 <div className="flex items-start justify-between w-full gap-2">
