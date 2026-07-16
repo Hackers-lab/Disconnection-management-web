@@ -500,7 +500,7 @@ export function ReconnectionList({ userRole, userAgencies, username, agencies }:
 
       {/* List */}
       {tab !== "reports" && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {paginated.length === 0 ? (
           <div className="text-center py-16 text-gray-400 col-span-full">
             <RotateCcw className="h-10 w-10 mx-auto mb-3 opacity-30" />

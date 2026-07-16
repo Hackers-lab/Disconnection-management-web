@@ -489,74 +489,81 @@ export function NscList({ userRole, userAgencies, username, agencies }: Props) {
 
       {/* Application cards */}
       {tab !== "reports" && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {paginated.length === 0 ? (
-            <div className="text-center py-16 text-gray-400 col-span-full">
+            <div className="text-center py-16 text-gray-400 col-span-full bg-white border rounded-2xl">
               <ClipboardList className="h-10 w-10 mx-auto mb-3 opacity-30" />
-              <p>No NSC applications found</p>
+              <p className="font-semibold">No NSC applications found</p>
             </div>
           ) : paginated.map(app => (
             <Card key={app.receiveNo} className="shadow-md hover:shadow-lg transition-all duration-200 overflow-hidden border border-gray-200 hover:border-blue-200">
               <CardContent className="p-4">
+=======
+            <Card key={app.receiveNo} className="hover:shadow-lg transition-all duration-300 overflow-hidden border border-slate-200 hover:border-blue-300 rounded-2xl shadow-sm bg-white hover:-translate-y-0.5">
+              <CardContent className="p-6">
+>>>>>>> 14f0976 (UI improvements and reports section for DTR verification, painting, dashboard layouts, and NSC/reconnection list desktop columns)
 
                 {/* Top row: receive no + phase chip + status badge + agency pill */}
-                <div className="flex items-start justify-between gap-2 flex-wrap">
+                <div className="flex items-start justify-between gap-3 flex-wrap border-b pb-3 mb-3 border-slate-100">
                   <div className="flex items-center gap-2 flex-wrap min-w-0">
-                    <span className="font-mono text-xs text-gray-400">{app.receiveNo}</span>
+                    <span className="font-mono text-xs text-slate-450 font-bold bg-slate-50 px-2 py-0.5 rounded border border-slate-100">{app.receiveNo}</span>
                     {app.officeRefNo && (
                       <>
-                        <span className="text-xs text-gray-300">|</span>
-                        <span className="font-mono text-xs text-blue-600 font-medium">Ref: {app.officeRefNo}</span>
+                        <span className="text-xs text-slate-200">|</span>
+                        <span className="font-mono text-xs text-blue-600 font-bold">Ref: {app.officeRefNo}</span>
                       </>
                     )}
-                    {app.isLegacy === "true" && <Badge variant="outline" className="text-xs py-0 px-1 text-amber-700 border-amber-300">Legacy</Badge>}
+                    {app.isLegacy === "true" && <Badge variant="outline" className="text-xs py-0.5 px-2 text-amber-700 border-amber-200 bg-amber-50/30 rounded-lg">Legacy</Badge>}
                     {/* Phase pill */}
-                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${app.phase === "3P" ? "bg-purple-100 text-purple-700" : "bg-blue-100 text-blue-700"}`}>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${app.phase === "3P" ? "bg-purple-50 text-purple-750 border border-purple-100" : "bg-blue-50 text-blue-750 border border-blue-100"}`}>
                       {app.phase}
                     </span>
                     {app.poleRequired === "yes" && (
-                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-orange-100 text-orange-700">Pole</span>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-orange-50 text-orange-750 border border-orange-100">Pole Required</span>
                     )}
                     {app.dispute && (
-                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">⚠ Dispute</span>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-50 text-red-750 border border-red-100">⚠ Dispute</span>
                     )}
                   </div>
                   {/* Agency pill — right side */}
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${agencyColor(app.agency)}`}>
+                  <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full shrink-0 border ${agencyColor(app.agency)}`}>
                     {app.agency}
                   </span>
                 </div>
 
                 {/* Project link */}
                 {app.projectId && (
-                  <p className="text-xs text-orange-600 font-mono mt-0.5">
-                    <FolderOpen className="inline h-3 w-3 mr-1" />{app.projectId}
+                  <p className="text-xs text-orange-700 font-mono mt-2 bg-orange-50/50 border border-orange-100 rounded-lg px-2.5 py-1 inline-block">
+                    <FolderOpen className="inline h-3.5 w-3.5 mr-1" />Project: {app.projectId}
                   </p>
                 )}
 
                 {/* Applicant info */}
-                <div className="mt-1.5">
-                  <div className="flex items-center justify-between gap-1">
-                    <p className="font-bold text-gray-900">{app.applicantName}</p>
-                    <Badge className={`shrink-0 text-[10px] px-1.5 py-0 ${NSC_STATUS_COLORS[app.status] || "bg-gray-100 text-gray-700"}`}>
+                <div className="mt-3.5 space-y-2.5">
+                  <div className="flex items-start justify-between gap-3">
+                    <p className="font-extrabold text-slate-905 text-base tracking-tight">{app.applicantName}</p>
+                    <Badge className={`shrink-0 text-[10px] px-2 py-0.5 font-bold rounded-lg border ${NSC_STATUS_COLORS[app.status] || "bg-slate-100 text-slate-700 border-slate-200"}`}>
                       {NSC_STATUS_LABELS[app.status] || app.status}
                     </Badge>
                   </div>
-                  {app.careOf && <p className="text-xs text-gray-500">C/O {app.careOf}</p>}
-                  <div className="flex items-center gap-1 mt-0.5">
-                    <span className="text-xs text-gray-500 font-medium">{CLASS_LABELS[app.appliedClass] || app.appliedClass}</span>
+                  {app.careOf && <p className="text-xs text-slate-500 font-medium -mt-1.5">C/O {app.careOf}</p>}
+                  
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-slate-700 font-semibold bg-slate-50 border border-slate-100 px-2 py-0.5 rounded-lg">{CLASS_LABELS[app.appliedClass] || app.appliedClass}</span>
                   </div>
-                  <div className="flex items-start gap-1 mt-0.5">
-                    <MapPin className="h-3 w-3 text-gray-400 shrink-0 mt-0.5" />
-                    <p className="text-xs text-gray-600">{app.address}</p>
+                  
+                  <div className="flex items-start gap-2 text-slate-655">
+                    <MapPin className="h-4 w-4 text-slate-400 shrink-0 mt-0.5" />
+                    <p className="text-xs leading-relaxed font-medium">{app.address}</p>
                   </div>
-                  <div className="flex items-center gap-3 mt-1 flex-wrap">
-                    <a href={`tel:${app.mobile}`} className="flex items-center gap-1 text-xs text-blue-600 font-mono">
-                      <Phone className="h-3 w-3" />{app.mobile}
+                  
+                  <div className="flex items-center gap-3 pt-1 flex-wrap">
+                    <a href={`tel:${app.mobile}`} className="flex items-center gap-1.5 text-xs text-blue-600 font-bold bg-blue-50/50 hover:bg-blue-50 border border-blue-100 px-2.5 py-1 rounded-lg transition-colors">
+                      <Phone className="h-3.5 w-3.5" />{app.mobile}
                     </a>
                     {app.existingConsumerId && (
-                      <span className="text-xs font-mono text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded">
-                        ConsID: {app.existingConsumerId}
+                      <span className="text-xs font-mono font-bold text-amber-700 bg-amber-50/50 border border-amber-100 px-2.5 py-1 rounded-lg">
+                        Consumer ID: {app.existingConsumerId}
                       </span>
                     )}
                   </div>
@@ -564,69 +571,72 @@ export function NscList({ userRole, userAgencies, username, agencies }: Props) {
 
                 {/* Processing summary */}
                 {app.status !== "pending" && (
-                  <div className="mt-1 text-xs text-gray-400">
+                  <div className="mt-3 p-2.5 bg-slate-50 rounded-xl border border-slate-100 text-xs text-slate-505 space-y-1 sm:space-y-0 sm:space-x-2">
                     {app.agencyDecision && (
-                      <span className={`mr-2 ${app.agencyDecision === "accepted" ? "text-green-600" : "text-red-600"}`}>
+                      <span className={`inline-block font-semibold ${app.agencyDecision === "accepted" ? "text-green-600" : "text-red-600"}`}>
                         Agency: {app.agencyDecision}
                       </span>
                     )}
                     {app.adminDecision && (
-                      <span className={app.adminDecision === "accepted" ? "text-green-700 font-medium" : "text-red-700 font-medium"}>
+                      <span className={`inline-block ${app.adminDecision === "accepted" ? "text-green-700 font-bold" : "text-red-700 font-bold"}`}>
                         Admin: {app.adminDecision}
                       </span>
                     )}
-                    {app.applicationNo && <span className="ml-2 font-mono text-green-700">App# {app.applicationNo}</span>}
-                    {app.memoNo        && <span className="ml-2 font-mono text-orange-700">Memo: {app.memoNo}</span>}
+                    {app.applicationNo && <span className="inline-block font-mono text-green-700 font-bold">App# {app.applicationNo}</span>}
+                    {app.memoNo        && <span className="inline-block font-mono text-orange-700 font-bold">Memo: {app.memoNo}</span>}
                   </div>
                 )}
 
                 {app.meterSerialNo && (
-                  <div className="mt-1 flex items-center gap-2 text-xs">
-                    <span className="font-mono font-bold text-purple-700">{app.meterSerialNo}</span>
-                    <span className="text-gray-400">→</span>
-                    <span className="text-gray-600">{app.agency}</span>
+                  <div className="mt-3 p-2.5 bg-purple-50/50 rounded-xl border border-purple-100 flex items-center gap-2 text-xs">
+                    <span className="font-mono font-bold text-purple-755">Meter Serial: {app.meterSerialNo}</span>
+                    <span className="text-purple-300">|</span>
+                    <span className="text-purple-755 font-bold">{app.agency}</span>
                   </div>
                 )}
 
-                <p className="text-xs text-gray-400 mt-0.5">{app.receivedDate}</p>
+                <div className="flex items-center justify-between mt-4 text-[11px] text-slate-400 font-bold border-t pt-2 border-slate-50">
+                  <span>Received Date</span>
+                  <span>{app.receivedDate}</span>
+                </div>
 
                 {/* ─ Action buttons ─────────────────────────────────────────── */}
-                <div className="flex gap-2 mt-3 pt-3 border-t flex-wrap">
+                <div className="flex gap-2 mt-4 pt-4 border-t border-slate-100 flex-wrap">
 
                   {/* View button — always visible */}
                   <button
-                    className="flex items-center gap-1 text-xs text-gray-500 hover:text-slate-900 bg-gray-50 hover:bg-gray-100 rounded-lg px-2.5 py-1.5 border border-gray-200 transition"
+                    className="flex items-center gap-1.5 text-xs text-slate-650 hover:text-slate-900 bg-slate-50 hover:bg-slate-150 rounded-xl px-3.5 py-2 border border-slate-200/80 transition-all font-semibold"
                     onClick={() => setViewApp(app)}
                     title="View full details"
                   >
-                    <Eye className="h-3.5 w-3.5" /> View
+                    <Eye className="h-3.5 w-3.5" /> View Details
                   </button>
 
                   {/* Agency: inspect pending */}
                   {isAgency && app.status === "pending" && (
-                    <Button size="sm" className="flex-1 bg-slate-950 hover:bg-slate-900 text-white text-xs font-semibold h-9 rounded-lg shadow-sm transition-colors"
+                    <Button size="sm" className="flex-1 bg-slate-950 hover:bg-slate-900 text-white text-xs font-semibold h-10 rounded-xl shadow-sm transition-colors"
                       onClick={() => { setSelected(app); setView("inspect") }}>
                       Start Inspection
                     </Button>
                   )}
                   {/* Agency: inspection submitted */}
                   {isAgency && app.status !== "pending" && (
-                    <p className="text-xs text-gray-500 flex items-center gap-1">
-                      <Check className="h-3 w-3 text-green-600" /> Inspection submitted
+                    <p className="text-xs text-green-650 font-bold bg-green-50 px-3 py-2 rounded-xl border border-green-100 flex items-center gap-1">
+                      <Check className="h-3.5 w-3.5 text-green-605" /> Inspection submitted
                     </p>
                   )}
 
                   {/* Admin: process inspected */}
                   {isAdmin && app.status === "inspected" && (
-                    <Button size="sm" className="flex-1 bg-slate-950 hover:bg-slate-900 text-white text-xs font-semibold h-9 rounded-lg shadow-sm transition-colors"
+                    <Button size="sm" className="flex-1 bg-slate-950 hover:bg-slate-900 text-white text-xs font-semibold h-10 rounded-xl shadow-sm transition-colors"
                       onClick={() => { setSelected(app); setView("process") }}>
-                      Process
+                      Process Application
                     </Button>
                   )}
 
                   {/* Admin: view/reprocess quotation or dispute */}
                   {isAdmin && (app.status === "quotation_issued" || app.status === "dispute_issued") && (
-                    <Button size="sm" variant="outline" className="flex-1 h-9 text-xs font-semibold rounded-lg shadow-sm bg-slate-950 hover:bg-slate-900 text-white border-slate-900 transition-colors"
+                    <Button size="sm" variant="outline" className="flex-1 h-10 text-xs font-semibold rounded-xl shadow-sm bg-slate-950 hover:bg-slate-900 text-white border-slate-900 transition-colors"
                       onClick={() => { setSelected(app); setView("process") }}>
                       View / Override
                     </Button>
@@ -634,23 +644,23 @@ export function NscList({ userRole, userAgencies, username, agencies }: Props) {
 
                   {/* Admin: create project from quotation */}
                   {isAdmin && app.status === "quotation_issued" && !app.projectId && (
-                    <Button size="sm" variant="outline" className="h-9 text-orange-700 border-orange-200 text-xs font-semibold rounded-lg shadow-sm transition-colors"
+                    <Button size="sm" variant="outline" className="h-10 text-orange-705 border-orange-200 bg-orange-50/20 hover:bg-orange-50 text-xs font-semibold rounded-xl shadow-sm transition-colors"
                       onClick={() => setProjectDialogApp(app)}>
-                      <FolderOpen className="h-3 w-3 mr-1" /> Create Project
+                      <FolderOpen className="h-3.5 w-3.5 mr-1" /> Create Project
                     </Button>
                   )}
 
                   {/* Admin: project statuses */}
                   {isAdmin && ["project_required", "project_ongoing", "project_done"].includes(app.status) && (
-                    <Button size="sm" variant="outline" className="flex-1 h-9 text-orange-700 border-orange-200 text-xs font-semibold rounded-lg shadow-sm transition-colors"
+                    <Button size="sm" variant="outline" className="flex-1 h-10 text-orange-705 border-orange-200 bg-orange-50/20 hover:bg-orange-50 text-xs font-semibold rounded-xl shadow-sm transition-colors"
                       onClick={() => { setTab("projects") }}>
-                      <FolderOpen className="h-3 w-3 mr-1" /> View Projects
+                      <FolderOpen className="h-3.5 w-3.5 mr-1" /> View Projects
                     </Button>
                   )}
 
                   {/* Admin: approve project if done */}
                   {isAdmin && app.status === "project_ongoing" && projectMap[app.receiveNo]?.status === "done" && (
-                    <Button size="sm" className="h-9 bg-slate-950 hover:bg-slate-900 text-white text-xs font-semibold rounded-lg shadow-sm transition-colors"
+                    <Button size="sm" className="h-10 bg-slate-950 hover:bg-slate-900 text-white text-xs font-semibold rounded-xl shadow-sm transition-colors"
                       onClick={() => { setSelectedProject(projectMap[app.receiveNo]); setProjectAction("approve") }}>
                       Approve Project
                     </Button>
@@ -659,44 +669,44 @@ export function NscList({ userRole, userAgencies, username, agencies }: Props) {
                   {/* Agency: mark project complete */}
                   {isAgency && ["project_required", "project_ongoing"].includes(app.status) && app.projectId &&
                     projectMap[app.receiveNo]?.status === "ongoing" && projectMap[app.receiveNo]?.poNumber && (
-                    <Button size="sm" className="h-9 bg-slate-950 hover:bg-slate-900 text-white text-xs font-semibold rounded-lg shadow-sm transition-colors"
+                    <Button size="sm" className="h-10 bg-slate-950 hover:bg-slate-900 text-white text-xs font-semibold rounded-xl shadow-sm transition-colors"
                       onClick={() => { setSelectedProject(projectMap[app.receiveNo]); setProjectAction("complete") }}>
                       Mark Work Done
                     </Button>
                   )}
 
-                  {/* Admin: pending — reassign */}
-                  {isAdmin && app.status === "pending" && (
-                    <Button size="sm" className="flex-1 h-9 bg-slate-950 hover:bg-slate-900 text-white text-xs font-semibold rounded-lg shadow-sm transition-colors"
-                      onClick={() => { setSelected(app); setView("process") }}>
-                      Reassign
-                    </Button>
-                  )}
-
-                  {/* Admin: meter issued / connection effected — view only */}
-                  {isAdmin && (app.status === "meter_issued" || app.status === "connection_effected") && (
-                    <p className="text-xs text-teal-700 flex items-center gap-1 font-medium">
-                      <Check className="h-3 w-3" />
-                      {app.status === "connection_effected" ? "Connection effected" : "Meter issued — awaiting installation"}
-                    </p>
-                  )}
-
-                  {/* Admin actions: edit ref & history icons only */}
+                  {/*                   {/* Admin actions: edit ref & history icons only */}
                   {isAdmin && (
                     <div className="ml-auto flex items-center gap-1">
                       <button
-                        className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-gray-50 rounded-lg border border-transparent hover:border-gray-200 transition"
+                        className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-slate-50 rounded-xl border border-transparent hover:border-slate-200 transition-all font-semibold"
                         onClick={() => { setEditingRefApp(app); setRefNoInput(app.officeRefNo || "") }}
                         title={app.officeRefNo ? `Edit Ref: ${app.officeRefNo}` : "Add Ref"}>
                         <Pencil className="h-3.5 w-3.5" />
                       </button>
                       <button
-                        className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded-lg border border-transparent hover:border-gray-200 transition"
+                        className="p-1.5 text-slate-400 hover:text-slate-655 hover:bg-slate-50 rounded-xl border border-transparent hover:border-slate-200 transition-all font-semibold"
                         onClick={() => setHistoryApp(app)}
                         title="View history">
                         <Clock className="h-3.5 w-3.5" />
                       </button>
                     </div>
+                  )}             <button
+                      className="flex items-center gap-1 text-xs text-slate-400 hover:text-blue-600 ml-auto font-semibold"
+                      onClick={() => { setEditingRefApp(app); setRefNoInput(app.officeRefNo || "") }}
+                      title="Edit office reference number">
+                      <Pencil className="h-3 w-3" /> {app.officeRefNo ? "Ref" : "Add Ref"}
+                    </button>
+                  )}
+
+                  {/* Admin: history button */}
+                  {isAdmin && (
+                    <button
+                      className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600 font-semibold"
+                      onClick={() => setHistoryApp(app)}>
+                      <Clock className="h-3 w-3" /> History
+                    </button>
+>>>>>>> 14f0976 (UI improvements and reports section for DTR verification, painting, dashboard layouts, and NSC/reconnection list desktop columns)
                   )}
                 </div>
               </CardContent>
