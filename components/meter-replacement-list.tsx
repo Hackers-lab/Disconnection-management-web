@@ -293,7 +293,7 @@ export function MeterReplacementList({ userRole, userAgencies, username, agencie
                   <Monitor className="h-4 w-4 text-gray-400 shrink-0" />
                   <div>
                     <p className="text-sm font-semibold text-amber-700 font-mono">
-                      {oldMeterMap[r.consumerId] || "—"}
+                      {r.oldMeterNo || oldMeterMap[r.consumerId] || "—"}
                     </p>
                     <p className="text-[10px] text-gray-500 uppercase font-bold">Old Meter No</p>
                   </div>
@@ -323,9 +323,10 @@ export function MeterReplacementList({ userRole, userAgencies, username, agencie
                 </div>
               )}
 
-              {(r.serialNo || r.issueId) && (
+              {(r.serialNo || r.issueId || r.workOrderNo) && (
                 <div className="pt-2 border-t mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500">
                   {r.issueId && <p>Issue ID: <strong className="font-mono">{r.issueId}</strong></p>}
+                  {r.workOrderNo && <p>WO No: <strong className="text-slate-700 font-mono">{r.workOrderNo}</strong></p>}
                 </div>
               )}
             </CardContent>
@@ -381,6 +382,7 @@ function MeterReplacementCreateForm({ agencies, onSave, onCancel }: FormProps) {
   const [manualName, setManualName] = useState("")
   const [manualAddress, setManualAddress] = useState("")
   const [manualMobile, setManualMobile] = useState("")
+  const [oldMeterNo, setOldMeterNo] = useState("")
   const [agency, setAgency] = useState("")
   const [purpose, setPurpose] = useState("faulty_replacement")
   const [remarks, setRemarks] = useState("")
@@ -424,6 +426,7 @@ function MeterReplacementCreateForm({ agencies, onSave, onCancel }: FormProps) {
         setManualAddress(match.address || "")
         setManualMobile(match.mobileNumber || "")
         setAgency(match.agency || "")
+        setOldMeterNo(match.device || oldMeterMap[id] || "")
         setLooking(false)
         return
       }
@@ -482,12 +485,14 @@ function MeterReplacementCreateForm({ agencies, onSave, onCancel }: FormProps) {
         setManualAddress(masterMatch.address)
         setManualMobile(masterMatch.mobile || "")
         setAgency(mappedAgency || "")
+        setOldMeterNo(masterMatch.meterNo || "")
       } else {
         setNotFound(true)
         setManualName("")
         setManualAddress("")
         setManualMobile("")
         setAgency("")
+        setOldMeterNo("")
       }
     } catch {
       setNotFound(true)
@@ -537,7 +542,8 @@ function MeterReplacementCreateForm({ agencies, onSave, onCancel }: FormProps) {
           agency: agency === "none" ? "" : agency,
           purpose,
           remarks,
-          attachmentUrl
+          attachmentUrl,
+          oldMeterNo: oldMeterNo.trim()
         })
       })
       const data = await res.json()
@@ -595,10 +601,17 @@ function MeterReplacementCreateForm({ agencies, onSave, onCancel }: FormProps) {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
+              <Label htmlFor="c-oldmeter">Old Meter Number (optional)</Label>
+              <Input id="c-oldmeter" value={oldMeterNo} onChange={e => setOldMeterNo(e.target.value.toUpperCase())} placeholder="e.g. OLD1234" disabled={submitting} />
+            </div>
+
+            <div className="space-y-2">
               <Label htmlFor="c-mobile">Mobile Number (optional)</Label>
               <Input id="c-mobile" value={manualMobile} onChange={e => setManualMobile(e.target.value.replace(/\D/g, "").slice(0, 10))} disabled={submitting} />
             </div>
+          </div>
 
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="c-agency">Assign Agency (optional)</Label>
               <Select value={agency || "none"} onValueChange={val => setAgency(val === "none" ? "" : val)} disabled={submitting}>

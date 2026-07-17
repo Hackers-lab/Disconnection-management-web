@@ -81,6 +81,8 @@ interface MeterReplacement {
   serialNo: string
   issueId: string
   remarks: string
+  oldMeterNo?: string
+  workOrderNo?: string
 }
 
 export function MeterList({ userRole, userAgencies, username, agencies }: Props) {
@@ -797,7 +799,7 @@ export function MeterList({ userRole, userAgencies, username, agencies }: Props)
                         <Monitor className="h-4 w-4 text-gray-400 shrink-0" />
                         <div>
                           <p className="text-sm font-semibold text-amber-700 font-mono">
-                            {oldMeterMap[rep.consumerId] || "—"}
+                            {rep.oldMeterNo || oldMeterMap[rep.consumerId] || "—"}
                           </p>
                           <p className="text-[10px] text-gray-500 uppercase font-bold">Old Meter No</p>
                         </div>
@@ -831,6 +833,7 @@ export function MeterList({ userRole, userAgencies, username, agencies }: Props)
                       <div className="pt-2 border-t flex flex-col gap-1.5">
                         <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500">
                           {rep.issueId && <p>Issue ID: <strong className="font-mono">{rep.issueId}</strong></p>}
+                          {rep.workOrderNo && <p>WO No: <strong className="text-slate-700 font-mono">{rep.workOrderNo}</strong></p>}
                         </div>
                         {rep.status === "issued" && (
                           <p className="text-xs text-yellow-700 font-medium bg-yellow-50/50 border border-yellow-100 rounded px-2 py-0.5 w-fit">
@@ -890,7 +893,7 @@ export function MeterList({ userRole, userAgencies, username, agencies }: Props)
 
       {/* ─── Reports tab ──────────────────────────────────────────────────────── */}
       {tab === "reports" && isAdmin && (
-        <ReportsPanel issues={issues} summary={summary} onExport={exportIssues} />
+        <ReportsPanel issues={issues} summary={summary} onExport={exportIssues} replacements={replacements} oldMeterMap={oldMeterMap} />
       )}
 
       {/* Sticky bottom — bulk finalize + Issue Meter */}
@@ -981,8 +984,117 @@ export function MeterList({ userRole, userAgencies, username, agencies }: Props)
 }
 
 // ── Reports Panel ─────────────────────────────────────────────────────────────
-function ReportsPanel({ issues, summary, onExport }: { issues: MeterIssue[]; summary: StockSummary[]; onExport: () => void }) {
+function ReportsPanel({ 
+  issues, 
+  summary, 
+  onExport,
+  replacements,
+  oldMeterMap
+}: { 
+  issues: MeterIssue[]; 
+  summary: StockSummary[]; 
+  onExport: () => void;
+  replacements: MeterReplacement[];
+  oldMeterMap: Record<string, string>;
+}) {
   const { toast } = useToast()
+
+  const [rptStartDate, setRptStartDate] = useState("")
+  const [rptEndDate, setRptEndDate]     = useState("")
+  const [rptAgency, setRptAgency]       = useState("all")
+  const [rptPurpose, setRptPurpose]     = useState("all")
+  const [rptStatus, setRptStatus]       = useState("all")
+
+  const reportAgencies = useMemo(() => {
+    return Array.from(new Set(issues.filter(i => i.purpose !== "nsc").map(i => i.agency).filter(Boolean))).sort()
+  }, [issues])
+
+  const reportPurposes = [
+    { value: "faulty_replacement", label: "Faulty / Defective" },
+    { value: "burnt_replacement",  label: "Burnt Meter" },
+    { value: "slow_fast",          label: "Slow / Fast" },
+  ]
+
+  const parseDateInput = (val: string) => {
+    if (!val) return null
+    const [y, m, d] = val.split("-").map(Number)
+    return new Date(y, m - 1, d)
+  }
+
+  const parseSheetDate = (val: string) => {
+    if (!val) return null
+    const datePart = val.split(" ")[0]
+    const [d, m, y] = datePart.split("-").map(Number)
+    if (isNaN(y) || isNaN(m) || isNaN(d)) return null
+    return new Date(y, m - 1, d)
+  }
+
+  const filteredReportIssues = useMemo(() => {
+    return issues.filter(i => {
+      if (i.purpose === "nsc") return false
+      if (i.status !== "installed" && i.status !== "installation_done") return false
+      if (rptStatus === "installed" && i.status !== "installed") return false
+      if (rptStatus === "installation_done" && i.status !== "installation_done") return false
+      if (rptAgency !== "all" && i.agency?.toUpperCase() !== rptAgency.toUpperCase()) return false
+      if (rptPurpose !== "all" && i.purpose !== rptPurpose) return false
+      if (i.completedAt) {
+        const replacementDate = parseSheetDate(i.completedAt)
+        if (replacementDate) {
+          if (rptStartDate) {
+            const start = parseDateInput(rptStartDate)
+            if (start && replacementDate < start) return false
+          }
+          if (rptEndDate) {
+            const end = parseDateInput(rptEndDate)
+            if (end) {
+              end.setHours(23, 59, 59, 999)
+              if (replacementDate > end) return false
+            }
+          }
+        } else if (rptStartDate || rptEndDate) {
+          return false
+        }
+      } else if (rptStartDate || rptEndDate) {
+        return false
+      }
+      return true
+    })
+  }, [issues, rptStartDate, rptEndDate, rptAgency, rptPurpose, rptStatus])
+
+  const exportNonNscReplacementReport = async () => {
+    if (filteredReportIssues.length === 0) {
+      toast({ title: "No matching records to export", variant: "destructive" })
+      return
+    }
+
+    const XLSX = await loadXLSX()
+    const wb = XLSX.utils.book_new()
+
+    const rows = filteredReportIssues.map((i, idx) => {
+      const rep = replacements.find(r => r.issueId === i.issueId || (r.consumerId === i.consumerId && r.status !== "proposed"))
+      const oldMeter = rep?.oldMeterNo || oldMeterMap[i.consumerId] || ""
+      const typeMatch = METER_TYPES.find(t => t.label === i.meterType)
+      const phase = typeMatch ? typeMatch.phase : "—"
+
+      return {
+        "S.No.": idx + 1,
+        "Work Order No": i.completionRef || "",
+        "Consumer ID": i.consumerId,
+        "Consumer Name": i.consumerName,
+        "Old Meter No": oldMeter,
+        "New Meter Serial": i.serialNo,
+        "Phase": phase,
+        "Date of Replacement": i.completedAt ? i.completedAt.split(" ")[0] : "",
+        "Agency Name": i.agency,
+        "Status": STATUS_LABELS[i.status] || i.status
+      }
+    })
+
+    const ws = XLSX.utils.json_to_sheet(rows)
+    XLSX.utils.book_append_sheet(wb, ws, "Replacement Report")
+    XLSX.writeFile(wb, `non-nsc-replacement-report-${new Date().toISOString().slice(0, 10)}.xlsx`)
+    toast({ title: "Replacement Report exported successfully" })
+  }
 
   const totalIssued          = issues.filter(i => i.status === "issued").length
   const totalPendingFinal    = issues.filter(i => i.status === "installation_done").length
@@ -1387,6 +1499,78 @@ function ReportsPanel({ issues, summary, onExport }: { issues: MeterIssue[]; sum
           </Button>
           <Button size="sm" variant="outline" className="border-amber-200 hover:bg-amber-50 text-amber-800 w-full" onClick={exportAgencyPendingExcel}>
             <FileSpreadsheet className="h-4 w-4 mr-1 text-green-600" /> Export Excel
+          </Button>
+        </div>
+      </div>
+
+      {/* Non-NSC Meter Replacement Report Card */}
+      <div className="bg-white rounded-xl border border-indigo-200 shadow-sm overflow-hidden p-4 space-y-4">
+        <div className="flex items-center gap-3">
+          <div className="p-2.5 rounded-xl bg-indigo-50 text-indigo-700">
+            <FileSpreadsheet className="h-5 w-5" />
+          </div>
+          <div>
+            <h3 className="font-semibold text-gray-900 text-sm">Meter Replacement Sheet Report</h3>
+            <p className="text-xs text-gray-500 mt-0.5">Excel export for non-NSC meter replacements with date and criteria filters.</p>
+          </div>
+        </div>
+
+        {/* Filters */}
+        <div className="grid grid-cols-2 gap-3 text-xs">
+          <div className="space-y-1">
+            <Label className="text-[10px] text-gray-500 font-semibold uppercase">Start Date</Label>
+            <Input type="date" value={rptStartDate} onChange={e => setRptStartDate(e.target.value)} className="h-8 rounded" />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-[10px] text-gray-500 font-semibold uppercase">End Date</Label>
+            <Input type="date" value={rptEndDate} onChange={e => setRptEndDate(e.target.value)} className="h-8 rounded" />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-3 gap-2 text-xs">
+          <div className="space-y-1">
+            <Label className="text-[10px] text-gray-500 font-semibold uppercase">Agency</Label>
+            <Select value={rptAgency} onValueChange={setRptAgency}>
+              <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="All" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Agencies</SelectItem>
+                {reportAgencies.map(ag => (
+                  <SelectItem key={ag} value={ag}>{ag}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1">
+            <Label className="text-[10px] text-gray-500 font-semibold uppercase">Purpose</Label>
+            <Select value={rptPurpose} onValueChange={setRptPurpose}>
+              <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="All" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Purposes</SelectItem>
+                {reportPurposes.map(p => (
+                  <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1">
+            <Label className="text-[10px] text-gray-500 font-semibold uppercase">Status</Label>
+            <Select value={rptStatus} onValueChange={setRptStatus}>
+              <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="All" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Completed</SelectItem>
+                <SelectItem value="installed">Finalized (Installed)</SelectItem>
+                <SelectItem value="installation_done">Pending Finalization</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between border-t pt-3 mt-1 text-xs">
+          <span className="text-gray-500">Matching Records: <strong className="text-slate-900">{filteredReportIssues.length}</strong></span>
+          <Button size="sm" className="bg-indigo-600 hover:bg-indigo-700 text-white" onClick={exportNonNscReplacementReport} disabled={filteredReportIssues.length === 0}>
+            <FileDown className="h-4 w-4 mr-1" /> Download Excel
           </Button>
         </div>
       </div>

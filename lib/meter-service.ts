@@ -313,7 +313,7 @@ export async function finalizeMeterInstallation(req: {
   if (issue.purpose === "nsc" && issue.nscReceiveNo) {
     await updateNSCConnectionEffected(issue.nscReceiveNo)
   }
-  await syncStatusFromIssue(req.issueId, "installed")
+  await syncStatusFromIssue(req.issueId, "installed", req.completionRef)
 }
 
 // ─── Bulk finalize: one fetch, two batchUpdates total ────────────────────────
@@ -375,7 +375,7 @@ export async function bulkFinalizeMeterInstallations(req: {
   if (nscReceiveNos.length > 0) {
     await Promise.all(nscReceiveNos.map(rcvNo => updateNSCConnectionEffected(rcvNo)))
   }
-  await Promise.all(req.issueIds.map(issueId => syncStatusFromIssue(issueId, "installed")))
+  await Promise.all(req.issueIds.map(issueId => syncStatusFromIssue(issueId, "installed", req.completionRef)))
   return { succeeded: req.issueIds.length - failed.length, failed }
 }
 

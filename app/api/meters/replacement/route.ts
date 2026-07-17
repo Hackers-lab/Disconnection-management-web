@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json()
-    const { consumerId, consumerName, address, mobile, agency, purpose, remarks, attachmentUrl } = body
+    const { consumerId, consumerName, address, mobile, agency, purpose, remarks, attachmentUrl, oldMeterNo } = body
 
     if (!consumerId || !consumerName || !address || !purpose) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
@@ -42,7 +42,8 @@ export async function POST(request: NextRequest) {
       agency: agency || "",
       purpose,
       remarks: remarks || "",
-      attachmentUrl: attachmentUrl || ""
+      attachmentUrl: attachmentUrl || "",
+      oldMeterNo: oldMeterNo || ""
     })
 
     return NextResponse.json({ success: true, replacementId })

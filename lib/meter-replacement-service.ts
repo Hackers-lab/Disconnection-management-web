@@ -18,6 +18,8 @@ export interface MeterReplacement {
   issueId: string
   remarks: string
   attachmentUrl: string
+  oldMeterNo?: string
+  workOrderNo?: string
 }
 
 const sheets = google.sheets({ version: "v4", auth })
@@ -26,7 +28,8 @@ export const REPLACEMENT_TAB = "Meter_Replacement"
 
 const REPLACEMENT_HEADERS = [
   "Replacement ID", "Consumer ID", "Consumer Name", "Address", "Mobile",
-  "Agency", "Purpose", "Proposed Date", "Status", "Serial No", "Issue ID", "Remarks", "Attachment URL"
+  "Agency", "Purpose", "Proposed Date", "Status", "Serial No", "Issue ID", "Remarks", "Attachment URL",
+  "Old Meter No", "Work Order No"
 ]
 
 const REPLACEMENT_TAG = "meter-replacement"
@@ -73,6 +76,8 @@ function parseReplacement(r: string[]): MeterReplacement {
     issueId:       r[10] || "",
     remarks:       r[11] || "",
     attachmentUrl: r[12] || "",
+    oldMeterNo:    r[13] || "",
+    workOrderNo:   r[14] || "",
   }
 }
 
@@ -81,7 +86,7 @@ async function _fetchReplacementsRaw(): Promise<MeterReplacement[]> {
   await ensureReplacementTab(id)
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId: id,
-    range: `${REPLACEMENT_TAB}!A:M`
+    range: `${REPLACEMENT_TAB}!A:O`
   })
   return (res.data.values || [])
     .slice(1)
@@ -113,6 +118,7 @@ export async function addReplacement(req: {
   purpose: string
   remarks?: string
   attachmentUrl?: string
+  oldMeterNo?: string
 }): Promise<string> {
   const id = getSpreadsheetId()
   await ensureReplacementTab(id)
@@ -131,11 +137,13 @@ export async function addReplacement(req: {
     "", // serialNo
     "", // issueId
     req.remarks || "",
-    req.attachmentUrl || ""
+    req.attachmentUrl || "",
+    req.oldMeterNo || "",
+    "" // workOrderNo
   ]
   await sheets.spreadsheets.values.append({
     spreadsheetId: id,
-    range: `${REPLACEMENT_TAB}!A:M`,
+    range: `${REPLACEMENT_TAB}!A:O`,
     valueInputOption: "RAW",
     requestBody: { values: [row] }
   })
@@ -171,7 +179,8 @@ export async function issueReplacement(
 
 export async function syncStatusFromIssue(
   issueId: string,
-  newStatus: "installation_done" | "installed" | "returned"
+  newStatus: "installation_done" | "installed" | "returned",
+  completionRef?: string
 ): Promise<void> {
   const id = getSpreadsheetId()
   await ensureReplacementTab(id)
@@ -188,7 +197,10 @@ export async function syncStatusFromIssue(
     updates.push({ range: `${REPLACEMENT_TAB}!I${rowNum}`, values: [[mappedStatus]] })
   } else if (newStatus === "installed") {
     mappedStatus = "replaced"
-    updates.push({ range: `${REPLACEMENT_TAB}!I${rowNum}`, values: [[mappedStatus]] })
+    updates.push(
+      { range: `${REPLACEMENT_TAB}!I${rowNum}`, values: [[mappedStatus]] },
+      { range: `${REPLACEMENT_TAB}!O${rowNum}`, values: [[completionRef || ""]] }
+    )
   } else if (newStatus === "returned") {
     // Reset back to proposed
     mappedStatus = "proposed"
@@ -196,6 +208,7 @@ export async function syncStatusFromIssue(
       { range: `${REPLACEMENT_TAB}!I${rowNum}`, values: [[mappedStatus]] },
       { range: `${REPLACEMENT_TAB}!J${rowNum}`, values: [[""]] },
       { range: `${REPLACEMENT_TAB}!K${rowNum}`, values: [[""]] },
+      { range: `${REPLACEMENT_TAB}!O${rowNum}`, values: [[""]] }
     )
   }
 
