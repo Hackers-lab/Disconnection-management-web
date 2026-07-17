@@ -261,11 +261,21 @@ export function DashboardStats({ consumers, loading = false, onStatusSelect }: D
   if (loading) {
     return (
       <div className="space-y-4">
-        <div className="flex justify-between items-center p-4 
-          bg-white/40 backdrop-blur-md rounded-lg shadow-sm border border-gray-200/50 
-          cursor-pointer hover:shadow-md transition-all">
-          <h3 className="font-semibold text-gray-800">Dashboard Statistics</h3>
-          <ChevronDown className="h-5 w-5 text-gray-600" />
+        <div className="flex justify-between items-center p-4 bg-white/70 backdrop-blur-md rounded-2xl border border-slate-200/80 shadow-sm hover:shadow-md transition-all duration-300 cursor-pointer">
+          <div className="flex items-center gap-3">
+            <span className="p-2 bg-slate-100 text-slate-400 rounded-xl">
+              <TrendingUp className="h-5 w-5" />
+            </span>
+            <span className="font-bold text-slate-850 text-sm tracking-tight">Dashboard Statistics Breakdown</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="hidden sm:inline text-[10px] uppercase font-bold tracking-wider text-slate-300 bg-slate-100 px-2.5 py-1 rounded-full">
+              Loading...
+            </span>
+            <div className="p-1.5 rounded-lg bg-slate-100 text-slate-400">
+              <ChevronDown className="h-4 w-4 animate-pulse" />
+            </div>
+          </div>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 mb-4">
           {Array.from({ length: 6 }).map((_, i) => (    
@@ -359,11 +369,23 @@ export function DashboardStats({ consumers, loading = false, onStatusSelect }: D
   return (
     <div className="space-y-4">
       <div 
-        className="flex justify-between items-center p-4 bg-gray-100 rounded-lg cursor-pointer hover:bg-gray-200"
+        className="flex justify-between items-center p-4 rounded-2xl cursor-pointer bg-white/70 hover:bg-white backdrop-blur-md border border-slate-200/80 shadow-sm hover:shadow-md transition-all duration-300"
         onClick={() => setIsSliderOpen(!isSliderOpen)}
       >
-        <h3 className="font-medium">Dashboard Statistics</h3>
-        {isSliderOpen ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
+        <div className="flex items-center gap-3">
+          <span className={`p-2 rounded-xl transition-colors duration-300 ${isSliderOpen ? 'bg-indigo-50 text-indigo-650' : 'bg-slate-100 text-slate-600'}`}>
+            <TrendingUp className="h-5 w-5" />
+          </span>
+          <span className="font-bold text-slate-800 text-sm tracking-tight">Dashboard Statistics Breakdown</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="hidden sm:inline text-[10px] uppercase font-bold tracking-wider text-slate-400 bg-slate-100 px-2.5 py-1 rounded-full">
+            {isSliderOpen ? "Hide Panel" : "Show Panel"}
+          </span>
+          <div className={`p-1.5 rounded-lg ${isSliderOpen ? 'bg-indigo-50 text-indigo-600' : 'bg-slate-100 text-slate-600'} transition-colors duration-200`}>
+            {isSliderOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+          </div>
+        </div>
       </div>
 
       {isSliderOpen && (

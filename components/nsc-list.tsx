@@ -489,14 +489,14 @@ export function NscList({ userRole, userAgencies, username, agencies }: Props) {
 
       {/* Application cards */}
       {tab !== "reports" && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
           {paginated.length === 0 ? (
             <div className="text-center py-16 text-gray-400 col-span-full">
               <ClipboardList className="h-10 w-10 mx-auto mb-3 opacity-30" />
               <p>No NSC applications found</p>
             </div>
           ) : paginated.map(app => (
-            <Card key={app.receiveNo} className="shadow-md hover:shadow-lg transition-all duration-200 overflow-hidden border border-gray-200 hover:border-blue-200">
+            <Card key={app.receiveNo} className="hover:shadow-md transition-all duration-200 overflow-hidden border border-gray-200 hover:border-blue-200">
               <CardContent className="p-4">
 
                 {/* Top row: receive no + phase chip + status badge + agency pill */}
@@ -542,10 +542,13 @@ export function NscList({ userRole, userAgencies, username, agencies }: Props) {
                       {NSC_STATUS_LABELS[app.status] || app.status}
                     </Badge>
                   </div>
-                  {app.careOf && <p className="text-xs text-gray-500">C/O {app.careOf}</p>}
-                  <div className="flex items-center gap-1 mt-0.5">
-                    <span className="text-xs text-gray-500 font-medium">{CLASS_LABELS[app.appliedClass] || app.appliedClass}</span>
-                  </div>
+                  {app.careOf && (
+                    <>
+                      <p className="text-xs text-gray-500">C/O {app.careOf}</p>
+                      <hr className="my-1.5 border-gray-100" />
+                    </>
+                  )}
+
                   <div className="flex items-start gap-1 mt-0.5">
                     <MapPin className="h-3 w-3 text-gray-400 shrink-0 mt-0.5" />
                     <p className="text-xs text-gray-600">{app.address}</p>
@@ -588,7 +591,16 @@ export function NscList({ userRole, userAgencies, username, agencies }: Props) {
                   </div>
                 )}
 
-                <p className="text-xs text-gray-400 mt-0.5">{app.receivedDate}</p>
+                <div className="flex items-center justify-between text-xs text-gray-400 mt-1">
+                  <span>{app.receivedDate}</span>
+                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold border ${
+                    app.appliedClass === "LT" ? "bg-indigo-50 text-indigo-700 border-indigo-200" :
+                    app.appliedClass === "HT" ? "bg-purple-50 text-purple-700 border-purple-200" :
+                    "bg-slate-50 text-slate-700 border-slate-200"
+                  }`}>
+                    {CLASS_LABELS[app.appliedClass] || app.appliedClass}
+                  </span>
+                </div>
 
                 {/* ─ Action buttons ─────────────────────────────────────────── */}
                 <div className="flex gap-2 mt-3 pt-3 border-t flex-wrap">
@@ -681,22 +693,24 @@ export function NscList({ userRole, userAgencies, username, agencies }: Props) {
                     </p>
                   )}
 
-                  {/* Admin actions: edit ref & history icons only */}
+                  {/* Admin: edit office ref no */}
                   {isAdmin && (
-                    <div className="ml-auto flex items-center gap-1">
-                      <button
-                        className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-gray-50 rounded-lg border border-transparent hover:border-gray-200 transition"
-                        onClick={() => { setEditingRefApp(app); setRefNoInput(app.officeRefNo || "") }}
-                        title={app.officeRefNo ? `Edit Ref: ${app.officeRefNo}` : "Add Ref"}>
-                        <Pencil className="h-3.5 w-3.5" />
-                      </button>
-                      <button
-                        className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded-lg border border-transparent hover:border-gray-200 transition"
-                        onClick={() => setHistoryApp(app)}
-                        title="View history">
-                        <Clock className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
+                    <button
+                      className="flex items-center gap-1 text-xs text-gray-400 hover:text-blue-600 ml-auto"
+                      onClick={() => { setEditingRefApp(app); setRefNoInput(app.officeRefNo || "") }}
+                      title="Edit office reference number">
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+
+                  {/* Admin: history button */}
+                  {isAdmin && (
+                    <button
+                      className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600"
+                      onClick={() => setHistoryApp(app)}
+                      title="View history logs">
+                      <Clock className="h-3.5 w-3.5" />
+                    </button>
                   )}
                 </div>
               </CardContent>

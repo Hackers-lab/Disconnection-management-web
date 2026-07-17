@@ -425,7 +425,7 @@ export function DashboardMenu({ onSelect, userRole, userAgencies = [], permissio
     <>
       <div className="p-4 md:p-8 max-w-7xl mx-auto min-h-[calc(100vh-80px)] flex flex-col">
         <div className="flex-grow">
-          <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-6">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-6">
             {modules.map((module) => {
               const permKey = module.id.replace(/-/g, "_")
               const hasAccess = module.id === "home" || (permissions && (

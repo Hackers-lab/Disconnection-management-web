@@ -11,8 +11,9 @@ import {
   Package, Search, Plus, ArrowDownToLine, ArrowUpFromLine,
   ListChecks, Loader2, RefreshCw, ChevronLeft, ChevronRight, ChevronDown, Trash2,
   FileDown, FileSpreadsheet, Eye, Settings, AlertTriangle, ArrowLeft,
-  Pencil, Check, MoreVertical, X, ImageIcon
+  Pencil, Check, MoreVertical, X, ImageIcon, Printer
 } from "lucide-react"
+import { useToast } from "@/hooks/use-toast"
 import type { Material, MaterialStock, MaterialReceive, MaterialIssue } from "@/lib/material-types"
 import { MATERIAL_CATEGORIES } from "@/lib/material-types"
 import { MaterialReceiveForm } from "./material-receive-form"
@@ -51,6 +52,7 @@ interface Props {
 }
 
 export function MaterialList({ userRole, userAgencies, username, permissions }: Props) {
+  const { toast } = useToast()
   const [view, setView] = useHashState<MainView>("material", "menu")
   const [settingsTab, setSettingsTab] = useState<SettingsSubTab>("catalogue")
 
@@ -218,6 +220,151 @@ export function MaterialList({ userRole, userAgencies, username, permissions }: 
   useEffect(() => {
     fetchData()
   }, [fetchData])
+
+  const handlePrintSlip = (issueId: string) => {
+    const itemsToPrint = issues.filter(i => i.issueId === issueId)
+    if (itemsToPrint.length === 0) {
+      toast({ title: "No items found for this Issue ID" })
+      return
+    }
+
+    const first = itemsToPrint[0]
+    const win = window.open("", "_blank")
+    if (!win) {
+      alert("Pop-up blocked. Please allow pop-ups.")
+      return
+    }
+
+    const rows = itemsToPrint.map((item, idx) => `
+      <tr>
+        <td style="border: 1px solid #cbd5e1; padding: 10px; text-align: center;">${idx + 1}</td>
+        <td style="border: 1px solid #cbd5e1; padding: 10px; font-family: monospace; font-weight: bold;">${item.materialId}</td>
+        <td style="border: 1px solid #cbd5e1; padding: 10px; font-weight: 600;">${item.materialDesc}</td>
+        <td style="border: 1px solid #cbd5e1; padding: 10px; text-align: right; font-weight: bold; color: #c2410c;">${item.quantity} ${item.unit}</td>
+        <td style="border: 1px solid #cbd5e1; padding: 10px; font-style: italic; color: #64748b;">${item.remarks || "—"}</td>
+      </tr>
+    `).join("")
+
+    win.document.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Store Requisition & Issue Note (SRIN)</title>
+        <style>
+          * { box-sizing: border-box; margin: 0; padding: 0; }
+          body { font-family: 'Segoe UI', system-ui, sans-serif; padding: 40px; color: #1e293b; background-color: #fff; font-size: 13px; line-height: 1.5; }
+          .container { max-width: 800px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px; padding: 30px; }
+          .header { text-align: center; margin-bottom: 25px; border-bottom: 2px solid #0f172a; padding-bottom: 15px; }
+          .header h1 { font-size: 20px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: #0f172a; }
+          .header h2 { font-size: 12px; color: #64748b; margin-top: 5px; font-weight: 600; }
+          .meta-grid { display: grid; grid-template-cols: 1fr 1fr; gap: 15px; margin-bottom: 25px; background: #f8fafc; border: 1px solid #f1f5f9; border-radius: 8px; padding: 15px; }
+          .meta-item { display: flex; justify-content: space-between; border-bottom: 1px dashed #e2e8f0; padding-bottom: 4px; }
+          .meta-item:last-child { border-bottom: none; }
+          .meta-label { font-weight: 700; color: #475569; text-transform: uppercase; font-size: 11px; }
+          .meta-value { font-weight: 600; color: #0f172a; }
+          table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
+          th { background: #0f172a; color: #fff; padding: 10px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; border: 1px solid #0f172a; }
+          .footer-signs { display: flex; justify-content: space-between; margin-top: 60px; gap: 20px; }
+          .sign-box { flex: 1; text-align: center; }
+          .sign-line { width: 100%; border-top: 1px solid #0f172a; margin: 45px auto 8px; }
+          .sign-title { font-weight: 700; font-size: 11px; color: #475569; text-transform: uppercase; }
+          .sign-subtitle { font-size: 10px; color: #94a3b8; margin-top: 2px; }
+          .notice { background: #fffbeb; border: 1px solid #fef3c7; color: #b45309; padding: 10px 15px; font-size: 11px; margin-bottom: 25px; border-radius: 8px; font-weight: 500; display: flex; gap: 10px; align-items: center; }
+          @media print {
+            body { padding: 0; }
+            .container { border: none; padding: 0; }
+            .no-print { display: none; }
+            @page { size: A4 portrait; margin: 15mm; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1>Store Requisition & Issue Note</h1>
+            <h2>SRIN • Material Management Slip</h2>
+          </div>
+          
+          <div class="notice">
+            <span>⚠️</span>
+            <span>Important: This note must be filed and registered at the central store database. Obtain all physical signatures before dispatch.</span>
+          </div>
+
+          <div class="meta-grid">
+            <div style="display: flex; flex-direction: column; gap: 6px;">
+              <div class="meta-item">
+                <span class="meta-label">Requisition ID:</span>
+                <span class="meta-value" style="font-family: monospace; color: #2563eb;">${first.issueId}</span>
+              </div>
+              <div class="meta-item">
+                <span class="meta-label">Recipient Name:</span>
+                <span class="meta-value">${first.recipientName}</span>
+              </div>
+              <div class="meta-item">
+                <span class="meta-label">Purpose:</span>
+                <span class="meta-value">${first.purpose || "—"}</span>
+              </div>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 6px;">
+              <div class="meta-item">
+                <span class="meta-label">Date of Issue:</span>
+                <span class="meta-value">${first.issueDate}</span>
+              </div>
+              <div class="meta-item">
+                <span class="meta-label">Issued By (User):</span>
+                <span class="meta-value">${first.issuedBy}</span>
+              </div>
+              <div class="meta-item">
+                <span class="meta-label">Print Time:</span>
+                <span class="meta-value">${new Date().toLocaleString("en-IN")}</span>
+              </div>
+            </div>
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 50px;">#</th>
+                <th style="width: 120px;">Material No</th>
+                <th>Material Description</th>
+                <th style="width: 100px; text-align: right;">Quantity</th>
+                <th style="width: 200px;">Remarks</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows}
+            </tbody>
+          </table>
+
+          <div class="footer-signs">
+            <div class="sign-box">
+              <div class="sign-line"></div>
+              <div class="sign-title">Issued By</div>
+              <div class="sign-subtitle">(Store Keeper / Clerk)</div>
+            </div>
+            <div class="sign-box">
+              <div class="sign-line"></div>
+              <div class="sign-title">Received By</div>
+              <div class="sign-subtitle">(Recipient Signature)</div>
+            </div>
+            <div class="sign-box">
+              <div class="sign-line"></div>
+              <div class="sign-title">Authorized By</div>
+              <div class="sign-subtitle">(Officer-in-Charge)</div>
+            </div>
+          </div>
+        </div>
+        <script>
+          window.onload = function() {
+            window.focus();
+            window.print();
+          }
+        </script>
+      </body>
+      </html>
+    `)
+    win.document.close()
+  }
 
   // ── Filters & Search ───────────────────────────────────────────────────────────
   const q = search.toLowerCase()
@@ -818,7 +965,7 @@ export function MaterialList({ userRole, userAgencies, username, permissions }: 
                                 className="h-7 w-7 rounded-lg object-cover border bg-gray-50 flex-shrink-0 cursor-zoom-in hover:opacity-80 transition-opacity"
                                 onClick={(e) => {
                                   e.stopPropagation()
-                                  setPreviewImage({ url: getGoogleDriveDirectLink(s.photoUrl), title: s.description })
+                                  setPreviewImage({ url: getGoogleDriveDirectLink(s.photoUrl || ""), title: s.description })
                                 }}
                               />
                             ) : (
@@ -883,7 +1030,7 @@ export function MaterialList({ userRole, userAgencies, username, permissions }: 
                                     className="h-7 w-7 rounded-lg object-cover border bg-gray-50 flex-shrink-0 cursor-zoom-in hover:opacity-80 transition-opacity"
                                     onClick={(e) => {
                                       e.stopPropagation()
-                                      setPreviewImage({ url: getGoogleDriveDirectLink(s.photoUrl), title: s.description })
+                                      setPreviewImage({ url: getGoogleDriveDirectLink(s.photoUrl || ""), title: s.description })
                                     }}
                                   />
                                 ) : (
@@ -1013,118 +1160,120 @@ export function MaterialList({ userRole, userAgencies, username, permissions }: 
                 )}
               </div>
 
-              {/* History Ledger Table */}
-              <Card className="overflow-hidden border border-gray-200">
-                <Table>
-                  <TableHeader className="bg-slate-900 hover:bg-slate-900">
-                    <TableRow>
-                      <TableHead className="text-xs text-white w-[100px]">Date</TableHead>
-                      <TableHead className="text-xs text-white">Item Name</TableHead>
-                      <TableHead className="text-xs text-white w-[120px]">Type</TableHead>
-                      <TableHead className="text-xs text-white text-right w-[100px]">Quantity</TableHead>
-                      <TableHead className="text-xs text-white hidden md:table-cell">Reference / Recipient</TableHead>
-                      <TableHead className="text-xs text-white text-right w-[80px]">Action</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {paginatedHistory.map((item, idx) => {
-                      const isReceive = item.type === "receive"
-                      return (
-                        <TableRow key={`${item.id}-${idx}`} className="hover:bg-slate-50/50">
-                          <TableCell className="text-xs font-mono text-gray-500">
-                            {item.date}
-                          </TableCell>
-                          <TableCell className="text-xs">
-                            <span 
-                              className="text-blue-650 hover:text-blue-855 hover:underline cursor-pointer font-semibold"
-                              onClick={() => {
-                                const mat = stock.find(s => s.materialId === item.materialId)
-                                if (mat) setHistoryMaterial(mat)
-                              }}
-                            >
-                              {item.materialDesc}
-                            </span>
-                          </TableCell>
-                          <TableCell className="text-xs">
-                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                              isReceive 
-                                ? "bg-emerald-50 text-emerald-700 border border-emerald-200" 
-                                : "bg-orange-50 text-orange-700 border border-orange-200"
-                            }`}>
-                              {isReceive ? "📥 Inward" : "📤 Outward"}
-                            </span>
-                          </TableCell>
-                          <TableCell className={`text-xs text-right font-mono font-bold ${
-                            isReceive ? "text-emerald-700" : "text-orange-750"
-                          }`}>
-                            {isReceive ? `+${item.quantity}` : `-${item.quantity}`} {item.unit}
-                          </TableCell>
-                          <TableCell className="text-xs text-gray-500 hidden md:table-cell max-w-[200px] truncate">
-                            {isReceive ? (
-                              <span>
-                                Challan: <strong className="text-gray-700">{item.ref}</strong> from {item.party}
-                              </span>
-                            ) : (
-                              <span>
-                                To: <strong className="text-gray-700">{item.party}</strong> ({item.ref})
-                              </span>
-                            )}
-                          </TableCell>
-                          <TableCell className="text-xs text-right">
-                            {item.photoUrl ? (
+              {/* History Ledger Cards Layout */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                
+                {/* Left Column: Inward Receipts (Receive Logs) */}
+                {(historyTypeFilter === "all" || historyTypeFilter === "receive") && (
+                  <div className={`space-y-2.5 ${historyTypeFilter === "receive" ? "col-span-full" : ""}`}>
+                    <p className="text-xs font-bold text-slate-800 flex items-center gap-1.5 px-1">
+                      <ArrowDownToLine className="h-4 w-4 text-emerald-600" />
+                      Inward Receipts (Challan Logs)
+                    </p>
+                    <div className="border border-slate-100 rounded-2xl bg-slate-50/50 p-2.5 space-y-2.5 max-h-[60vh] overflow-y-auto shadow-inner">
+                      {filteredUnifiedHistory.filter(h => h.type === "receive").map((r, idx) => (
+                        <div key={`${r.id}-${idx}`} className="p-3.5 text-xs bg-white border border-slate-100 rounded-xl space-y-1.5 relative group shadow-sm">
+                          <div className="flex items-start justify-between pr-8">
+                            <div>
+                              <p className="font-semibold text-slate-900">{r.materialDesc}</p>
+                              <p className="text-[10px] text-slate-500 font-mono">
+                                ID: {r.id} · Qty: <span className="font-bold text-emerald-700">+{r.quantity} {r.unit}</span>
+                              </p>
+                            </div>
+                            {r.photoUrl && (
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                className="h-7 w-7 text-blue-655 hover:text-blue-855 hover:bg-blue-50"
-                                onClick={() => setPreviewImage({ url: getGoogleDriveDirectLink(item.photoUrl), title: item.materialDesc })}
+                                className="h-7 w-7 text-blue-650 hover:text-blue-855 hover:bg-blue-50 absolute top-3 right-3"
+                                onClick={() => setPreviewImage({ url: getGoogleDriveDirectLink(r.photoUrl || ""), title: r.materialDesc })}
                                 title="View Attached Photo"
                               >
                                 <ImageIcon className="h-4 w-4" />
                               </Button>
-                            ) : (
-                              <span className="text-gray-300">—</span>
                             )}
-                          </TableCell>
-                        </TableRow>
-                      )
-                    })}
+                          </div>
+                          <div className="grid grid-cols-2 gap-x-2 text-[10px] text-slate-450 border-t pt-1.5 border-dashed border-slate-100">
+                            <div><span className="font-semibold text-slate-600">Challan:</span> {r.ref || "—"}</div>
+                            <div><span className="font-semibold text-slate-600">From:</span> {r.party}</div>
+                            <div><span className="font-semibold text-slate-600">Date:</span> {r.date}</div>
+                            <div><span className="font-semibold text-slate-600">By:</span> {r.by}</div>
+                          </div>
+                          {r.remarks && (
+                            <div className="text-[10px] text-slate-500 bg-slate-50 border border-slate-100 p-2 rounded-lg italic">
+                              Remarks: {r.remarks}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                      {filteredUnifiedHistory.filter(h => h.type === "receive").length === 0 && (
+                        <p className="text-center py-10 text-xs text-slate-450 bg-white border border-dashed rounded-xl">No inward records found</p>
+                      )}
+                    </div>
+                  </div>
+                )}
 
-                    {filteredUnifiedHistory.length === 0 && (
-                      <TableRow>
-                        <TableCell colSpan={6} className="text-center py-10 text-xs text-gray-400">
-                          No transaction history found.
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              </Card>
+                {/* Right Column: Outward Handovers (Issue Logs) */}
+                {(historyTypeFilter === "all" || historyTypeFilter === "issue") && (
+                  <div className={`space-y-2.5 ${historyTypeFilter === "issue" ? "col-span-full" : ""}`}>
+                    <p className="text-xs font-bold text-slate-800 flex items-center gap-1.5 px-1">
+                      <ArrowUpFromLine className="h-4 w-4 text-orange-600" />
+                      Outward Handovers (Issues Logs)
+                    </p>
+                    <div className="border border-slate-100 rounded-2xl bg-slate-50/50 p-2.5 space-y-2.5 max-h-[60vh] overflow-y-auto shadow-inner">
+                      {filteredUnifiedHistory.filter(h => h.type === "issue").map((i, idx) => (
+                        <div key={`${i.id}-${idx}`} className="p-3.5 text-xs bg-white border border-slate-100 rounded-xl space-y-1.5 relative group shadow-sm">
+                          <div className="flex items-start justify-between pr-8">
+                            <div>
+                              <p className="font-semibold text-slate-900">{i.materialDesc}</p>
+                              <p className="text-[10px] text-slate-500 font-mono">
+                                ID: {i.id} · Qty: <span className="font-bold text-orange-700">-{i.quantity} {i.unit}</span>
+                              </p>
+                            </div>
+                            <div className="absolute top-3 right-3 flex items-center gap-1">
+                              {i.photoUrl && (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7 text-blue-650 hover:text-blue-855 hover:bg-blue-50"
+                                  onClick={() => setPreviewImage({ url: getGoogleDriveDirectLink(i.photoUrl || ""), title: i.materialDesc })}
+                                  title="View Attached Photo"
+                                >
+                                  <ImageIcon className="h-4 w-4" />
+                                </Button>
+                              )}
+                              <Button
+                                variant="outline"
+                                size="icon"
+                                className="h-7 w-7 text-slate-500 hover:text-slate-700 bg-white border-slate-200 hover:bg-slate-50"
+                                onClick={() => handlePrintSlip(i.id)}
+                                title="Print Requisition Note"
+                              >
+                                <Printer className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-2 gap-x-2 text-[10px] text-slate-450 border-t pt-1.5 border-dashed border-slate-100">
+                            <div><span className="font-semibold text-slate-600">To:</span> {i.party}</div>
+                            <div><span className="font-semibold text-slate-600">Purpose:</span> {i.ref || "—"}</div>
+                            <div><span className="font-semibold text-slate-600">Date:</span> {i.date}</div>
+                            <div><span className="font-semibold text-slate-600">By:</span> {i.by}</div>
+                          </div>
+                          {i.remarks && (
+                            <div className="text-[10px] text-slate-500 bg-slate-50 border border-slate-100 p-2 rounded-lg italic">
+                              Remarks: {i.remarks}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                      {filteredUnifiedHistory.filter(h => h.type === "issue").length === 0 && (
+                        <p className="text-center py-10 text-xs text-slate-450 bg-white border border-dashed rounded-xl">No outward records found</p>
+                      )}
+                    </div>
+                  </div>
+                )}
 
-              {/* Ledger Pagination */}
-              {totalHistoryPages > 1 && (
-                <div className="flex items-center justify-between bg-white p-4 rounded-xl shadow-sm border">
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    onClick={() => setHistoryPage(p => Math.max(1, p - 1))} 
-                    disabled={historyPage === 1} 
-                    className="rounded-lg"
-                  >
-                    <ChevronLeft className="h-4 w-4 mr-1" /> Previous
-                  </Button>
-                  <span className="text-sm text-gray-600">Page {historyPage} of {totalHistoryPages}</span>
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    onClick={() => setHistoryPage(p => Math.min(totalHistoryPages, p + 1))} 
-                    disabled={historyPage === totalHistoryPages} 
-                    className="rounded-lg"
-                  >
-                    Next <ChevronRight className="h-4 w-4 ml-1" />
-                  </Button>
-                </div>
-              )}
-            </>
+              </div>
+</>
           )}
         </div>
       )}
@@ -1337,7 +1486,7 @@ export function MaterialList({ userRole, userAgencies, username, permissions }: 
                                 className="h-7 w-7 rounded-lg object-cover border bg-gray-50 flex-shrink-0 cursor-zoom-in hover:opacity-80 transition-opacity"
                                 onClick={(e) => {
                                   e.stopPropagation()
-                                  setPreviewImage({ url: getGoogleDriveDirectLink(m.photoUrl), title: m.description })
+                                  setPreviewImage({ url: getGoogleDriveDirectLink(m.photoUrl || ""), title: m.description })
                                 }}
                               />
                             ) : (
@@ -1437,14 +1586,27 @@ export function MaterialList({ userRole, userAgencies, username, permissions }: 
                             ID: {i.issueId} · Qty: <span className="font-bold text-orange-700">-{i.quantity} {i.unit}</span>
                           </p>
                         </div>
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          className="h-7 w-7 text-red-500 hover:text-red-700 bg-white border-red-100 hover:bg-red-50 absolute top-3 right-3 opacity-80 group-hover:opacity-100"
-                          onClick={() => handleDeleteIssue(i.issueId)}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
+                        <div className="absolute top-3 right-3 flex items-center gap-1 opacity-80 group-hover:opacity-100">
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-7 w-7 text-slate-500 hover:text-slate-700 bg-white border-slate-200 hover:bg-slate-50"
+                            onClick={() => handlePrintSlip(i.issueId)}
+                            title="Print Requisition Note"
+                          >
+                            <Printer className="h-3.5 w-3.5" />
+                          </Button>
+                          {canWrite && (
+                            <Button
+                              variant="outline"
+                              size="icon"
+                              className="h-7 w-7 text-red-500 hover:text-red-700 bg-white border-red-100 hover:bg-red-50"
+                              onClick={() => handleDeleteIssue(i.issueId)}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
+                        </div>
                       </div>
                       <div className="grid grid-cols-2 gap-x-2 text-[10px] text-gray-400">
                         <div><span className="font-medium text-gray-500">To:</span> {i.recipientName} ({i.recipientDesignation || "—"})</div>
@@ -1478,7 +1640,15 @@ export function MaterialList({ userRole, userAgencies, username, permissions }: 
            <MaterialIssueForm
              catalogue={catalogue.filter(m => m.isActive)}
              stock={stock}
-             onSuccess={() => { setView("menu"); fetchData(true) }}
+             onSuccess={(issueId) => { 
+                setView("menu")
+                fetchData(true)
+                if (issueId) {
+                  setTimeout(() => {
+                    handlePrintSlip(issueId)
+                  }, 500)
+                }
+              }}
              onCancel={() => setView("menu")}
            />
          )}

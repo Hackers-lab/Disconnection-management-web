@@ -21,6 +21,12 @@ import {
 } from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import {
   Search,
   Filter,
   RadioTower,
@@ -39,7 +45,9 @@ import {
   Camera,
   SlidersHorizontal,
   FileDown,
-  FileSpreadsheet
+  FileSpreadsheet,
+  MoreVertical,
+  BarChart3
 } from "lucide-react"
 
 function getGoogleDriveDirectLink(url: string): string {
@@ -66,7 +74,7 @@ interface Props {
   permissions?: Record<string, string[]>
 }
 
-type TabType = "all" | "pending" | "completed"
+type TabType = "all" | "pending" | "completed" | "reports"
 type SyncState = "idle" | "loading" | "updated"
 const CACHE_KEY = "dtr_data_cache"
 
@@ -430,6 +438,160 @@ export function DTRPaintingList({ userRole, userAgencies = [], username, agencie
     toast({ title: "Excel Report downloaded" })
   }
 
+  const exportAgencyCompletedPDF = async () => {
+    const { default: jsPDF } = await import("jspdf")
+    const { default: autoTable } = await import("jspdf-autotable")
+
+    const completedDTRs = records.filter(r => (r.painting || "").toLowerCase() === "done")
+    
+    // Sort by agency then dtrCode
+    const sortedDTRs = [...completedDTRs].sort((a, b) => {
+      const agComp = (a.paintingAgency || "").localeCompare(b.paintingAgency || "")
+      if (agComp !== 0) return agComp
+      return (a.dtrCode || "").localeCompare(b.dtrCode || "")
+    })
+
+    const doc = new jsPDF({ orientation: "landscape" })
+    const pw = doc.internal.pageSize.width
+
+    // Title / Header
+    doc.setFontSize(16)
+    doc.setTextColor(30, 41, 59)
+    doc.text("Agency-wise Completed DTR Painting Report", pw / 2, 14, { align: "center" })
+    
+    doc.setFontSize(9)
+    doc.setTextColor(100)
+    doc.text(
+      `Generated on: ${new Date().toLocaleDateString("en-IN")} | Total Completed DTRs: ${completedDTRs.length}`,
+      pw / 2, 20, { align: "center" }
+    )
+
+    // Summary table
+    const summaryRows = agencyStats.map((row, idx) => [
+      idx + 1,
+      row.agency,
+      row.total,
+      row.done,
+      row.pending,
+      `${row.pct}%`
+    ])
+
+    autoTable(doc, {
+      startY: 25,
+      head: [["#", "Painting Agency", "Assigned DTRs", "Painting Completed", "Painting Pending", "Progress Rate"]],
+      body: summaryRows,
+      styles: { fontSize: 8.5, font: "helvetica", halign: "center", cellPadding: 3 },
+      headStyles: { fillColor: [22, 163, 74], textColor: 255, fontStyle: "bold" },
+      columnStyles: { 1: { halign: "left", fontStyle: "bold" } },
+      theme: "grid"
+    })
+
+    const nextY = (doc as any).lastAutoTable.finalY + 10
+    let startY = nextY
+    if (startY > doc.internal.pageSize.height - 40) {
+      doc.addPage()
+      startY = 15
+    }
+
+    doc.setFontSize(11)
+    doc.setTextColor(30, 41, 59)
+    doc.text("Detailed Completed List (Grouped by Agency)", 14, startY)
+
+    const cols = ["#", "DTR Code", "Feeder Name", "Capacity (kVA)", "Landmark / Location", "Painting Agency", "Verified By", "Verified At", "Remarks"]
+    const body = sortedDTRs.map((r, idx) => [
+      idx + 1,
+      r.dtrCode || "-",
+      r.feederName || "-",
+      r.kvCapacity || "-",
+      r.locationName || "-",
+      r.paintingAgency || "Unassigned",
+      r.verifiedBy || "-",
+      r.verifiedAt || "-",
+      r.remarks || "-"
+    ])
+
+    autoTable(doc, {
+      startY: startY + 3,
+      head: [cols],
+      body: body,
+      styles: { fontSize: 8, font: "helvetica", cellPadding: 2.5 },
+      headStyles: { fillColor: [60, 60, 60], textColor: 255 },
+      columnStyles: {
+        0: { cellWidth: 10 },
+        1: { cellWidth: 25 },
+        2: { cellWidth: 35 },
+        3: { cellWidth: 20 },
+        4: { cellWidth: 70 },
+        5: { cellWidth: 35 },
+        6: { cellWidth: 25 },
+        7: { cellWidth: 25 },
+        8: { cellWidth: 30 }
+      },
+      didDrawPage: (data) => {
+        doc.setFontSize(8)
+        doc.setTextColor(150)
+        doc.text(`Page ${doc.getNumberOfPages()}`, data.settings.margin.left, doc.internal.pageSize.height - 10)
+      },
+      theme: "grid"
+    })
+
+    doc.save(`agency-wise-completed-dtr-painting-report-${new Date().toISOString().slice(0, 10)}.pdf`)
+    toast({ title: "Completed PDF Report downloaded" })
+  }
+
+  const exportAgencyCompletedExcel = async () => {
+    const XLSX = await import("xlsx")
+    const wb = XLSX.utils.book_new()
+
+    // Sheet 1: Summary Sheet
+    const summaryRows = [
+      ["Agency-wise DTR Painting Progress Summary"],
+      [`Generated on: ${new Date().toLocaleDateString("en-IN")}`],
+      [],
+      ["Painting Agency", "Assigned DTRs", "Painting Completed", "Painting Pending", "Progress Rate"]
+    ]
+
+    agencyStats.forEach(row => {
+      summaryRows.push([
+        row.agency,
+        row.total.toString(),
+        row.done.toString(),
+        row.pending.toString(),
+        `${row.pct}%`
+      ])
+    })
+
+    const wsSummary = XLSX.utils.aoa_to_sheet(summaryRows)
+    XLSX.utils.book_append_sheet(wb, wsSummary, "Painting Summary")
+
+    // Sheet 2: Detailed Completed Sheet
+    const completedDTRs = records.filter(r => (r.painting || "").toLowerCase() === "done")
+    const sortedDTRs = [...completedDTRs].sort((a, b) => {
+      const agComp = (a.paintingAgency || "").localeCompare(b.paintingAgency || "")
+      if (agComp !== 0) return agComp
+      return (a.dtrCode || "").localeCompare(b.dtrCode || "")
+    })
+
+    const detailRows = sortedDTRs.map(r => ({
+      "DTR Code": r.dtrCode,
+      "Feeder Name": r.feederName,
+      "Capacity (kVA)": r.kvCapacity || "",
+      "Landmark / Location": r.locationName,
+      "Supply Office": r.supplyOffice || "",
+      "Painting Agency": r.paintingAgency || "Unassigned",
+      "Verified By": r.verifiedBy || "",
+      "Verified At": r.verifiedAt || "",
+      "Remarks": r.remarks || "",
+      "Painting Image Link": r.paintingImage || ""
+    }))
+
+    const wsDetails = XLSX.utils.json_to_sheet(detailRows)
+    XLSX.utils.book_append_sheet(wb, wsDetails, "Completed Details")
+
+    XLSX.writeFile(wb, `agency-wise-completed-dtr-painting-report-${new Date().toISOString().slice(0, 10)}.xlsx`)
+    toast({ title: "Completed Excel Report downloaded" })
+  }
+
   // Pagination
   const paginated = useMemo(() => {
     const start = (currentPage - 1) * PAGE_SIZE
@@ -476,17 +638,49 @@ export function DTRPaintingList({ userRole, userAgencies = [], username, agencie
           </Badge>
         </div>
         <div className="flex items-center gap-2">
-          <Button 
-            variant="outline" 
-            onClick={() => setShowAgencyReport(true)} 
-            className="h-10 rounded-xl text-slate-700 border-slate-200 hover:bg-slate-50 flex items-center gap-1.5 text-xs font-semibold"
-          >
-            <Building2 className="h-4 w-4 text-blue-600" /> Agency Report
-          </Button>
+          {tab === "reports" ? (
+            <Button
+              variant="outline"
+              onClick={() => setTab("pending")}
+              className="h-10 rounded-xl text-slate-700 border-slate-200 hover:bg-slate-50 flex items-center gap-1.5 text-xs font-semibold"
+            >
+              <ArrowLeft className="h-4 w-4 text-blue-600" /> Back to List
+            </Button>
+          ) : (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="icon" className="h-10 w-10 rounded-xl border-slate-200 text-slate-600 hover:bg-slate-50">
+                  <MoreVertical className="h-5 w-5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48 rounded-xl p-1 bg-white border border-slate-200 shadow-lg z-50">
+                <DropdownMenuItem
+                  onClick={() => setTab("reports")}
+                  className="flex items-center gap-2 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg cursor-pointer transition-colors"
+                >
+                  <BarChart3 className="h-4 w-4 text-blue-600" />
+                  <span>Painting Reports</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
       </div>
 
-      {/* Filter and Control Bar */}
+      {tab === "reports" ? (
+        <DTRPaintingReports
+          records={records}
+          agencyStats={agencyStats}
+          exportAgencyPendingPDF={exportAgencyPendingPDF}
+          exportAgencyPendingExcel={exportAgencyPendingExcel}
+          exportAgencyCompletedPDF={exportAgencyCompletedPDF}
+          exportAgencyCompletedExcel={exportAgencyCompletedExcel}
+          userRole={userRole}
+          userAgencies={userAgencies}
+        />
+      ) : (
+        <>
+          {/* Filter and Control Bar */}
       <div className="bg-white border rounded-2xl p-4 shadow-sm space-y-4">
         {/* Row 1: Search and Filters toggle button */}
         <div className="flex gap-3">
@@ -734,6 +928,9 @@ export function DTRPaintingList({ userRole, userAgencies = [], username, agencie
         </div>
       )}
 
+        </>
+      )}
+
       {/* POPUP MODAL 1: VIEW DETAILS DIALOG (Radix compliance fixes) */}
       <Dialog open={viewingDtr !== null} onOpenChange={(open) => !open && setViewingDtr(null)}>
         <DialogContent className="max-w-4xl w-[95vw] max-h-[90vh] overflow-y-auto p-0 rounded-2xl">
@@ -908,81 +1105,7 @@ export function DTRPaintingList({ userRole, userAgencies = [], username, agencie
         </DialogContent>
       </Dialog>
 
-      {/* POPUP MODAL 2: AGENCY PAINTING REPORT (Radix compliance fixes) */}
-      <Dialog open={showAgencyReport} onOpenChange={setShowAgencyReport}>
-        <DialogContent className="max-w-3xl w-[95vw] max-h-[85vh] overflow-y-auto p-0 rounded-2xl text-slate-900">
-          <DialogHeader className="bg-slate-900 text-white p-5 sticky top-0 z-40 flex flex-row items-center justify-between space-y-0">
-            <div className="flex items-center gap-3">
-              <span className="p-2 bg-slate-800 rounded-xl">
-                <Building2 className="h-5 w-5 text-blue-400" />
-              </span>
-              <div>
-                <DialogTitle className="text-base font-bold text-white tracking-tight">Agency-wise Painting Report</DialogTitle>
-                <DialogDescription className="text-[11px] text-slate-400">Total metrics breakdown of painting jobs assigned to field vendors</DialogDescription>
-              </div>
-            </div>
-            <button 
-              onClick={() => setShowAgencyReport(false)} 
-              className="text-slate-400 hover:text-white transition p-1.5 hover:bg-slate-800 rounded-lg mr-6"
-            >
-              <X className="h-5 w-5" />
-            </button>
-          </DialogHeader>
 
-          <div className="p-6 space-y-4">
-            <div className="flex justify-end gap-2">
-              <Button 
-                size="sm" 
-                variant="outline" 
-                onClick={exportAgencyPendingPDF}
-                className="h-8 rounded-lg border-slate-200 hover:bg-slate-50 text-slate-700 flex items-center gap-1 text-[11px] font-semibold"
-              >
-                <FileDown className="h-3.5 w-3.5 text-red-500" /> Export PDF
-              </Button>
-              <Button 
-                size="sm" 
-                variant="outline" 
-                onClick={exportAgencyPendingExcel}
-                className="h-8 rounded-lg border-slate-200 hover:bg-slate-50 text-slate-700 flex items-center gap-1 text-[11px] font-semibold"
-              >
-                <FileSpreadsheet className="h-3.5 w-3.5 text-green-600" /> Export Excel
-              </Button>
-            </div>
-
-            <div className="overflow-hidden rounded-xl border border-slate-200">
-              <Table className="text-xs">
-                <TableHeader className="bg-slate-50 font-bold">
-                  <TableRow>
-                    <TableHead className="font-bold text-slate-850">Painting Agency Name</TableHead>
-                    <TableHead className="text-center font-bold text-slate-850">Assigned DTRs</TableHead>
-                    <TableHead className="text-center font-bold text-slate-850 text-green-600">Painting Completed</TableHead>
-                    <TableHead className="text-center font-bold text-slate-850 text-orange-600">Painting Pending</TableHead>
-                    <TableHead className="text-right font-bold text-slate-850">Progress Rate</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {agencyStats.map((row) => (
-                    <TableRow key={row.agency} className="hover:bg-slate-50 transition-colors">
-                      <TableCell className="font-semibold text-slate-800">{row.agency}</TableCell>
-                      <TableCell className="text-center font-bold font-mono">{row.total}</TableCell>
-                      <TableCell className="text-center font-bold font-mono text-green-600 bg-green-50/10">{row.done}</TableCell>
-                      <TableCell className="text-center font-bold font-mono text-orange-600 bg-orange-50/10">{row.pending}</TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <span className="font-bold font-mono">{row.pct}%</span>
-                          <div className="w-16 bg-slate-100 h-1.5 rounded-full overflow-hidden inline-block border">
-                            <div className="bg-blue-600 h-full" style={{ width: `${row.pct}%` }} />
-                          </div>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
 
       {/* POPUP MODAL 3: NEARBY DTR MAP RADAR */}
       <Dialog open={showMap} onOpenChange={setShowMap}>
@@ -995,6 +1118,162 @@ export function DTRPaintingList({ userRole, userAgencies = [], username, agencie
         </DialogContent>
       </Dialog>
 
+    </div>
+  )
+}
+
+interface ReportsProps {
+  records: DTRRecord[]
+  agencyStats: any[]
+  exportAgencyPendingPDF: () => void
+  exportAgencyPendingExcel: () => void
+  exportAgencyCompletedPDF: () => void
+  exportAgencyCompletedExcel: () => void
+  userRole: string
+  userAgencies: string[]
+}
+
+function DTRPaintingReports({
+  records,
+  agencyStats,
+  exportAgencyPendingPDF,
+  exportAgencyPendingExcel,
+  exportAgencyCompletedPDF,
+  exportAgencyCompletedExcel,
+  userRole,
+  userAgencies
+}: ReportsProps) {
+  const isRestricted = !["admin", "executive", "viewer"].includes(userRole)
+  
+  // Filter records based on role if restricted
+  const scopedRecords = useMemo(() => {
+    if (isRestricted && userAgencies.length > 0) {
+      return records.filter(r => 
+        userAgencies.some(ag => (r.paintingAgency || "").toLowerCase().trim() === ag.toLowerCase().trim())
+      )
+    }
+    return records
+  }, [records, isRestricted, userAgencies])
+
+  const total = scopedRecords.length
+  const completed = scopedRecords.filter(r => (r.painting || "").toLowerCase() === "done").length
+  const pending = total - completed
+  const progress = total > 0 ? Math.round((completed / total) * 100) : 0
+
+  const StatCard = ({ label, value, color }: { label: string; value: number | string; color: string }) => (
+    <div className={`rounded-2xl p-5 border bg-white shadow-sm hover:shadow-md transition-shadow ${color}`}>
+      <p className="text-xs text-gray-500 font-bold uppercase tracking-wider">{label}</p>
+      <p className="text-3xl font-extrabold mt-2 text-slate-900">{value}</p>
+    </div>
+  )
+
+  const Table = ({ title, headers, rows }: { title: string; headers: string[]; rows: (string | number)[][] }) => (
+    <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
+      <div className="px-5 py-4 border-b bg-slate-50/50">
+        <p className="font-bold text-gray-800 text-sm">{title}</p>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead className="bg-slate-50 border-b">
+            <tr>
+              {headers.map((h, i) => (
+                <th key={i} className="px-4 py-3 text-left text-slate-600 font-bold uppercase tracking-wider text-[10px]">
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {rows.map((row, i) => (
+              <tr key={i} className="hover:bg-slate-50/55 transition-colors">
+                {row.map((cell, j) => (
+                  <td key={j} className="px-4 py-3 text-slate-700 font-medium">
+                    {cell}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+
+  return (
+    <div className="space-y-6">
+      {/* Stat Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <StatCard label="Total DTRs" value={total} color="border-slate-200" />
+        <StatCard label="Completed Painting" value={completed} color="border-green-200" />
+        <StatCard label="Pending Painting" value={pending} color="border-orange-200" />
+        <StatCard label="Progress Rate" value={`${progress}%`} color="border-blue-200" />
+      </div>
+
+      {/* Custom Reports Panel */}
+      <Card className="border border-slate-200 shadow-sm overflow-hidden bg-white rounded-2xl">
+        <div className="px-5 py-4 border-b bg-slate-50/50">
+          <h3 className="font-bold text-slate-900 text-sm">Download DTR Painting Reports</h3>
+          <p className="text-xs text-slate-500 mt-0.5">Generate customized PDF reports and Excel spreadsheets with summary pages</p>
+        </div>
+        <CardContent className="p-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            
+            {/* Card 1: Agency Pending Report */}
+            <div className="bg-slate-50/60 border border-slate-100 rounded-2xl p-5 flex flex-col justify-between space-y-4 hover:border-orange-200 hover:bg-orange-50/5 transition">
+              <div className="space-y-1.5">
+                <span className="text-[9px] font-bold tracking-wider text-orange-700 uppercase bg-orange-100/60 px-2 py-0.5 rounded-full">Pending Tasks</span>
+                <h4 className="font-bold text-gray-900 text-sm">Agency Pending Painting Report</h4>
+                <p className="text-xs text-gray-500 leading-relaxed">
+                  List and matrix of DTRs assigned to painting agencies where structural painting is pending.
+                </p>
+              </div>
+              <div className="flex gap-2 pt-1">
+                <Button size="sm" variant="outline" className="flex-1 h-8 text-xs gap-1 border-red-200 text-red-700 bg-red-50/50 hover:bg-red-100 hover:text-red-800 transition" onClick={exportAgencyPendingPDF}>
+                  <FileDown className="h-3.5 w-3.5" /> PDF
+                </Button>
+                <Button size="sm" variant="outline" className="flex-1 h-8 text-xs gap-1 border-green-200 text-green-700 bg-green-50/50 hover:bg-green-100 hover:text-green-800 transition" onClick={exportAgencyPendingExcel}>
+                  <FileSpreadsheet className="h-3.5 w-3.5" /> Excel
+                </Button>
+              </div>
+            </div>
+
+            {/* Card 2: Agency Completed Report */}
+            <div className="bg-slate-50/60 border border-slate-100 rounded-2xl p-5 flex flex-col justify-between space-y-4 hover:border-green-200 hover:bg-green-50/5 transition">
+              <div className="space-y-1.5">
+                <span className="text-[9px] font-bold tracking-wider text-green-700 uppercase bg-green-100/60 px-2 py-0.5 rounded-full">Completed Tasks</span>
+                <h4 className="font-bold text-gray-900 text-sm">Agency Completed Painting Report</h4>
+                <p className="text-xs text-gray-500 leading-relaxed">
+                  List and matrix of DTRs where structural painting has been successfully completed and verified.
+                </p>
+              </div>
+              <div className="flex gap-2 pt-1">
+                <Button size="sm" variant="outline" className="flex-1 h-8 text-xs gap-1 border-red-200 text-red-700 bg-red-50/50 hover:bg-red-100 hover:text-red-800 transition" onClick={exportAgencyCompletedPDF}>
+                  <FileDown className="h-3.5 w-3.5" /> PDF
+                </Button>
+                <Button size="sm" variant="outline" className="flex-1 h-8 text-xs gap-1 border-green-200 text-green-700 bg-green-50/50 hover:bg-green-100 hover:text-green-800 transition" onClick={exportAgencyCompletedExcel}>
+                  <FileSpreadsheet className="h-3.5 w-3.5" /> Excel
+                </Button>
+              </div>
+            </div>
+
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Agency Performance Table */}
+      {agencyStats.length > 0 && (
+        <Table 
+          title="Agency Painting Performance Breakdown" 
+          headers={["Agency Name", "Assigned DTRs", "Completed DTRs", "Pending DTRs", "Completion Progress"]} 
+          rows={agencyStats.map(a => [
+            a.agency, 
+            a.total, 
+            a.done, 
+            a.pending, 
+            `${a.pct}%`
+          ])} 
+        />
+      )}
     </div>
   )
 }
