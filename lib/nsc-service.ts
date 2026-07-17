@@ -1,7 +1,7 @@
 // Server-only — imports googleapis. Never import in "use client" components.
 import { google } from "googleapis"
 import { unstable_cache, revalidateTag } from "next/cache"
-import { auth } from "./google-drive"
+import { auth, renameDriveFile } from "./google-drive"
 import { getSpreadsheetId, ensureHeaders, findColumn, colLetter } from "./google-sheets-api"
 import type { NSCApplication } from "./nsc-types"
 import { nowTs, currentFY } from "./date-utils"
@@ -267,6 +267,18 @@ export async function createApplication(req: {
     valueInputOption: "RAW",
     requestBody: { values: [row] },
   })
+
+  // Rename Google Drive file to match REF or NSC App No (receiveNo)
+  if (req.applicationFormUrl) {
+    const match = req.applicationFormUrl.match(/id=([^&]+)/)
+    const fileId = match ? match[1] : null
+    if (fileId) {
+      const rawName = req.officeRefNo?.trim() ? req.officeRefNo.trim() : receiveNo
+      const cleanName = `${rawName.replace(/[^a-zA-Z0-9-_]/g, "_")}.pdf`
+      await renameDriveFile(fileId, cleanName)
+    }
+  }
+
   invalidateNSCCache()
   return receiveNo
 }

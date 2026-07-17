@@ -89,3 +89,16 @@ export async function uploadImageToDrive(file: File, consumerId: string): Promis
     throw error
   }
 }
+
+export async function renameDriveFile(fileId: string, newName: string): Promise<void> {
+  try {
+    await drive.files.update({
+      fileId: fileId,
+      requestBody: {
+        name: newName,
+      },
+    })
+  } catch (error) {
+    console.error("Failed to rename drive file:", error)
+  }
+}

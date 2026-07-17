@@ -234,6 +234,7 @@ export function NscApplicationForm({ agencies, onSave, onCancel }: Props) {
     if (!appliedClass)         { alert("Applied class is required."); return }
     if (!phase)                { alert("Phase is required."); return }
     if (!agency)               { alert("Please assign an agency."); return }
+    if (!applicationFormUrl)   { alert("Please compile and upload the Application Form PDF first."); return }
 
     setSubmitting(true)
     try {
@@ -344,18 +345,34 @@ export function NscApplicationForm({ agencies, onSave, onCancel }: Props) {
           <input
             type="file"
             accept="image/*"
+            capture="environment"
+            onChange={handleImageSelection}
+            className="hidden"
+            id="nsc-camera-input"
+          />
+          <input
+            type="file"
+            accept="image/*"
             multiple
             onChange={handleImageSelection}
             className="hidden"
-            id="nsc-pdf-image-input"
+            id="nsc-gallery-input"
           />
 
           {!applicationFormUrl && (
-            <label htmlFor="nsc-pdf-image-input" className="flex flex-col items-center justify-center border-2 border-dashed border-indigo-200 bg-white rounded-xl p-5 cursor-pointer hover:bg-indigo-50/50 hover:border-indigo-300 transition group">
-              <Camera className="h-6 w-6 text-indigo-400 group-hover:text-indigo-600 mb-1.5 transition-colors" />
-              <span className="text-xs font-semibold text-indigo-950">Add Page Images / Take Photos</span>
-              <span className="text-[10px] text-gray-400 mt-1">Select files or snap photos directly on mobile</span>
-            </label>
+            <div className="grid grid-cols-2 gap-3">
+              <label htmlFor="nsc-camera-input" className="flex flex-col items-center justify-center border-2 border-dashed border-indigo-200 bg-white rounded-xl p-4 cursor-pointer hover:bg-indigo-50/50 hover:border-indigo-300 transition group text-center">
+                <Camera className="h-6 w-6 text-indigo-500 group-hover:text-indigo-600 mb-1.5 transition-colors" />
+                <span className="text-xs font-semibold text-indigo-950">Open Camera</span>
+                <span className="text-[9px] text-gray-400 mt-1">Take photo directly</span>
+              </label>
+              
+              <label htmlFor="nsc-gallery-input" className="flex flex-col items-center justify-center border-2 border-dashed border-indigo-200 bg-white rounded-xl p-4 cursor-pointer hover:bg-indigo-50/50 hover:border-indigo-300 transition group text-center">
+                <UploadCloud className="h-6 w-6 text-indigo-500 group-hover:text-indigo-600 mb-1.5 transition-colors" />
+                <span className="text-xs font-semibold text-indigo-950">Upload Images</span>
+                <span className="text-[9px] text-gray-400 mt-1">Choose from gallery</span>
+              </label>
+            </div>
           )}
 
           {pages.length > 0 && !applicationFormUrl && (
