@@ -68,7 +68,7 @@ function agencyColor(name: string) {
 }
 
 // Completed = non-pole resolved OR pole fully done
-const COMPLETED_STATUSES = ["quotation_issued", "dispute_issued", "project_done", "connection_effected", "meter_issued"]
+const COMPLETED_STATUSES = ["quotation_issued", "dispute_issued", "project_done", "connection_effected", "meter_issued", "meter_returned"]
 
 interface ActiveFilters {
   phase:    string   // "" | "1P" | "3P"
@@ -190,7 +190,7 @@ export function NscList({ userRole, userAgencies, username, agencies }: Props) {
 
   const filtered = useMemo(() => {
     let data = scopedApps
-    if (tab === "pending")   data = data.filter(a => !COMPLETED_STATUSES.includes(a.status))
+    if (tab === "pending")   data = data.filter(a => a.status === "pending")
     if (tab === "inspected") data = data.filter(a => a.status === "inspected")
     if (tab === "completed") data = data.filter(a => COMPLETED_STATUSES.includes(a.status))
     if (tab === "projects")  data = data.filter(a => ["project_required", "project_ongoing", "project_done"].includes(a.status))
@@ -223,14 +223,14 @@ export function NscList({ userRole, userAgencies, username, agencies }: Props) {
   useEffect(() => setPage(1), [tab, search, filters])
 
   // ── Tab counts ────────────────────────────────────────────────────────────
-  const pendingCount    = scopedApps.filter(a => !COMPLETED_STATUSES.includes(a.status)).length
+  const pendingCount    = scopedApps.filter(a => a.status === "pending").length
   const inspectedCount  = scopedApps.filter(a => a.status === "inspected").length
   const completedCount  = scopedApps.filter(a => COMPLETED_STATUSES.includes(a.status)).length
   const projectCount    = scopedApps.filter(a => ["project_required", "project_ongoing", "project_done"].includes(a.status)).length
 
   // Phase sub-counts for pending — shows how many 1P vs 3P are waiting
-  const pending1P = scopedApps.filter(a => !COMPLETED_STATUSES.includes(a.status) && a.phase === "1P").length
-  const pending3P = scopedApps.filter(a => !COMPLETED_STATUSES.includes(a.status) && a.phase === "3P").length
+  const pending1P = scopedApps.filter(a => a.status === "pending" && a.phase === "1P").length
+  const pending3P = scopedApps.filter(a => a.status === "pending" && a.phase === "3P").length
 
   // ── Export ────────────────────────────────────────────────────────────────
   const exportData = useCallback(async () => {
