@@ -57,6 +57,20 @@ async function ensureReplacementTab(id: string) {
       valueInputOption: "RAW",
       requestBody: { values: [REPLACEMENT_HEADERS] }
     })
+  } else {
+    const res = await sheets.spreadsheets.values.get({
+      spreadsheetId: id,
+      range: `${REPLACEMENT_TAB}!A1:O1`
+    })
+    const currentHeaders = res.data.values?.[0] || []
+    if (currentHeaders.length < REPLACEMENT_HEADERS.length) {
+      await sheets.spreadsheets.values.update({
+        spreadsheetId: id,
+        range: `${REPLACEMENT_TAB}!A1`,
+        valueInputOption: "RAW",
+        requestBody: { values: [REPLACEMENT_HEADERS] }
+      })
+    }
   }
   tabReady = true
 }
