@@ -638,6 +638,19 @@ export function MeterList({ userRole, userAgencies, username, agencies }: Props)
                   )}
                 </div>
 
+                {issue.status !== "issued" && (issue.completionRef || issue.installationNo) && (
+                  <div className="pt-2 border-t mt-2 flex flex-col gap-1 text-xs text-gray-500">
+                    <div className="flex flex-wrap gap-x-4 gap-y-1">
+                      {issue.completionRef && (
+                        <p>WO No: <strong className="text-slate-700 font-mono">{issue.completionRef}</strong></p>
+                      )}
+                      {issue.installationNo && (
+                        <p>Inst No: <strong className="text-slate-700 font-mono">{issue.installationNo}</strong></p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 {issue.status === "issued" && (
                   <div className="flex gap-2 mt-3 pt-3 border-t">
                     {/* Agency: complete installation */}

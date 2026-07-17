@@ -102,6 +102,8 @@ export interface NSCApplication {
   isLegacy:             string   // "true" | ""
   // Existing consumer ID — entered by admin at processing stage (searchable)
   existingConsumerId:   string
+  // Application Form PDF URL
+  applicationFormUrl?:  string
 }
 
 // ── NSC Project ───────────────────────────────────────────────────────────────

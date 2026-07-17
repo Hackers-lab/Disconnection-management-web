@@ -34,6 +34,7 @@ const NSC_HEADERS = [
   "Meter Issued At", "Connection Effected At", "Meter Serial No",
   // Added columns (AS–AV) — safe to append, never break existing data
   "Office Ref No", "Project ID", "Is Legacy", "Existing Consumer ID",
+  "Application Form URL",
 ]
 
 const NSC_FIELD_MAP: Record<keyof NSCApplication, string[]> = {
@@ -85,6 +86,7 @@ const NSC_FIELD_MAP: Record<keyof NSCApplication, string[]> = {
   projectId:            ["Project ID", "projectId", "project_id"],
   isLegacy:             ["Is Legacy", "isLegacy", "is_legacy"],
   existingConsumerId:   ["Existing Consumer ID", "existingConsumerId", "existing_consumer_id", "existingconsumerid"],
+  applicationFormUrl:   ["Application Form URL", "applicationFormUrl", "application_form_url"],
 }
 
 // ─── Shared cross-instance cache (Next.js Data Cache) ─────────────────────────
@@ -174,6 +176,7 @@ function parseRow(r: string[], headers: string[]): NSCApplication {
     projectId:            getVal("projectId"),
     isLegacy:             getVal("isLegacy"),
     existingConsumerId:   getVal("existingConsumerId"),
+    applicationFormUrl:   getVal("applicationFormUrl"),
   }
 }
 
@@ -229,6 +232,7 @@ export async function createApplication(req: {
   agency:        string
   createdBy:     string
   officeRefNo?:  string
+  applicationFormUrl?: string
 }): Promise<string> {
   const id = getSpreadsheetId()
   const headers = await ensureHeaders(id, NSC_TAB, NSC_HEADERS)
@@ -254,6 +258,7 @@ export async function createApplication(req: {
   setVal("createdBy", req.createdBy)
   setVal("createdAt", now)
   setVal("officeRefNo", req.officeRefNo || "")
+  setVal("applicationFormUrl", req.applicationFormUrl || "")
 
   const lastColLetter = colLetter(headers.length - 1)
   await sheets.spreadsheets.values.append({

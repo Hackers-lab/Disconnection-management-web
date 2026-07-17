@@ -58,6 +58,7 @@ export function NscViewDialog({ app, open, onClose }: Props) {
         { label: "Class / Phase",   value: `${CLASS_LABELS[app.appliedClass] || app.appliedClass} · ${app.phase}` },
         { label: "Assigned Agency", value: app.agency },
         { label: "Created By",      value: app.createdBy },
+        ...(app.applicationFormUrl ? [{ label: "Application Form PDF", value: app.applicationFormUrl, link: true }] : []),
       ],
     },
     {

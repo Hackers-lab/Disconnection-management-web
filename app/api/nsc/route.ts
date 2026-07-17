@@ -45,6 +45,7 @@ export async function POST(request: NextRequest) {
       agency:        body.agency,
       createdBy:     `${session.role}:${session.username}`,
       officeRefNo:   body.officeRefNo   || "",
+      applicationFormUrl: body.applicationFormUrl || "",
     })
     return NextResponse.json({ success: true, receiveNo })
   } catch (e: any) {

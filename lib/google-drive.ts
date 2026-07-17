@@ -45,7 +45,8 @@ export async function uploadImageToDrive(file: File, consumerId: string): Promis
     const buffer = Buffer.from(arrayBuffer)
     const stream = Readable.from(buffer)
 
-    const fileName = `${consumerId}_${Date.now()}.jpg`
+    const ext = file.name ? (file.name.split(".").pop() || "jpg") : (file.type === "application/pdf" ? "pdf" : "jpg")
+    const fileName = `${consumerId}_${Date.now()}.${ext}`
     const folderId = process.env.GOOGLE_DRIVE_FOLDER_ID
     
     if (!folderId) {
