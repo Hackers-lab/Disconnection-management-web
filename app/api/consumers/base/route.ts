@@ -1,13 +1,16 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { fetchConsumerData } from "@/lib/google-sheets";
+import { withTenant } from "@/lib/tenant-context";
+import { getSpreadsheetId } from "@/lib/google-sheets-api";
 
 // No force-dynamic — allow CDN to cache the response.
 // The 24h s-maxage means most client loads are served from CDN edge.
 // The integrity check below falls back to no-store only when data is incomplete.
 
-export async function GET() {
+export const GET = withTenant(async function GET(req: NextRequest) {
   try {
-    const data = await fetchConsumerData();
+    const spreadsheetId = getSpreadsheetId();
+    const data = await fetchConsumerData(spreadsheetId);
     const lastRow = data[data.length - 1];
 
     // If the last row has an ID but no agency, the sheet may still be loading.
@@ -29,4 +32,4 @@ export async function GET() {
     console.error("💥 API /consumers/base error:", error);
     return NextResponse.json({ error: "Failed to fetch base data" }, { status: 500 });
   }
-}
+})

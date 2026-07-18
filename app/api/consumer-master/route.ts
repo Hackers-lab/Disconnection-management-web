@@ -6,9 +6,11 @@ import {
   invalidateMasterCache,
   type ConsumerMasterRow,
 } from "@/lib/consumer-master-service"
+import { getTenantConfig } from "@/lib/tenant-resolver"
+import { withTenant } from "@/lib/tenant-context"
 
 // All roles can read the consumer master
-export async function GET(request: NextRequest) {
+export const GET = withTenant(async function GET(request: NextRequest) {
   const session = await verifySession()
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   try {
@@ -21,7 +23,8 @@ export async function GET(request: NextRequest) {
       invalidateMasterCache()
     }
 
-    const data = await fetchMasterData()
+    const tenantConfig = await getTenantConfig(session.cccCode)
+    const data = await fetchMasterData(tenantConfig.spreadsheetId)
     
     let result = data
     if (offsetStr !== null || limitStr !== null) {
@@ -42,10 +45,10 @@ export async function GET(request: NextRequest) {
     console.error("Consumer master fetch error:", e)
     return NextResponse.json({ error: e.message || "Failed" }, { status: 500 })
   }
-}
+})
 
 // Only admin can replace/upload the master data
-export async function POST(request: NextRequest) {
+export const POST = withTenant(async function POST(request: NextRequest) {
   const session = await verifySession()
   if (!session || session.role !== "admin") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -57,10 +60,12 @@ export async function POST(request: NextRequest) {
     }
     const rows = body.rows as ConsumerMasterRow[]
     const clearExisting = body.clearExisting !== false
-    const result = await uploadMasterData(rows, clearExisting)
+
+    const tenantConfig = await getTenantConfig(session.cccCode)
+    const result = await uploadMasterData(rows, clearExisting, tenantConfig.spreadsheetId)
     return NextResponse.json({ success: true, count: result.count })
   } catch (e: any) {
     console.error("Consumer master upload error:", e)
     return NextResponse.json({ error: e.message || "Failed" }, { status: 500 })
   }
-}
+})

@@ -103,10 +103,10 @@ function findColumnIndex(headers: string[], searchTerms: string[]): number {
 }
 
 // lib/google-sheets.ts
-export async function getAgencyLastUpdates(): Promise<
+export async function getAgencyLastUpdates(spreadsheetId: string): Promise<
   { name: string; lastUpdate: string; lastUpdateCount: number }[]
 > {
-  const consumers = await fetchConsumerData();
+  const consumers = await fetchConsumerData(spreadsheetId);
 
   // 1. Group all records by agency
   const agencyData = new Map<string, any[]>();
@@ -261,11 +261,9 @@ export const EXPECTED_CONSUMER_HEADERS = [
 
 // Raw worker — does the actual fetch + parse and THROWS on failure so the
 // shared cache never stores an error/mock result.
-async function _fetchConsumerDataRaw(): Promise<ConsumerData[]> {
-    const spreadsheetId =
-      process.env.DISCONNECTION_SHEET?.trim() || process.env.GOOGLE_SHEET_ID
+async function _fetchConsumerDataRaw(spreadsheetId: string): Promise<ConsumerData[]> {
     if (!spreadsheetId) {
-      throw new Error("DISCONNECTION_SHEET env variable not set")
+      throw new Error("spreadsheetId parameter is required")
     }
     const sheetName = process.env.GOOGLE_SHEET_NAME || "Sheet1"
 
@@ -402,14 +400,14 @@ const MOCK_CONSUMERS: ConsumerData[] = [
 // Cross-instance cached read. Errors propagate (and are NOT cached) so the
 // public wrapper below can fall back to mock data without poisoning the cache.
 const _cachedConsumerData = unstable_cache(
-  _fetchConsumerDataRaw,
+  async (spreadsheetId: string) => _fetchConsumerDataRaw(spreadsheetId),
   ["consumer-data"],
-  { revalidate: CONSUMER_REVALIDATE_S, tags: [CONSUMERS_TAG] },
+  { revalidate: CONSUMER_REVALIDATE_S, tags: [CONSUMERS_TAG] }
 )
 
-export async function fetchConsumerData(): Promise<ConsumerData[]> {
+export async function fetchConsumerData(spreadsheetId: string): Promise<ConsumerData[]> {
   try {
-    return await _cachedConsumerData()
+    return await _cachedConsumerData(spreadsheetId)
   } catch (error) {
     console.error("Detailed error in fetchConsumerData:", error)
     return MOCK_CONSUMERS
@@ -419,8 +417,8 @@ export async function fetchConsumerData(): Promise<ConsumerData[]> {
 // Lightweight count + version for /api/system/row-count. Reuses the cached
 // parsed data (no extra Sheets fetch) and hashes only the consumer-ID set —
 // matching the old "column C" semantics at a fraction of the CPU.
-export async function getConsumerCountAndVersion(): Promise<{ count: number; version: string }> {
-  const consumers = await fetchConsumerData()
+export async function getConsumerCountAndVersion(spreadsheetId: string): Promise<{ count: number; version: string }> {
+  const consumers = await fetchConsumerData(spreadsheetId)
   const { createHash } = await import("crypto")
   const version = createHash("md5")
     .update(consumers.map(c => c.consumerId).join("\n"))

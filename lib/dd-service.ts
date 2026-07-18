@@ -21,12 +21,16 @@ export interface DeemedVisitData {
   imageUrl?: string
 }
 
-// 30-second in-memory memo shared across /base, /patch, /row-count calls
+// Warm-function in-memory cache per spreadsheet
 const DD_MEMO_TTL_MS = 60_000
-let ddMemo: { at: number; data: DeemedVisitData[] } | null = null
+let ddMemo: Record<string, { at: number; data: DeemedVisitData[] }> = {}
 
-export function invalidateDDCache() {
-  ddMemo = null
+export function invalidateDDCache(spreadsheetId?: string) {
+  if (spreadsheetId) {
+    delete ddMemo[spreadsheetId]
+  } else {
+    ddMemo = {}
+  }
 }
 
 const DD_COLUMN_MAPPINGS = {
@@ -73,14 +77,14 @@ function parseNumericValue(value: string): string {
   return isNaN(parsed) ? "0" : parsed.toString()
 }
 
-export async function fetchDDData(): Promise<DeemedVisitData[]> {
-  if (ddMemo && Date.now() - ddMemo.at < DD_MEMO_TTL_MS) {
-    return ddMemo.data
+export async function fetchDDData(spreadsheetId: string): Promise<DeemedVisitData[]> {
+  const memo = ddMemo[spreadsheetId]
+  if (memo && Date.now() - memo.at < DD_MEMO_TTL_MS) {
+    return memo.data
   }
 
   try {
-    const spreadsheetId = process.env.DISCONNECTION_SHEET?.trim()
-    if (!spreadsheetId) throw new Error("DISCONNECTION_SHEET env variable not set")
+    if (!spreadsheetId) throw new Error("spreadsheetId parameter is required")
 
     const sheets = await getSheetsClient()
     const response = await sheets.spreadsheets.values.get({
@@ -143,7 +147,7 @@ export async function fetchDDData(): Promise<DeemedVisitData[]> {
       }
     }
 
-    ddMemo = { at: Date.now(), data: records }
+    ddMemo[spreadsheetId] = { at: Date.now(), data: records }
     return records
   } catch (error) {
     console.error("Error fetching DD data from Google Sheets:", error)
@@ -151,8 +155,8 @@ export async function fetchDDData(): Promise<DeemedVisitData[]> {
   }
 }
 
-export async function getDDUpdates(): Promise<DeemedVisitData[]> {
-  const allData = await fetchDDData()
+export async function getDDUpdates(spreadsheetId: string): Promise<DeemedVisitData[]> {
+  const allData = await fetchDDData(spreadsheetId)
 
   // 48-hour window — same as consumer patch, covers timezone differences
   const cutoff = new Date()

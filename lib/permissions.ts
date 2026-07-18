@@ -1,5 +1,6 @@
 import { verifySession } from "./session"
 import { roleStorage } from "./role-storage"
+import { getTenantConfig } from "./tenant-resolver"
 
 export interface AuthResult {
   authorized: boolean
@@ -23,21 +24,26 @@ export async function checkApiPermission(module: string, action: string | string
     return { authorized: true, session }
   }
 
-  // Load permissions for session role
-  const permissions = await roleStorage.getPermissionsForRole(session.role)
-  if (!permissions) {
-    return { authorized: false, error: `Forbidden: Role '${session.role}' not configured`, status: 403, session }
+  try {
+    const tenantConfig = await getTenantConfig(session.cccCode)
+    // Load permissions for session role
+    const permissions = await roleStorage.getPermissionsForRole(session.role, tenantConfig.spreadsheetId)
+    if (!permissions) {
+      return { authorized: false, error: `Forbidden: Role '${session.role}' not configured`, status: 403, session }
+    }
+
+    const modulePerms = permissions[module] || permissions[module.replace(/-/g, "_")] || []
+    const actions = Array.isArray(action) ? action : [action]
+    const hasAccess = actions.some(act => modulePerms.includes(act))
+
+    if (!hasAccess) {
+      return { authorized: false, error: `Forbidden: No ${actions.join(" or ")} access to module '${module}'`, status: 403, session }
+    }
+
+    return { authorized: true, session }
+  } catch (e: any) {
+    return { authorized: false, error: `Tenant config error: ${e.message}`, status: 500, session }
   }
-
-  const modulePerms = permissions[module] || permissions[module.replace(/-/g, "_")] || []
-  const actions = Array.isArray(action) ? action : [action]
-  const hasAccess = actions.some(act => modulePerms.includes(act))
-
-  if (!hasAccess) {
-    return { authorized: false, error: `Forbidden: No ${actions.join(" or ")} access to module '${module}'`, status: 403, session }
-  }
-
-  return { authorized: true, session }
 }
 
 /**

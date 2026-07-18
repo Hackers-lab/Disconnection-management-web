@@ -1,16 +1,17 @@
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import { google } from "googleapis"
 import { auth } from "@/lib/google-drive"
 import { getSpreadsheetId, getSheetName, findColumn, colLetter, ensureHeaders } from "@/lib/google-sheets-api"
 import { _fetchMasterRaw } from "@/lib/consumer-master-service"
 import { EXPECTED_CONSUMER_HEADERS, invalidateConsumerCache } from "@/lib/google-sheets"
 import { verifySession } from "@/lib/session"
+import { withTenant } from "@/lib/tenant-context"
 
 export const maxDuration = 60
 
 const sheets = google.sheets({ version: "v4", auth })
 
-export async function POST() {
+export const POST = withTenant(async function POST(req: NextRequest) {
   const session = await verifySession()
   if (!session || session.role !== "admin") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -21,7 +22,7 @@ export async function POST() {
     const sheetName = getSheetName()
 
     // 1. Load Consumer Master — bypass cache for freshest data
-    const masterRows = await _fetchMasterRaw()
+    const masterRows = await _fetchMasterRaw(spreadsheetId)
     if (masterRows.length === 0) {
       return NextResponse.json({ error: "Consumer Master is empty. Upload it first." }, { status: 400 })
     }
@@ -122,4 +123,4 @@ export async function POST() {
     console.error("refresh-latlong error:", err)
     return NextResponse.json({ error: err.message || "Failed to refresh lat/long" }, { status: 500 })
   }
-}
+})

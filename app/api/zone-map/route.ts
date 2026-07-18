@@ -1,8 +1,9 @@
-import { NextResponse, type NextRequest } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import { google } from "googleapis"
 import { auth } from "@/lib/google-drive"
 import { getSpreadsheetId } from "@/lib/google-sheets-api"
 import { verifySession } from "@/lib/session"
+import { withTenant } from "@/lib/tenant-context"
 
 const TAB = "AgencyZoneMap"
 const HISTORY_TAB = "ZoneMapHistory"
@@ -34,7 +35,7 @@ const normMru = (s: string) => (s || "").trim().toUpperCase()
 
 type ZoneRow = { zone: string; agency: string; address?: string; updatedOn?: string }
 
-export async function GET() {
+export const GET = withTenant(async function GET(request: NextRequest) {
   const session = await verifySession()
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -57,9 +58,9 @@ export async function GET() {
   } catch (e: any) {
     return NextResponse.json({ error: e?.message }, { status: 500 })
   }
-}
+})
 
-export async function POST(request: NextRequest) {
+export const POST = withTenant(async function POST(request: NextRequest) {
   const session = await verifySession()
   if (!session || session.role !== "admin") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -125,4 +126,4 @@ export async function POST(request: NextRequest) {
   } catch (e: any) {
     return NextResponse.json({ error: e?.message }, { status: 500 })
   }
-}
+})

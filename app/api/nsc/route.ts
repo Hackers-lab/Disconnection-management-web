@@ -2,10 +2,11 @@ import { NextRequest, NextResponse } from "next/server"
 import { verifySession } from "@/lib/session"
 import { fetchApplications, createApplication } from "@/lib/nsc-service"
 import { checkApiPermission, isAgencyScopeRestricted } from "@/lib/permissions"
+import { withTenant } from "@/lib/tenant-context"
 
 export const dynamic = "force-dynamic"
 
-export async function GET() {
+export const GET = withTenant(async function GET(request: NextRequest) {
   const { authorized, error, status, session } = await checkApiPermission("nsc", "read")
   if (!authorized) return NextResponse.json({ error }, { status })
 
@@ -16,9 +17,8 @@ export async function GET() {
     return NextResponse.json(all.filter(a => upper.includes((a.agency || "").toUpperCase())))
   }
   return NextResponse.json(all)
-}
-
-export async function POST(request: NextRequest) {
+})
+export const POST = withTenant(async function POST(request: NextRequest) {
   const { authorized, error, status, session } = await checkApiPermission("nsc", "create")
   if (!authorized) return NextResponse.json({ error }, { status })
 
@@ -52,5 +52,5 @@ export async function POST(request: NextRequest) {
     console.error("NSC create error:", e)
     return NextResponse.json({ error: e.message || "Failed" }, { status: 500 })
   }
-}
+})
 

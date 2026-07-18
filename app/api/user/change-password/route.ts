@@ -1,8 +1,9 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { verifySession } from "@/lib/session"
 import { userStorage } from "@/lib/user-storage"
+import { withTenant } from "@/lib/tenant-context"
 
-export async function POST(request: NextRequest) {
+export const POST = withTenant(async function POST(request: NextRequest) {
   const session = await verifySession()
 
   if (!session) {
@@ -38,4 +39,4 @@ export async function POST(request: NextRequest) {
     console.error("Error changing password:", error)
     return NextResponse.json({ error: "Failed to change password" }, { status: 500 })
   }
-}
+})

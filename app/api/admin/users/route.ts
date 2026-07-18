@@ -2,25 +2,38 @@ import { type NextRequest, NextResponse } from "next/server"
 import { verifySession } from "@/lib/session"
 import { userStorage } from "@/lib/user-storage"
 import { checkApiPermission } from "@/lib/permissions"
+import { withTenant, getTenantContext } from "@/lib/tenant-context"
 
 export const dynamic = "force-dynamic"
 
-// GET - List all users
-export async function GET() {
+export const GET = withTenant(async function GET(request: NextRequest) {
   const { authorized, error, status } = await checkApiPermission("admin", "read")
   if (!authorized) {
     return NextResponse.json({ error }, { status })
   }
 
-  const users = await userStorage.getUsers()
-  return NextResponse.json(users)
-}
+  const context = getTenantContext()
+  const cccCode = context?.cccCode || ""
+
+  const allUsers = await userStorage.getUsers()
+  // Filter users by current tenant cccCode
+  const tenantUsers = allUsers.filter((u) => u.cccCode === cccCode)
+  
+  return NextResponse.json(tenantUsers)
+})
 
 // POST - Add new user
-export async function POST(request: NextRequest) {
+export const POST = withTenant(async function POST(request: NextRequest) {
   const { authorized, error, status } = await checkApiPermission("admin", "update")
   if (!authorized) {
     return NextResponse.json({ error }, { status })
+  }
+
+  const context = getTenantContext()
+  const cccCode = context?.cccCode
+
+  if (!cccCode) {
+    return NextResponse.json({ error: "Tenant context not found" }, { status: 400 })
   }
 
   try {
@@ -31,10 +44,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Username and password are required" }, { status: 400 })
     }
 
-    const users = await userStorage.getUsers()
+    const allUsers = await userStorage.getUsers()
 
-    // Check if username already exists
-    if (users.find((u) => u.username === username)) {
+    // Check if username already exists globally
+    if (allUsers.find((u) => u.username === username)) {
       return NextResponse.json({ error: "Username already exists" }, { status: 400 })
     }
 
@@ -43,6 +56,8 @@ export async function POST(request: NextRequest) {
       username,
       password,
       role: role || "agency",
+      cccCode,
+      name: username,
       agencies: agencies || [],
     })
 
@@ -52,27 +67,34 @@ export async function POST(request: NextRequest) {
     console.error("Error adding user:", error)
     return NextResponse.json({ error: "Failed to add user" }, { status: 500 })
   }
-}
+})
 
 // PUT - Update user
-export async function PUT(request: NextRequest) {
+export const PUT = withTenant(async function PUT(request: NextRequest) {
   const { authorized, error, status } = await checkApiPermission("admin", "update")
   if (!authorized) {
     return NextResponse.json({ error }, { status })
   }
 
+  const context = getTenantContext()
+  const cccCode = context?.cccCode
+
+  if (!cccCode) {
+    return NextResponse.json({ error: "Tenant context not found" }, { status: 400 })
+  }
+
   try {
     const { id, username, password, role, agencies } = await request.json()
 
-    const users = await userStorage.getUsers()
-    const existingUser = users.find((u) => u.id === id)
+    const allUsers = await userStorage.getUsers()
+    const existingUser = allUsers.find((u) => u.id === id && u.cccCode === cccCode)
 
     if (!existingUser) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 })
+      return NextResponse.json({ error: "User not found in this tenant" }, { status: 404 })
     }
 
-    // Check if new username conflicts with existing users (excluding current user)
-    if (users.find((u) => u.username === username && u.id !== id)) {
+    // Check if new username conflicts with existing users
+    if (allUsers.find((u) => u.username === username && u.id !== id)) {
       return NextResponse.json({ error: "Username already exists" }, { status: 400 })
     }
 
@@ -80,6 +102,7 @@ export async function PUT(request: NextRequest) {
       username,
       password: password || existingUser.password,
       role,
+      cccCode,
       agencies: agencies || [],
     })
 
@@ -93,13 +116,20 @@ export async function PUT(request: NextRequest) {
     console.error("Error updating user:", error)
     return NextResponse.json({ error: "Failed to update user" }, { status: 500 })
   }
-}
+})
 
 // DELETE - Delete user
-export async function DELETE(request: NextRequest) {
+export const DELETE = withTenant(async function DELETE(request: NextRequest) {
   const { authorized, error, status } = await checkApiPermission("admin", "update")
   if (!authorized) {
     return NextResponse.json({ error }, { status })
+  }
+
+  const context = getTenantContext()
+  const cccCode = context?.cccCode
+
+  if (!cccCode) {
+    return NextResponse.json({ error: "Tenant context not found" }, { status: 400 })
   }
 
   try {
@@ -110,11 +140,11 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: "User ID is required" }, { status: 400 })
     }
 
-    const users = await userStorage.getUsers()
-    const userToDelete = users.find((u) => u.id === id)
+    const allUsers = await userStorage.getUsers()
+    const userToDelete = allUsers.find((u) => u.id === id && u.cccCode === cccCode)
 
     if (!userToDelete) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 })
+      return NextResponse.json({ error: "User not found in this tenant" }, { status: 404 })
     }
 
     // Prevent deleting admin user
@@ -134,4 +164,4 @@ export async function DELETE(request: NextRequest) {
     console.error("Error deleting user:", error)
     return NextResponse.json({ error: "Failed to delete user" }, { status: 500 })
   }
-}
+})

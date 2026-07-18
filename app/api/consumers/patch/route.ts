@@ -1,9 +1,12 @@
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import { fetchConsumerData } from "@/lib/google-sheets"
+import { withTenant } from "@/lib/tenant-context"
+import { getSpreadsheetId } from "@/lib/google-sheets-api"
 
-export async function GET() {
+export const GET = withTenant(async function GET(req: NextRequest) {
   try {
-    const data = await fetchConsumerData()
+    const spreadsheetId = getSpreadsheetId()
+    const data = await fetchConsumerData(spreadsheetId)
 
     // If the dataset is small (e.g., under 100 rows), return it all.
     // This avoids complex date logic for small datasets.
@@ -60,4 +63,4 @@ export async function GET() {
       { status: 500 }
     )
   }
-}
+})

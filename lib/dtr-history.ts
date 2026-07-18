@@ -1,5 +1,4 @@
 import { google } from "googleapis"
-import { getSpreadsheetId } from "./google-sheets-api"
 import { auth } from "./google-drive"
 
 const HISTORY_TAB = "DTR_History"
@@ -26,10 +25,6 @@ export const DTR_HISTORY_HEADERS = [
   "Load Currents", "Verified By", "Remarks", "Image URL", "Location Name"
 ]
 
-function getDtrSpreadsheetId(): string {
-  return process.env.DTR_SHEET?.trim() || getSpreadsheetId()
-}
-
 async function ensureDTRHistoryTab(spreadsheetId: string) {
   try {
     const meta = await sheets.spreadsheets.get({ spreadsheetId })
@@ -52,9 +47,8 @@ async function ensureDTRHistoryTab(spreadsheetId: string) {
   }
 }
 
-export async function fetchDTRHistory(dtrCode: string): Promise<DTRHistoryEntry[]> {
+export async function fetchDTRHistory(dtrCode: string, spreadsheetId: string): Promise<DTRHistoryEntry[]> {
   try {
-    const spreadsheetId = getDtrSpreadsheetId()
     await ensureDTRHistoryTab(spreadsheetId)
     const resp = await sheets.spreadsheets.values.get({
       spreadsheetId,
@@ -86,9 +80,8 @@ export async function fetchDTRHistory(dtrCode: string): Promise<DTRHistoryEntry[
   }
 }
 
-export async function appendDTRHistory(entry: DTRHistoryEntry): Promise<void> {
+export async function appendDTRHistory(entry: DTRHistoryEntry, spreadsheetId: string): Promise<void> {
   try {
-    const spreadsheetId = getDtrSpreadsheetId()
     await ensureDTRHistoryTab(spreadsheetId)
     
     const values = [[

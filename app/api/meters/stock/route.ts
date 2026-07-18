@@ -4,8 +4,9 @@ import {
   fetchStock, fetchIssues, getStockSummary,
   addMeterStock, METER_TYPES,
 } from "@/lib/meter-service"
+import { withTenant } from "@/lib/tenant-context"
 
-export async function GET() {
+export const GET = withTenant(async function GET(request: NextRequest) {
   const session = await verifySession()
   if (!session || !["admin", "executive"].includes(session.role)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -16,9 +17,8 @@ export async function GET() {
     fetchIssues(),
   ])
   return NextResponse.json({ summary, stock, issues })
-}
-
-export async function POST(request: NextRequest) {
+})
+export const POST = withTenant(async function POST(request: NextRequest) {
   const session = await verifySession()
   if (!session || session.role !== "admin") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -41,4 +41,4 @@ export async function POST(request: NextRequest) {
     console.error("Add stock error:", e)
     return NextResponse.json({ error: e.message || "Failed" }, { status: 500 })
   }
-}
+})

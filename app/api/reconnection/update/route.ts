@@ -3,10 +3,11 @@ import { verifySession } from "@/lib/session"
 import { updateReconnectionStatus, fetchReconnectionData } from "@/lib/reconnection-service"
 import { checkApiPermission, isAgencyScopeRestricted } from "@/lib/permissions"
 import { roleStorage } from "@/lib/role-storage"
+import { withTenant } from "@/lib/tenant-context"
 
 export const dynamic = "force-dynamic"
 
-export async function POST(request: NextRequest) {
+export const POST = withTenant(async function POST(request: NextRequest) {
   const { authorized, error, status, session } = await checkApiPermission("reconnection", "update")
   if (!authorized) return NextResponse.json({ error }, { status })
 
@@ -56,5 +57,5 @@ export async function POST(request: NextRequest) {
     console.error("Reconnection update error:", e)
     return NextResponse.json({ error: e.message || "Failed" }, { status: 500 })
   }
-}
+})
 

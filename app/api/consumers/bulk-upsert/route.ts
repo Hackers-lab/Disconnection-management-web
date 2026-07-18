@@ -11,6 +11,7 @@ import {
 import { EXPECTED_CONSUMER_HEADERS, invalidateConsumerCache } from "@/lib/google-sheets"
 import { appendHistory, nowTimestamp, invalidateHistoryCache } from "@/lib/consumer-history"
 import { verifySession } from "@/lib/session"
+import { withTenant } from "@/lib/tenant-context"
 
 export const maxDuration = 60
 
@@ -84,7 +85,7 @@ type UpsertRequest = {
   overrides?: Record<string, "keep" | "replace">
 }
 
-export async function POST(request: NextRequest) {
+export const POST = withTenant(async function POST(request: NextRequest) {
   const session = await verifySession()
   if (!session || session.role !== "admin") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -350,8 +351,8 @@ export async function POST(request: NextRequest) {
 
     // 8. Fire-and-forget history (non-critical, doesn't block response)
     if (historyEntries.length > 0) {
-      appendHistory(historyEntries)
-        .then(() => invalidateHistoryCache())
+      appendHistory(historyEntries, spreadsheetId)
+        .then(() => invalidateHistoryCache(spreadsheetId))
         .catch(e => console.warn("History append failed (non-critical):", e))
     }
 
@@ -370,4 +371,4 @@ export async function POST(request: NextRequest) {
     console.error("bulk-upsert error:", error)
     return NextResponse.json({ error: error?.message || "Bulk upsert failed" }, { status: 500 })
   }
-}
+})

@@ -56,7 +56,7 @@ interface AdminPanelProps {
   onClose: () => void
 }
 
-type ViewType = "menu" | "users" | "agencies" | "payments" | "dcList" | "zoneMap" | "roles"
+type ViewType = "menu" | "users" | "agencies" | "payments" | "dcList" | "zoneMap" | "roles" | "google-onboarding"
 
 interface User {
   id: string
@@ -324,6 +324,30 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
 
   const [view, setView] = useHashState<ViewType>("admin", "menu")
   const [users, setUsers] = useState<User[]>([])
+
+  // Google integration status state
+  const [tenantStatus, setTenantStatus] = useState<{ linked: boolean; driveFolderId?: string; spreadsheetId?: string; cccName?: string; cccCode?: string } | null>(null)
+  const [loadingStatus, setLoadingStatus] = useState(false)
+
+  const fetchTenantStatus = async () => {
+    setLoadingStatus(true)
+    try {
+      const res = await fetch("/api/admin/tenant-status")
+      if (res.ok) {
+        setTenantStatus(await res.json())
+      }
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setLoadingStatus(false)
+    }
+  }
+
+  useEffect(() => {
+    if (view === "google-onboarding") {
+      fetchTenantStatus()
+    }
+  }, [view])
   const [agencies, setAgencies] = useState<Agency[]>([])
   const [roles, setRoles] = useState<any[]>([])
   const [selectedRole, setSelectedRole] = useState<string>("agency")
@@ -1137,7 +1161,118 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
             description="Edit role permissions dynamically"
             onClick={() => setView("roles")}
           />
+          <DashboardCard
+            icon={<KeyRound className="h-12 w-12 text-blue-600" />}
+            title="Google Integration"
+            description="Link Google drive and sheets"
+            onClick={() => setView("google-onboarding")}
+          />
         </div>
+      )}
+
+      {view === "google-onboarding" && (
+        <Card className="max-w-2xl mx-auto">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <KeyRound className="h-6 w-6 text-blue-600" />
+              Google Workspace Integration
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {loadingStatus ? (
+              <div className="flex justify-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+              </div>
+            ) : tenantStatus ? (
+              <div className="space-y-6">
+                <div className="p-4 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm font-medium text-slate-500">CCC Code:</span>
+                    <span className="text-sm font-semibold">{tenantStatus.cccCode}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm font-medium text-slate-500">CCC Name:</span>
+                    <span className="text-sm font-semibold">{tenantStatus.cccName}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm font-medium text-slate-500">Connection Status:</span>
+                    <Badge variant={tenantStatus.linked ? "default" : "destructive"}>
+                      {tenantStatus.linked ? "Linked & Active" : "Not Linked"}
+                    </Badge>
+                  </div>
+                </div>
+
+                {tenantStatus.linked ? (
+                  <div className="space-y-4">
+                    <div className="p-4 rounded-lg border border-green-200 bg-green-50/50 dark:bg-green-950/20 text-sm space-y-3">
+                      <div className="flex items-center gap-2 text-green-700 dark:text-green-400 font-semibold">
+                        <CheckCircle2 className="h-5 w-5" />
+                        Google Drive Storage Configured Successfully
+                      </div>
+                      <p className="text-xs text-slate-600 dark:text-slate-400">
+                        Uploaded image receipts and documents are saved directly to your linked Google Account.
+                      </p>
+                      <div className="space-y-1 font-mono text-xs text-slate-500">
+                        {tenantStatus.driveFolderId && (
+                          <div className="flex items-center gap-1">
+                            <span>Folder ID:</span>
+                            <a
+                              href={`https://drive.google.com/drive/folders/${tenantStatus.driveFolderId}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-blue-600 hover:underline break-all"
+                            >
+                              {tenantStatus.driveFolderId}
+                            </a>
+                          </div>
+                        )}
+                        {tenantStatus.spreadsheetId && (
+                          <div className="flex items-center gap-1">
+                            <span>Spreadsheet:</span>
+                            <a
+                              href={`https://docs.google.com/spreadsheets/d/${tenantStatus.spreadsheetId}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-blue-600 hover:underline break-all"
+                            >
+                              {tenantStatus.spreadsheetId}
+                            </a>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    
+                    <div className="pt-2">
+                      <Button asChild variant="outline" className="w-full">
+                        <a href="/api/auth/google/login">Re-link Google Account</a>
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="p-4 rounded-lg border border-yellow-200 bg-yellow-50/50 dark:bg-yellow-950/20 text-sm space-y-2">
+                      <div className="flex items-center gap-2 text-yellow-700 dark:text-yellow-400 font-semibold">
+                        <AlertCircle className="h-5 w-5" />
+                        Action Required: Link Google Drive
+                      </div>
+                      <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+                        To store uploaded images (e.g. meter replacement files and disconnection proofs) under your own Google API limits, you must authorize this application. We will automatically provision a folder named <code className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-xs font-semibold">Disconnection_App_Storage</code> in your Drive.
+                      </p>
+                    </div>
+                    <Button asChild className="w-full">
+                      <a href="/api/auth/google/login">
+                        <KeyRound className="h-4 w-4 mr-2" />
+                        Link Google Account
+                      </a>
+                    </Button>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="text-center text-sm text-slate-500">Failed to load tenant status configuration.</p>
+            )}
+          </CardContent>
+        </Card>
       )}
 
   {view === "users" && (

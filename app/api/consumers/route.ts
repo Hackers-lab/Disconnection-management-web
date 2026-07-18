@@ -1,12 +1,18 @@
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import { fetchConsumerData } from "@/lib/google-sheets"
+import { verifySession } from "@/lib/session"
+import { getTenantConfig } from "@/lib/tenant-resolver"
+import { withTenant } from "@/lib/tenant-context"
 
-export async function GET() {
-  //console.log("🚀 API /consumers called")
+export const GET = withTenant(async function GET(req: NextRequest) {
+  const session = await verifySession()
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
 
   try {
-    //console.log("📡 Starting fetchConsumerData...")
-    const data = await fetchConsumerData()
+    const tenantConfig = await getTenantConfig(session.cccCode)
+    const data = await fetchConsumerData(tenantConfig.spreadsheetId)
     //console.log(`✅ API: Successfully fetched ${data.length} consumers`)
 
     // Add some sample data to ensure the API works
@@ -100,4 +106,4 @@ export async function GET() {
 
     return NextResponse.json(fallbackData, { status: 200 })
   }
-}
+})

@@ -1,8 +1,9 @@
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import { checkApiPermission } from "@/lib/permissions"
 import { getReceiveHistory, addReceives, deleteReceive } from "@/lib/material-service"
+import { withTenant } from "@/lib/tenant-context"
 
-export async function GET() {
+export const GET = withTenant(async function GET(req: NextRequest) {
   const { authorized, error, status } = await checkApiPermission("material", ["read", "receive", "settings"])
   if (!authorized) return NextResponse.json({ error }, { status: status || 403 })
 
@@ -13,9 +14,9 @@ export async function GET() {
     console.error("Material receive history error:", e)
     return NextResponse.json({ error: e.message }, { status: 500 })
   }
-}
+})
 
-export async function POST(req: Request) {
+export const POST = withTenant(async function POST(req: NextRequest) {
   const { authorized, error, status, session } = await checkApiPermission("material", ["create", "receive"])
   if (!authorized) return NextResponse.json({ error }, { status: status || 403 })
 
@@ -52,9 +53,9 @@ export async function POST(req: Request) {
     console.error("Add receive error:", e)
     return NextResponse.json({ error: e.message }, { status: 500 })
   }
-}
+})
 
-export async function DELETE(req: Request) {
+export const DELETE = withTenant(async function DELETE(req: NextRequest) {
   const { authorized, error, status } = await checkApiPermission("material", ["delete", "settings"])
   if (!authorized) return NextResponse.json({ error }, { status: status || 403 })
 
@@ -72,4 +73,4 @@ export async function DELETE(req: Request) {
     console.error("Delete receive error:", e)
     return NextResponse.json({ error: e.message }, { status: 500 })
   }
-}
+})

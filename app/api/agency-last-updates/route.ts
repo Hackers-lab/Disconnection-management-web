@@ -1,5 +1,7 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { getAgencyLastUpdates } from '@/lib/google-sheets'; // Your data source
+import { withTenant } from '@/lib/tenant-context';
+import { getSpreadsheetId } from '@/lib/google-sheets-api';
 
 // Define the response type
 type AgencyUpdate = {
@@ -8,9 +10,10 @@ type AgencyUpdate = {
   lastUpdateCount: number;
 };
 
-export async function GET() {
+export const GET = withTenant(async function GET(req: NextRequest) {
   try {
-    const updates = await getAgencyLastUpdates();
+    const spreadsheetId = getSpreadsheetId();
+    const updates = await getAgencyLastUpdates(spreadsheetId);
 
     if (!Array.isArray(updates)) {
       throw new Error('Invalid data format from getAgencyLastUpdates');
@@ -30,4 +33,4 @@ export async function GET() {
       { status: 500 }
     );
   }
-}
+})

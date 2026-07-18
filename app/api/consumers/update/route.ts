@@ -5,6 +5,8 @@ import { invalidateConsumerCache, fetchConsumerData, type ConsumerData } from "@
 import { appendHistory, nowTimestamp, invalidateHistoryCache } from "@/lib/consumer-history"
 import { verifySession } from "@/lib/session"
 import { checkApiPermission, isAgencyScopeRestricted } from "@/lib/permissions"
+import { getTenantConfig } from "@/lib/tenant-resolver"
+import { withTenant } from "@/lib/tenant-context"
 
 export const dynamic = "force-dynamic"
 
@@ -16,7 +18,7 @@ type UpdatePayload = ConsumerData & {
   previousNotes?: string
 }
 
-export async function POST(request: NextRequest) {
+export const POST = withTenant(async function POST(request: NextRequest) {
   try {
     const { authorized, error, status, session } = await checkApiPermission("disconnection", "update")
     if (!authorized) {
@@ -24,9 +26,11 @@ export async function POST(request: NextRequest) {
     }
 
     const consumer: UpdatePayload = await request.json()
+    const tenantConfig = await getTenantConfig(session.cccCode)
+    const spreadsheetId = tenantConfig.spreadsheetId
 
     // Scoping check for agency/executive roles
-    const allConsumers = await fetchConsumerData()
+    const allConsumers = await fetchConsumerData(spreadsheetId)
     const existing = allConsumers.find((c) => c.consumerId === consumer.consumerId)
     
     if (
@@ -42,7 +46,7 @@ export async function POST(request: NextRequest) {
     console.log(`🔄 Updating consumer ${consumer.consumerId}...`)
 
     // Use the direct Sheets API function
-    const result = await updateConsumerInGoogleSheet(consumer)
+    const result = await updateConsumerInGoogleSheet(consumer, spreadsheetId)
 
     // Invalidate the warm-function memo so the next /base or /patch read
     // reflects this write immediately within this container.
@@ -53,7 +57,6 @@ export async function POST(request: NextRequest) {
     const newStatus = String(consumer.disconStatus || "").trim()
     const oldStatus = String(consumer.previousStatus || "").trim()
     if (newStatus && newStatus.toLowerCase() !== oldStatus.toLowerCase()) {
-      const session = await verifySession().catch(() => null)
       appendHistory([{
         timestamp: nowTimestamp(),
         consumerId: String(consumer.consumerId || ""),
@@ -66,8 +69,8 @@ export async function POST(request: NextRequest) {
         oldImageUrl: String(consumer.imageUrl || ""),
         changedBy: session?.role ? `${session.role}${session.agencies?.[0] ? ":" + session.agencies[0] : ""}` : "field",
         eventDate: String(consumer.disconDate || ""),
-      }])
-        .then(() => invalidateHistoryCache())
+      }], spreadsheetId)
+        .then(() => invalidateHistoryCache(spreadsheetId))
         .catch(e => console.warn("Field history append failed (non-critical):", e))
     }
 
@@ -83,4 +86,4 @@ export async function POST(request: NextRequest) {
       { status: 500 },
     )
   }
-}
+})

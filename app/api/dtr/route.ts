@@ -1,33 +1,37 @@
 import { NextRequest, NextResponse } from "next/server"
 import { verifySession } from "@/lib/session"
 import { checkApiPermission } from "@/lib/permissions"
+import { getSpreadsheetId } from "@/lib/google-sheets-api"
+import { withTenant } from "@/lib/tenant-context"
 
 export const dynamic = "force-dynamic"
 import { fetchDTRData, updateDTRRecord, uploadDTRData, DTRRecord } from "@/lib/dtr-service"
 import { nowTs } from "@/lib/date-utils"
 import { appendDTRHistory } from "@/lib/dtr-history"
 
-export async function GET() {
-  let { authorized, error, status } = await checkApiPermission("dtr", "read")
+export const GET = withTenant(async function GET(request: NextRequest) {
+  let { authorized, error, status, session } = await checkApiPermission("dtr", "read")
   if (!authorized) {
     const fallback = await checkApiPermission("dtr_painting", "read")
     if (fallback.authorized) {
       authorized = true
+      session = fallback.session
     } else {
       return NextResponse.json({ error }, { status })
     }
   }
 
   try {
-    const all = await fetchDTRData()
+    const spreadsheetId = getSpreadsheetId()
+    const all = await fetchDTRData(spreadsheetId)
     return NextResponse.json(all)
   } catch (e: any) {
     console.error("💥 DTR fetch error:", e)
     return NextResponse.json({ error: e.message || "Failed to fetch DTR data" }, { status: 500 })
   }
-}
+})
 
-export async function POST(request: NextRequest) {
+export const POST = withTenant(async function POST(request: NextRequest) {
   const { authorized, error, status, session } = await checkApiPermission("dtr", "update")
   if (!authorized) return NextResponse.json({ error }, { status })
 
@@ -76,7 +80,8 @@ export async function POST(request: NextRequest) {
       paintingImage:  String(body.paintingImage || "").trim(),
     }
 
-    await updateDTRRecord(record, originalDtrCode)
+    const spreadsheetId = getSpreadsheetId()
+    await updateDTRRecord(record, originalDtrCode, spreadsheetId)
 
     // Save update to DTR History sheet
     await appendDTRHistory({
@@ -92,16 +97,16 @@ export async function POST(request: NextRequest) {
       remarks: record.remarks || "",
       imageUrl: record.image || "",
       locationName: record.actualLocation || record.locationName
-    })
+    }, spreadsheetId)
 
     return NextResponse.json({ success: true, record })
   } catch (e: any) {
     console.error("💥 DTR update error:", e)
     return NextResponse.json({ error: e.message || "Failed to update DTR record" }, { status: 500 })
   }
-}
+})
 
-export async function PUT(request: NextRequest) {
+export const PUT = withTenant(async function PUT(request: NextRequest) {
   const { authorized, error, status } = await checkApiPermission("dtr", "create")
   if (!authorized) return NextResponse.json({ error }, { status })
 
@@ -139,10 +144,11 @@ export async function PUT(request: NextRequest) {
       paintingImage:  String(r.paintingImage || r["Painting Image"] || r["paintingimage"] || "").trim(),
     }))
 
-    const count = await uploadDTRData(dtrRows, true)
+    const spreadsheetId = getSpreadsheetId()
+    const count = await uploadDTRData(dtrRows, true, spreadsheetId)
     return NextResponse.json({ success: true, count })
   } catch (e: any) {
     console.error("💥 DTR bulk upload error:", e)
     return NextResponse.json({ error: e.message || "Failed to upload DTR data" }, { status: 500 })
   }
-}
+})

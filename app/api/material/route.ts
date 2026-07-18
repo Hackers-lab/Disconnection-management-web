@@ -1,8 +1,9 @@
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import { checkApiPermission } from "@/lib/permissions"
-import { getStock, getCatalogue } from "@/lib/material-service"
+import { getStock, getCatalogue, invalidateMaterialCache } from "@/lib/material-service"
+import { withTenant } from "@/lib/tenant-context"
 
-export async function GET(req: Request) {
+export const GET = withTenant(async function GET(req: NextRequest) {
   const { authorized, error, status } = await checkApiPermission("material", ["read", "stock", "receive", "issue", "settings"])
   if (!authorized) return NextResponse.json({ error }, { status: status || 403 })
 
@@ -17,4 +18,4 @@ export async function GET(req: Request) {
     console.error("Material stock error:", e)
     return NextResponse.json({ error: e.message }, { status: 500 })
   }
-}
+})

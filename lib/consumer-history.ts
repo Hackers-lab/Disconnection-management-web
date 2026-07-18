@@ -1,6 +1,5 @@
 import { google } from "googleapis"
 import { auth } from "./google-drive"
-import { getSpreadsheetId } from "./google-sheets-api"
 
 const sheets = google.sheets({ version: "v4", auth })
 
@@ -28,14 +27,16 @@ export interface HistoryEntry {
   eventDate?: string    // date the event occurred (e.g. paid date, disconnect date)
 }
 
-// Warm-function in-memory cache. History reads are rare (user-triggered) but
-// when the consumer form is open, several rows may be requested in sequence.
-// 30s TTL matches the consumer data cache.
+// Warm-function in-memory cache per spreadsheet.
 const HISTORY_MEMO_TTL_MS = 60_000
-let historyMemo: { at: number; data: HistoryEntry[] } | null = null
+let historyMemo: Record<string, { at: number; data: HistoryEntry[] }> = {}
 
-export function invalidateHistoryCache() {
-  historyMemo = null
+export function invalidateHistoryCache(spreadsheetId?: string) {
+  if (spreadsheetId) {
+    delete historyMemo[spreadsheetId]
+  } else {
+    historyMemo = {}
+  }
 }
 
 async function ensureHistoryTab(spreadsheetId: string) {
@@ -68,11 +69,10 @@ async function ensureHistoryTab(spreadsheetId: string) {
   }
 }
 
-async function fetchAllHistory(): Promise<HistoryEntry[]> {
-  const id = getSpreadsheetId()
-  await ensureHistoryTab(id)
+async function fetchAllHistory(spreadsheetId: string): Promise<HistoryEntry[]> {
+  await ensureHistoryTab(spreadsheetId)
   const resp = await sheets.spreadsheets.values.get({
-    spreadsheetId: id,
+    spreadsheetId,
     range: `${HISTORY_TAB}!A:L`,
   })
   const rows = (resp.data.values || []).slice(1) // skip header
@@ -93,35 +93,36 @@ async function fetchAllHistory(): Promise<HistoryEntry[]> {
 }
 
 // Public read — uses memo so repeated calls within 30s cost 0 API calls.
-export async function getHistoryForConsumer(consumerId: string): Promise<HistoryEntry[]> {
+export async function getHistoryForConsumer(consumerId: string, spreadsheetId: string): Promise<HistoryEntry[]> {
   const now = Date.now()
-  if (!historyMemo || now - historyMemo.at > HISTORY_MEMO_TTL_MS) {
-    const all = await fetchAllHistory()
-    historyMemo = { at: now, data: all }
+  const memo = historyMemo[spreadsheetId]
+  if (!memo || now - memo.at > HISTORY_MEMO_TTL_MS) {
+    const all = await fetchAllHistory(spreadsheetId)
+    historyMemo[spreadsheetId] = { at: now, data: all }
   }
-  return historyMemo.data
+  return historyMemo[spreadsheetId].data
     .filter(h => h.consumerId === consumerId)
     .sort((a, b) => b.timestamp.localeCompare(a.timestamp)) // newest first
 }
 
 // Public read — retrieves full history memoized
-export async function getFullHistory(): Promise<HistoryEntry[]> {
+export async function getFullHistory(spreadsheetId: string): Promise<HistoryEntry[]> {
   const now = Date.now()
-  if (!historyMemo || now - historyMemo.at > HISTORY_MEMO_TTL_MS) {
-    const all = await fetchAllHistory()
-    historyMemo = { at: now, data: all }
+  const memo = historyMemo[spreadsheetId]
+  if (!memo || now - memo.at > HISTORY_MEMO_TTL_MS) {
+    const all = await fetchAllHistory(spreadsheetId)
+    historyMemo[spreadsheetId] = { at: now, data: all }
   }
-  return historyMemo.data.sort((a, b) => b.timestamp.localeCompare(a.timestamp))
+  return historyMemo[spreadsheetId].data.sort((a, b) => b.timestamp.localeCompare(a.timestamp))
 }
 
 // Append history rows. Called from update route and bulk-upsert.
 // Batches multiple entries into a single append call.
-export async function appendHistory(entries: HistoryEntry[]): Promise<void> {
+export async function appendHistory(entries: HistoryEntry[], spreadsheetId: string): Promise<void> {
   if (!entries.length) return
-  const id = getSpreadsheetId()
-  await ensureHistoryTab(id)
+  await ensureHistoryTab(spreadsheetId)
   await sheets.spreadsheets.values.append({
-    spreadsheetId: id,
+    spreadsheetId,
     range: `${HISTORY_TAB}!A:L`,
     valueInputOption: "RAW",
     requestBody: {
@@ -133,7 +134,7 @@ export async function appendHistory(entries: HistoryEntry[]): Promise<void> {
     },
   })
   // Invalidate memo so the new entry shows on next read
-  historyMemo = null
+  delete historyMemo[spreadsheetId]
 }
 
 export function nowTimestamp(): string {

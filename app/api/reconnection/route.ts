@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { verifySession } from "@/lib/session"
 import { checkApiPermission, isAgencyScopeRestricted } from "@/lib/permissions"
+import { withTenant } from "@/lib/tenant-context"
 
 export const dynamic = "force-dynamic"
 import {
@@ -8,7 +9,7 @@ import {
   createReconnectionRequest,
 } from "@/lib/reconnection-service"
 
-export async function GET() {
+export const GET = withTenant(async function GET(request: NextRequest) {
   const { authorized, error, status, session } = await checkApiPermission("reconnection", "read")
   if (!authorized) return NextResponse.json({ error }, { status })
 
@@ -21,9 +22,8 @@ export async function GET() {
   }
 
   return NextResponse.json(all)
-}
-
-export async function POST(request: NextRequest) {
+})
+export const POST = withTenant(async function POST(request: NextRequest) {
   const { authorized, error, status, session } = await checkApiPermission("reconnection", "create")
   if (!authorized) return NextResponse.json({ error }, { status })
 
@@ -51,5 +51,5 @@ export async function POST(request: NextRequest) {
     console.error("Reconnection create error:", e)
     return NextResponse.json({ error: e.message || "Failed" }, { status: 500 })
   }
-}
+})
 

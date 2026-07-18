@@ -28,10 +28,10 @@ export interface ConsumerMasterRow {
   longitude:   string
 }
 
-let tabReady = false
+let tabReady: Record<string, boolean> = {}
 
 async function ensureTab(id: string) {
-  if (tabReady) return
+  if (tabReady[id]) return
   const meta = await sheets.spreadsheets.get({ spreadsheetId: id })
   const existing = (meta.data.sheets || []).map(s => s.properties?.title)
   if (!existing.includes(MASTER_TAB)) {
@@ -45,7 +45,7 @@ async function ensureTab(id: string) {
       requestBody: { values: [MASTER_HEADERS] },
     })
   }
-  tabReady = true
+  tabReady[id] = true
 }
 
 function parseRow(r: string[]): ConsumerMasterRow {
@@ -65,16 +65,15 @@ function parseRow(r: string[]): ConsumerMasterRow {
 
 // ── Raw fetch (used by write paths so they see live data) ─────────────────────
 // Exported so the refresh-latlong API can bypass the 30-day cache.
-export async function _fetchMasterRaw(): Promise<ConsumerMasterRow[]> {
-  const id = getSpreadsheetId()
-  await ensureTab(id)
-  const res = await sheets.spreadsheets.values.get({ spreadsheetId: id, range: `${MASTER_TAB}!A:J` })
+export async function _fetchMasterRaw(spreadsheetId: string): Promise<ConsumerMasterRow[]> {
+  await ensureTab(spreadsheetId)
+  const res = await sheets.spreadsheets.values.get({ spreadsheetId, range: `${MASTER_TAB}!A:J` })
   return (res.data.values || []).slice(1).filter(r => r[0]).map(r => parseRow(r.map(String)))
 }
 
 // ── Cached read ───────────────────────────────────────────────────────────────
 export const fetchMasterData = unstable_cache(
-  _fetchMasterRaw,
+  async (spreadsheetId: string) => _fetchMasterRaw(spreadsheetId),
   ["consumer-master-data"],
   { revalidate: MASTER_REVALIDATE, tags: [MASTER_TAG] },
 )
@@ -82,14 +81,13 @@ export const fetchMasterData = unstable_cache(
 export function invalidateMasterCache() { revalidateTag(MASTER_TAG) }
 
 // ── Upload (replaces entire sheet data) ──────────────────────────────────────
-export async function uploadMasterData(rows: ConsumerMasterRow[], clearExisting: boolean = true): Promise<{ count: number }> {
-  const id = getSpreadsheetId()
-  await ensureTab(id)
+export async function uploadMasterData(rows: ConsumerMasterRow[], clearExisting: boolean = true, spreadsheetId: string): Promise<{ count: number }> {
+  await ensureTab(spreadsheetId)
 
   if (clearExisting) {
     // Clear existing data (keep header row)
     await sheets.spreadsheets.values.clear({
-      spreadsheetId: id,
+      spreadsheetId,
       range: `${MASTER_TAB}!A2:J`,
     })
   }
@@ -113,7 +111,7 @@ export async function uploadMasterData(rows: ConsumerMasterRow[], clearExisting:
 
     try {
       const result = await sheets.spreadsheets.values.append({
-        spreadsheetId: id,
+        spreadsheetId,
         range: `${MASTER_TAB}!A:A`,
         valueInputOption: "RAW",
         requestBody: { values },

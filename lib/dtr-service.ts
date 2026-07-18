@@ -1,6 +1,5 @@
 import { google } from "googleapis"
 import { unstable_cache, revalidateTag } from "next/cache"
-import { getSpreadsheetId } from "./google-sheets-api"
 import { auth } from "./google-drive"
 
 const TAB = "DTR"
@@ -49,10 +48,6 @@ export const DTR_HEADERS = [
 
 function norm(s: string) {
   return s.toLowerCase().replace(/[^a-z0-9]/g, "")
-}
-
-function getDtrSpreadsheetId(): string {
-  return process.env.DTR_SHEET?.trim() || getSpreadsheetId()
 }
 
 async function ensureHeaders(spreadsheetId: string) {
@@ -140,8 +135,7 @@ function parseRow(r: string[]): DTRRecord {
 }
 
 // Raw fetch for updates
-async function _fetchDTRDataRaw(): Promise<DTRRecord[]> {
-  const spreadsheetId = getDtrSpreadsheetId()
+async function _fetchDTRDataRaw(spreadsheetId: string): Promise<DTRRecord[]> {
   await ensureHeaders(spreadsheetId)
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId,
@@ -154,7 +148,7 @@ async function _fetchDTRDataRaw(): Promise<DTRRecord[]> {
 
 // Cached read
 export const fetchDTRData = unstable_cache(
-  _fetchDTRDataRaw,
+  async (spreadsheetId: string) => _fetchDTRDataRaw(spreadsheetId),
   ["dtr-list-data"],
   { revalidate: DTR_REVALIDATE, tags: [DTR_TAG] }
 )
@@ -163,8 +157,7 @@ export function invalidateDTRCache() {
   revalidateTag(DTR_TAG)
 }
 
-export async function updateDTRRecord(record: DTRRecord, originalDtrCode?: string): Promise<void> {
-  const spreadsheetId = getDtrSpreadsheetId()
+export async function updateDTRRecord(record: DTRRecord, originalDtrCode: string | undefined, spreadsheetId: string): Promise<void> {
   await ensureHeaders(spreadsheetId)
   
   // Find row by reading DTR Code column
@@ -217,8 +210,7 @@ export async function updateDTRRecord(record: DTRRecord, originalDtrCode?: strin
   invalidateDTRCache()
 }
 
-export async function uploadDTRData(rows: Omit<DTRRecord, "verifiedBy" | "verifiedAt">[], clearExisting = true): Promise<number> {
-  const spreadsheetId = getDtrSpreadsheetId()
+export async function uploadDTRData(rows: Omit<DTRRecord, "verifiedBy" | "verifiedAt">[], clearExisting: boolean, spreadsheetId: string): Promise<number> {
   await ensureHeaders(spreadsheetId)
 
   if (clearExisting) {
@@ -275,9 +267,9 @@ export async function updateDTRPainting(
   painting: string,
   image: string,
   remarks: string,
-  verifiedBy: string
+  verifiedBy: string,
+  spreadsheetId: string
 ): Promise<void> {
-  const spreadsheetId = getDtrSpreadsheetId()
   await ensureHeaders(spreadsheetId)
 
   // Find row by reading DTR Code column

@@ -1,6 +1,7 @@
 import { google, sheets_v4 } from "googleapis"
 import { auth } from "./google-drive"
 import { EXPECTED_CONSUMER_HEADERS, type ConsumerData } from "./google-sheets"
+import { getTenantContext } from "./tenant-context"
 
 const sheets = google.sheets({ version: "v4", auth })
 
@@ -26,6 +27,11 @@ export const colLetter = (i: number) => {
 }
 
 export function getSpreadsheetId() {
+  const context = getTenantContext()
+  if (context?.spreadsheetId) {
+    return context.spreadsheetId
+  }
+
   const id =
     process.env.DISCONNECTION_SHEET?.trim() ||
     process.env.USERS_SHEET?.trim() ||
@@ -93,9 +99,9 @@ const FIELD_MAP: Partial<Record<keyof ConsumerData, string[]>> = {
   paymentSource: ["payment source", "paymentsource", "payment mode"],
 }
 
-export async function updateConsumerInGoogleSheet(consumer: ConsumerData) {
+export async function updateConsumerInGoogleSheet(consumer: ConsumerData, spreadsheetId: string) {
   try {
-    const spreadsheetId = getSpreadsheetId()
+    if (!spreadsheetId) throw new Error("spreadsheetId parameter is required")
     const sheetName = getSheetName()
 
     // 1. Ensure all expected columns exist.

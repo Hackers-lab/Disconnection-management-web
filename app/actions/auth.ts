@@ -6,24 +6,6 @@ import { createSession, deleteSession } from "@/lib/session"
 import { userStorage } from "@/lib/user-storage"
 import { appendLoginLog } from "@/lib/login-logger"
 
-// Function to get current users (used by admin API)
-export async function getCurrentUsers() {
-  return await userStorage.getUsers()
-}
-
-// Function to update users (used by admin API)
-export async function updateUsers(
-  newUsers: Array<{
-    id: string
-    username: string
-    password: string
-    role: string
-    agencies: string[]
-  }>,
-) {
-  await userStorage.setUsers(newUsers)
-}
-
 // Function to get a specific user by credentials
 export async function getUserByCredentials(username: string, password: string) {
   return await userStorage.findUserByCredentials(username, password)
@@ -61,7 +43,7 @@ export async function login(formData: FormData) {
   }
 
   console.log("✅ Login successful for:", username, "Role:", user.role)
-  await createSession(user.id, username, user.role, user.agencies)
+  await createSession(user.id, username, user.role, user.agencies, user.cccCode)
 
   // Fire-and-forget: log the successful login, never await
   appendLoginLog({
@@ -72,7 +54,11 @@ export async function login(formData: FormData) {
     agencies: user.agencies,
   }).catch(() => {})
 
-  redirect("/dashboard")
+  if (user.role === "superuser") {
+    redirect("/superuser")
+  } else {
+    redirect("/dashboard")
+  }
 }
 
 export async function logout() {

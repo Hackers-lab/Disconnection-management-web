@@ -1,4 +1,5 @@
 import { google } from "googleapis"
+import { getSpreadsheetId } from "./google-sheets-api"
 
 const SHEET_ID = process.env.USERS_SHEET!
 const SHEET_NAME = "AppRoles"
@@ -134,7 +135,7 @@ type CachedRoles = { roles: RolePermissions[]; timestamp: number }
 
 export class RoleStorage {
   static instance: RoleStorage
-  private _cache: CachedRoles | null = null
+  private _cache: Record<string, CachedRoles> = {}
   private readonly _CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes
 
   static getInstance() {
@@ -142,8 +143,12 @@ export class RoleStorage {
     return RoleStorage.instance
   }
 
-  invalidateCache() {
-    this._cache = null
+  invalidateCache(spreadsheetId?: string) {
+    if (spreadsheetId) {
+      delete this._cache[spreadsheetId]
+    } else {
+      this._cache = {}
+    }
   }
 
   private _parseRows(rows: any[][]): RolePermissions[] {
@@ -159,18 +164,18 @@ export class RoleStorage {
       })
   }
 
-  private async _ensureTab(sheets: any) {
+  private async _ensureTab(sheets: any, spreadsheetId: string) {
     try {
-      const spreadsheet = await sheets.spreadsheets.get({ spreadsheetId: SHEET_ID })
+      const spreadsheet = await sheets.spreadsheets.get({ spreadsheetId })
       const tabExists = spreadsheet.data.sheets?.some(
         (s: any) => s.properties?.title === SHEET_NAME
       )
 
       if (!tabExists) {
-        console.log(`Creating missing tab "${SHEET_NAME}"...`)
+        console.log(`Creating missing tab "${SHEET_NAME}" in spreadsheet ${spreadsheetId}...`)
         // Add tab
         await sheets.spreadsheets.batchUpdate({
-          spreadsheetId: SHEET_ID,
+          spreadsheetId,
           requestBody: {
             requests: [{ addSheet: { properties: { title: SHEET_NAME } } }],
           },
@@ -187,7 +192,7 @@ export class RoleStorage {
         ]
 
         await sheets.spreadsheets.values.update({
-          spreadsheetId: SHEET_ID,
+          spreadsheetId,
           range: `${SHEET_NAME}!A1`,
           valueInputOption: "RAW",
           requestBody: { values },
@@ -195,19 +200,19 @@ export class RoleStorage {
       } else {
         // Tab exists. Let's check headers.
         const res = await sheets.spreadsheets.values.get({
-          spreadsheetId: SHEET_ID,
+          spreadsheetId,
           range: `${SHEET_NAME}!A1:Z`,
         })
         const allRows = res.data.values || []
         const headers = allRows[0] || []
 
         if (!headers.includes("meter_replacement") || !headers.includes("dtr_painting") || !headers.includes("material")) {
-          console.log(`Updating "${SHEET_NAME}" with new headers and default permissions for missing columns...`)
+          console.log(`Updating "${SHEET_NAME}" with new headers and default permissions for missing columns in ${spreadsheetId}...`)
           
           // 1. Update header row
           const newHeaders = ["Role", ...MODULES]
           await sheets.spreadsheets.values.update({
-            spreadsheetId: SHEET_ID,
+            spreadsheetId,
             range: `${SHEET_NAME}!A1`,
             valueInputOption: "RAW",
             requestBody: { values: [newHeaders] },
@@ -233,7 +238,7 @@ export class RoleStorage {
 
           if (updatedRows.length > 0) {
             await sheets.spreadsheets.values.update({
-              spreadsheetId: SHEET_ID,
+              spreadsheetId,
               range: `${SHEET_NAME}!A2`,
               valueInputOption: "RAW",
               requestBody: { values: updatedRows },
@@ -246,15 +251,16 @@ export class RoleStorage {
     }
   }
 
-  async getRoles(): Promise<RolePermissions[]> {
-    if (this._cache && Date.now() - this._cache.timestamp < this._CACHE_TTL_MS) {
-      return this._cache.roles
+  async getRoles(spreadsheetId: string = getSpreadsheetId()): Promise<RolePermissions[]> {
+    const cached = this._cache[spreadsheetId]
+    if (cached && Date.now() - cached.timestamp < this._CACHE_TTL_MS) {
+      return cached.roles
     }
     const sheets = await getSheetsClient()
-    await this._ensureTab(sheets)
+    await this._ensureTab(sheets, spreadsheetId)
 
     const res = await sheets.spreadsheets.values.get({
-      spreadsheetId: SHEET_ID,
+      spreadsheetId,
       range: `${SHEET_NAME}!A2:Z`,
     })
     const rows = res.data.values || []
@@ -263,7 +269,7 @@ export class RoleStorage {
     // Ensure at least admin exists if sheet was manually emptied
     if (roles.length === 0) {
       await sheets.spreadsheets.values.update({
-        spreadsheetId: SHEET_ID,
+        spreadsheetId,
         range: `${SHEET_NAME}!A2`,
         valueInputOption: "RAW",
         requestBody: {
@@ -275,16 +281,16 @@ export class RoleStorage {
           ],
         },
       })
-      this.invalidateCache()
-      return this.getRoles()
+      this.invalidateCache(spreadsheetId)
+      return this.getRoles(spreadsheetId)
     }
 
-    this._cache = { roles, timestamp: Date.now() }
+    this._cache[spreadsheetId] = { roles, timestamp: Date.now() }
     return roles
   }
 
-  async getPermissionsForRole(roleName: string): Promise<Record<string, string[]> | null> {
-    const roles = await this.getRoles()
+  async getPermissionsForRole(roleName: string, spreadsheetId: string = getSpreadsheetId()): Promise<Record<string, string[]> | null> {
+    const roles = await this.getRoles(spreadsheetId)
     const r = roles.find((x) => x.role.toLowerCase() === roleName.toLowerCase())
     if (!r) return null
 
@@ -295,10 +301,10 @@ export class RoleStorage {
     return perms
   }
 
-  async addOrUpdateRole(role: RolePermissions) {
+  async addOrUpdateRole(role: RolePermissions, spreadsheetId: string = getSpreadsheetId()) {
     const sheets = await getSheetsClient()
-    await this._ensureTab(sheets)
-    const roles = await this.getRoles()
+    await this._ensureTab(sheets, spreadsheetId)
+    const roles = await this.getRoles(spreadsheetId)
 
     const idx = roles.findIndex(
       (x) => x.role.toLowerCase() === role.role.toLowerCase()
@@ -308,7 +314,7 @@ export class RoleStorage {
     if (idx === -1) {
       // Append
       await sheets.spreadsheets.values.append({
-        spreadsheetId: SHEET_ID,
+        spreadsheetId,
         range: `${SHEET_NAME}!A:Z`,
         valueInputOption: "RAW",
         requestBody: {
@@ -319,7 +325,7 @@ export class RoleStorage {
       // Update
       const rowNum = idx + 2 // A2 starts at index 0, so row is index + 2
       await sheets.spreadsheets.values.update({
-        spreadsheetId: SHEET_ID,
+        spreadsheetId,
         range: `${SHEET_NAME}!A${rowNum}:Z${rowNum}`,
         valueInputOption: "RAW",
         requestBody: {
@@ -327,21 +333,21 @@ export class RoleStorage {
         },
       })
     }
-    this.invalidateCache()
+    this.invalidateCache(spreadsheetId)
     return role
   }
 
-  async deleteRole(roleName: string) {
+  async deleteRole(roleName: string, spreadsheetId: string = getSpreadsheetId()) {
     const sheets = await getSheetsClient()
-    await this._ensureTab(sheets)
-    const roles = await this.getRoles()
+    await this._ensureTab(sheets, spreadsheetId)
+    const roles = await this.getRoles(spreadsheetId)
     const idx = roles.findIndex(
       (x) => x.role.toLowerCase() === roleName.toLowerCase()
     )
     if (idx === -1) return null
 
     // Get spreadsheet tab property sheetId for deletion batch update
-    const spreadsheet = await sheets.spreadsheets.get({ spreadsheetId: SHEET_ID })
+    const spreadsheet = await sheets.spreadsheets.get({ spreadsheetId })
     const sheet = spreadsheet.data.sheets?.find(
       (s: any) => s.properties?.title === SHEET_NAME
     )
@@ -352,7 +358,7 @@ export class RoleStorage {
     }
 
     await sheets.spreadsheets.batchUpdate({
-      spreadsheetId: SHEET_ID,
+      spreadsheetId,
       requestBody: {
         requests: [
           {
@@ -368,7 +374,7 @@ export class RoleStorage {
         ],
       },
     })
-    this.invalidateCache()
+    this.invalidateCache(spreadsheetId)
     return roles[idx]
   }
 }

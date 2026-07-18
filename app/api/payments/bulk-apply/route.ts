@@ -11,6 +11,7 @@ import {
 import { EXPECTED_CONSUMER_HEADERS, invalidateConsumerCache } from "@/lib/google-sheets"
 import { appendHistory, nowTimestamp, invalidateHistoryCache } from "@/lib/consumer-history"
 import { verifySession } from "@/lib/session"
+import { withTenant } from "@/lib/tenant-context"
 
 export const maxDuration = 60
 
@@ -59,7 +60,7 @@ const cleanNumber = (s: string): number => {
   return isNaN(n) ? 0 : n
 }
 
-export async function POST(request: NextRequest) {
+export const POST = withTenant(async function POST(request: NextRequest) {
   const session = await verifySession()
   if (!session || session.role !== "admin") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -266,8 +267,8 @@ export async function POST(request: NextRequest) {
 
     // Fire-and-forget history (non-critical, doesn't block response).
     if (historyEntries.length > 0) {
-      appendHistory(historyEntries)
-        .then(() => invalidateHistoryCache())
+      appendHistory(historyEntries, spreadsheetId)
+        .then(() => invalidateHistoryCache(spreadsheetId))
         .catch(e => console.warn("Payment history append failed (non-critical):", e))
     }
 
@@ -290,4 +291,4 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     )
   }
-}
+})

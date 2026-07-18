@@ -1,10 +1,11 @@
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import { verifySession } from "@/lib/session"
 import { roleStorage } from "@/lib/role-storage"
+import { withTenant } from "@/lib/tenant-context"
 
 export const dynamic = "force-dynamic"
 
-export async function GET() {
+export const GET = withTenant(async function GET(req: NextRequest) {
   try {
     const session = await verifySession()
     if (!session) {
@@ -39,4 +40,4 @@ export async function GET() {
     console.error("Error in permissions API:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
-}
+})

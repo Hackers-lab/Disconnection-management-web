@@ -1,14 +1,16 @@
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import { google } from "googleapis"
 import { auth } from "@/lib/google-drive"
+import { getSpreadsheetId } from "@/lib/google-sheets-api"
+import { withTenant } from "@/lib/tenant-context"
 
 export const dynamic = 'force-dynamic'
 
 // Initialize the Google Sheets API client
 const sheets = google.sheets({ version: "v4", auth })
 
-export async function GET() {
-  const spreadsheetId = process.env.DISCONNECTION_SHEET?.trim()
+export const GET = withTenant(async function GET(req: NextRequest) {
+  const spreadsheetId = getSpreadsheetId()
 
   if (!spreadsheetId) {
     return NextResponse.json(
@@ -40,4 +42,4 @@ export async function GET() {
   }
 
   return NextResponse.redirect(url)
-}
+})

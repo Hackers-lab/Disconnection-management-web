@@ -1,17 +1,20 @@
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import { getFullHistory } from "@/lib/consumer-history"
 import { verifySession } from "@/lib/session"
+import { withTenant } from "@/lib/tenant-context"
+import { getSpreadsheetId } from "@/lib/google-sheets-api"
 
 export const maxDuration = 60
 
-export async function GET() {
+export const GET = withTenant(async function GET(request: NextRequest) {
   const session = await verifySession()
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
   try {
-    const allHistory = await getFullHistory()
+    const spreadsheetId = getSpreadsheetId()
+    const allHistory = await getFullHistory(spreadsheetId)
     let filtered = allHistory
 
     // If role is agency, filter by their assigned agency
@@ -35,4 +38,4 @@ export async function GET() {
     console.error("Error fetching full history:", error)
     return NextResponse.json({ error: error?.message || "Failed to load history" }, { status: 500 })
   }
-}
+})

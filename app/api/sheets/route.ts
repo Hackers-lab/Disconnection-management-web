@@ -1,8 +1,9 @@
 // app/api/sheets/route.ts
 import { google } from "googleapis";
-import { NextResponse } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
+import { withTenant } from "@/lib/tenant-context";
 
-export async function POST(request: Request) {
+export const POST = withTenant(async function POST(request: NextRequest) {
   try {
     const { sheetName, data, headers } = await request.json();
 
@@ -40,7 +41,7 @@ export async function POST(request: Request) {
       { status: 500 }
     );
   }
-}
+})
 
 // Add this to prevent GET requests
 export async function GET() {

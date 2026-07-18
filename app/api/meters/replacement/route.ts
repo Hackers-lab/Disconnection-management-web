@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from "next/server"
 import { verifySession } from "@/lib/session"
 import { fetchReplacements, addReplacement } from "@/lib/meter-replacement-service"
 import { checkApiPermission } from "@/lib/permissions"
+import { withTenant } from "@/lib/tenant-context"
 
-export async function GET() {
+export const GET = withTenant(async function GET(request: NextRequest) {
   const session = await verifySession()
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
@@ -17,9 +18,8 @@ export async function GET() {
     return NextResponse.json(all.filter(r => upper.includes((r.agency || "").toUpperCase())))
   }
   return NextResponse.json(all)
-}
-
-export async function POST(request: NextRequest) {
+})
+export const POST = withTenant(async function POST(request: NextRequest) {
   const session = await verifySession()
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
@@ -51,4 +51,4 @@ export async function POST(request: NextRequest) {
     console.error("Create replacement error:", e)
     return NextResponse.json({ error: e.message || "Failed" }, { status: 500 })
   }
-}
+})

@@ -1,19 +1,21 @@
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import { DeemedVisitData, invalidateDDCache } from "@/lib/dd-service"
 import { google } from "googleapis"
 import { auth } from "@/lib/google-drive"
+import { getSpreadsheetId } from "@/lib/google-sheets-api"
+import { withTenant } from "@/lib/tenant-context"
 
-export async function POST(request: Request) {
+export const POST = withTenant(async function POST(request: NextRequest) {
   try {
     const body: DeemedVisitData = await request.json()
     
-    if (!process.env.DISCONNECTION_SHEET) {
-      console.error("Missing DISCONNECTION_SHEET environment variable")
+    const spreadsheetId = getSpreadsheetId()
+    if (!spreadsheetId) {
+      console.error("Missing spreadsheet ID")
       return NextResponse.json({ success: false, error: "Server configuration error" }, { status: 500 })
     }
 
     const sheets = google.sheets({ version: "v4", auth })
-    const spreadsheetId = process.env.DISCONNECTION_SHEET
     const sheetName = "DD" // Explicitly targeting the DD sheet
     
     // 1. Fetch only headers first to map columns (Optimized)
@@ -121,4 +123,4 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ success: false, error: "Update failed" }, { status: 500 })
   }
-}
+})

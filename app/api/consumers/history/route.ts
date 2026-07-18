@@ -1,8 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server"
 import { getHistoryForConsumer } from "@/lib/consumer-history"
 import { verifySession } from "@/lib/session"
+import { withTenant } from "@/lib/tenant-context"
+import { getSpreadsheetId } from "@/lib/google-sheets-api"
 
-export async function GET(request: NextRequest) {
+export const GET = withTenant(async function GET(request: NextRequest) {
   // History is visible to all authenticated users (agency sees their own consumers).
   const session = await verifySession()
   if (!session) {
@@ -15,7 +17,8 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const entries = await getHistoryForConsumer(consumerId)
+    const spreadsheetId = getSpreadsheetId()
+    const entries = await getHistoryForConsumer(consumerId, spreadsheetId)
     return NextResponse.json(entries, {
       headers: {
         // CDN-cache 20s: history reads are user-triggered, not on page load.
@@ -27,4 +30,4 @@ export async function GET(request: NextRequest) {
     console.error("History fetch error:", e)
     return NextResponse.json({ error: e?.message }, { status: 500 })
   }
-}
+})

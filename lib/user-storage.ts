@@ -1,8 +1,7 @@
 import { google } from "googleapis"
 
-const SHEET_ID = process.env.USERS_SHEET!
-const SHEET_NAME = "User" // Change to your sheet name
-const LIST_SHEET_ID = process.env.GOOGLE_LIST_SHEET_ID!
+const SHEET_ID = process.env.MASTER_CONFIG_SHEET!
+const SHEET_NAME = "Master_Credentials"
 
 async function getSheetsClient() {
   const auth = new google.auth.GoogleAuth({
@@ -15,7 +14,17 @@ async function getSheetsClient() {
   return google.sheets({ version: "v4", auth })
 }
 
-type CachedUsers = { users: ReturnType<UserStorage["_parseRows"]>, timestamp: number }
+export interface MasterUser {
+  id: string
+  username: string
+  password: string
+  role: string
+  cccCode: string
+  name: string
+  agencies: string[]
+}
+
+type CachedUsers = { users: MasterUser[], timestamp: number }
 
 export class UserStorage {
   static instance: UserStorage
@@ -27,15 +36,17 @@ export class UserStorage {
     return UserStorage.instance
   }
 
-  _parseRows(rows: any[][]) {
+  _parseRows(rows: any[][]): MasterUser[] {
     return rows
       .filter(row => row && row.length > 0 && row[1])
-      .map(([id, username, password, role, agencies]) => ({
-        id,
-        username,
-        password,
-        role,
-        agencies: agencies ? agencies.split(",") : [] as string[],
+      .map(([id, username, password, role, cccCode, name, agencies]) => ({
+        id: String(id || ""),
+        username: String(username || ""),
+        password: String(password || ""),
+        role: String(role || ""),
+        cccCode: String(cccCode || ""),
+        name: String(name || ""),
+        agencies: agencies ? String(agencies).split(",") : [] as string[],
       }))
   }
 
@@ -43,14 +54,17 @@ export class UserStorage {
     this._cache = null
   }
 
-  async getUsers() {
+  async getUsers(): Promise<MasterUser[]> {
+    if (!SHEET_ID) {
+      throw new Error("MASTER_CONFIG_SHEET environment variable is not defined")
+    }
     if (this._cache && Date.now() - this._cache.timestamp < this._CACHE_TTL_MS) {
       return this._cache.users
     }
     const sheets = await getSheetsClient()
     const res = await sheets.spreadsheets.values.get({
       spreadsheetId: SHEET_ID,
-      range: `${SHEET_NAME}!A2:E`,
+      range: `${SHEET_NAME}!A2:G`,
     })
     const rows = res.data.values || []
     const users = this._parseRows(rows)
@@ -58,53 +72,51 @@ export class UserStorage {
     return users
   }
 
-  async findUserByCredentials(username: string, password: string) {
+  async findUserByCredentials(username: string, password: string): Promise<MasterUser | null> {
     const users = await this.getUsers()
     return users.find(u => u.username === username && u.password === password) || null
   }
 
-  async addUser(user: { username: string; password: string; role: string; agencies: string[] }) {
+  async addUser(user: Omit<MasterUser, "id">): Promise<MasterUser> {
     const users = await this.getUsers()
-    const newId = (Math.max(0, ...users.map(u => Number(u.id))) + 1).toString()
+    const newId = (Math.max(0, ...users.map(u => Number(u.id) || 0)) + 1).toString()
     const sheets = await getSheetsClient()
     await sheets.spreadsheets.values.append({
       spreadsheetId: SHEET_ID,
-      range: `${SHEET_NAME}!A:E`,
+      range: `${SHEET_NAME}!A:G`,
       valueInputOption: "RAW",
       requestBody: {
-        values: [[newId, user.username, user.password, user.role, user.agencies.join(",")]],
+        values: [[newId, user.username, user.password, user.role, user.cccCode, user.name, user.agencies.join(",")]],
       },
     })
     this.invalidateCache()
     return { id: newId, ...user }
   }
 
-  async updateUser(id: string, updates: Partial<{ username: string; password: string; role: string; agencies: string[] }>) {
+  async updateUser(id: string, updates: Partial<Omit<MasterUser, "id">>): Promise<MasterUser | null> {
     const sheets = await getSheetsClient()
     const users = await this.getUsers()
     const idx = users.findIndex(u => u.id === id)
     if (idx === -1) return null
     const updated = { ...users[idx], ...updates }
-    // Update the row in the sheet
     await sheets.spreadsheets.values.update({
       spreadsheetId: SHEET_ID,
-      range: `${SHEET_NAME}!A${idx + 2}:E${idx + 2}`,
+      range: `${SHEET_NAME}!A${idx + 2}:G${idx + 2}`,
       valueInputOption: "RAW",
       requestBody: {
-        values: [[updated.id, updated.username, updated.password, updated.role, updated.agencies.join(",")]],
+        values: [[updated.id, updated.username, updated.password, updated.role, updated.cccCode, updated.name, updated.agencies.join(",")]],
       },
     })
     this.invalidateCache()
     return updated
   }
 
-  async deleteUser(id: string) {
+  async deleteUser(id: string): Promise<MasterUser | null> {
     const sheets = await getSheetsClient()
     const users = await this.getUsers()
     const idx = users.findIndex(u => u.id === id)
     if (idx === -1) return null
 
-    // To delete a row completely, we first need the numeric sheetId of the tab
     const spreadsheet = await sheets.spreadsheets.get({
       spreadsheetId: SHEET_ID,
     })
@@ -115,7 +127,6 @@ export class UserStorage {
       throw new Error(`Sheet tab "${SHEET_NAME}" not found`)
     }
 
-    // Use batchUpdate with deleteDimension to remove the row entirely from the sheet
     await sheets.spreadsheets.batchUpdate({
       spreadsheetId: SHEET_ID,
       requestBody: {
@@ -124,7 +135,7 @@ export class UserStorage {
             range: {
               sheetId: targetSheetId,
               dimension: "ROWS",
-              startIndex: idx + 1, // 0-based index: Row 1 is 0, Row 2 (A2) is 1
+              startIndex: idx + 1,
               endIndex: idx + 2
             }
           }

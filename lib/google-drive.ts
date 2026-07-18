@@ -1,31 +1,75 @@
 import { google } from "googleapis"
 import { Readable } from "stream"
+import { getTenantContext } from "./tenant-context"
 
-// Shared Auth client for Drive and Sheets
+// Shared Auth client configuration
 const client_email = process.env.GOOGLE_SHEETS_CLIENT_EMAIL
 const private_key = process.env.GOOGLE_SHEETS_PRIVATE_KEY
 const client_id = process.env.GOOGLE_CLIENT_ID
 const client_secret = process.env.GOOGLE_CLIENT_SECRET
 const refresh_token = process.env.GOOGLE_REFRESH_TOKEN
 
-export const auth =
-  client_id && client_secret && refresh_token
-    ? (() => {
-        const oauth2Client = new google.auth.OAuth2(client_id, client_secret)
-        oauth2Client.setCredentials({ refresh_token })
-        return oauth2Client
-      })()
-    : new google.auth.GoogleAuth({
-        credentials: {
-          client_email,
-          private_key: private_key?.replace(/\\n/g, "\n"),
-        },
-        scopes: [
-          "https://www.googleapis.com/auth/drive",
-          "https://www.googleapis.com/auth/spreadsheets",
-        ],
-      })
+// Dynamic Auth Delegate class
+class DynamicAuth extends google.auth.GoogleAuth {
+  private defaultAuth: any
 
+  constructor() {
+    super({
+      scopes: [
+        "https://www.googleapis.com/auth/drive",
+        "https://www.googleapis.com/auth/spreadsheets",
+      ],
+    })
+    this.defaultAuth =
+      client_id && client_secret && refresh_token
+        ? (() => {
+            const oauth2Client = new google.auth.OAuth2(client_id, client_secret)
+            oauth2Client.setCredentials({ refresh_token })
+            return oauth2Client
+          })()
+        : new google.auth.GoogleAuth({
+            credentials: {
+              client_email,
+              private_key: private_key?.replace(/\\n/g, "\n"),
+            },
+            scopes: [
+              "https://www.googleapis.com/auth/drive",
+              "https://www.googleapis.com/auth/spreadsheets",
+            ],
+          })
+  }
+
+  private getActiveAuth() {
+    const context = getTenantContext()
+    if (context?.googleDriveRefreshToken) {
+      const oauth2Client = new google.auth.OAuth2(
+        process.env.GOOGLE_CLIENT_ID,
+        process.env.GOOGLE_CLIENT_SECRET
+      )
+      oauth2Client.setCredentials({ refresh_token: context.googleDriveRefreshToken })
+      return oauth2Client
+    }
+    return this.defaultAuth
+  }
+
+  override async getRequestHeaders(url?: string): Promise<any> {
+    const active = this.getActiveAuth()
+    if (typeof active.getRequestHeaders === "function") {
+      return active.getRequestHeaders(url)
+    }
+    return {}
+  }
+
+  override async request(opts: any): Promise<any> {
+    const active = this.getActiveAuth()
+    if (typeof active.request === "function") {
+      return active.request(opts)
+    }
+    throw new Error("Active auth client does not support request method")
+  }
+}
+
+export const auth = new DynamicAuth()
 
 const drive = google.drive({ version: "v3", auth })
 
@@ -33,10 +77,11 @@ export async function uploadImageToDrive(file: File, consumerId: string): Promis
   try {
     const hasServiceAccount = client_email && private_key
     const hasOAuth = client_id && client_secret && refresh_token
+    const context = getTenantContext()
 
-    if (!hasServiceAccount && !hasOAuth) {
+    if (!hasServiceAccount && !hasOAuth && !context?.googleDriveRefreshToken) {
       throw new Error(
-        "Missing Google credentials. Please set GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, and GOOGLE_REFRESH_TOKEN in .env.local",
+        "Missing Google credentials. Please set GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, and GOOGLE_REFRESH_TOKEN in .env.local or link a Google account",
       )
     }
 
@@ -47,10 +92,11 @@ export async function uploadImageToDrive(file: File, consumerId: string): Promis
 
     const ext = file.name ? (file.name.split(".").pop() || "jpg") : (file.type === "application/pdf" ? "pdf" : "jpg")
     const fileName = `${consumerId}_${Date.now()}.${ext}`
-    const folderId = process.env.GOOGLE_DRIVE_FOLDER_ID
+    
+    const folderId = context?.driveFolderId || process.env.GOOGLE_DRIVE_FOLDER_ID
     
     if (!folderId) {
-      throw new Error("GOOGLE_DRIVE_FOLDER_ID is not set in .env.local")
+      throw new Error("GOOGLE_DRIVE_FOLDER_ID is not set in .env.local and no tenant folder is provisioned")
     }
 
     const fileMetadata = {

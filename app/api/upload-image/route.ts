@@ -1,11 +1,12 @@
 // app/api/upload-image/route.ts
 import { type NextRequest, NextResponse } from "next/server"
 import { uploadImageToDrive } from "@/lib/google-drive" // Ensure this file exists now
+import { withTenant } from "@/lib/tenant-context"
 
 // Allow the function to run longer for slower uploads (Standard is 10s on Hobby, up to 60s on Pro)
 export const maxDuration = 60;
 
-export async function POST(request: NextRequest) {
+export const POST = withTenant(async function POST(request: NextRequest) {
   try {
     const formData = await request.formData()
     const file = formData.get("file") as File
@@ -31,4 +32,4 @@ export async function POST(request: NextRequest) {
     console.error("Image upload error:", error)
     return NextResponse.json({ error: "Failed to upload image" }, { status: 500 })
   }
-}
+})

@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
 import { verifySession } from "@/lib/session"
 import { processApplication } from "@/lib/nsc-service"
+import { withTenant } from "@/lib/tenant-context"
 
-export async function POST(request: NextRequest) {
+export const POST = withTenant(async function POST(request: NextRequest) {
   const session = await verifySession()
   if (!session || !["admin", "executive"].includes(session.role)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -38,4 +39,4 @@ export async function POST(request: NextRequest) {
     console.error("NSC process error:", e)
     return NextResponse.json({ error: e.message || "Failed" }, { status: 500 })
   }
-}
+})

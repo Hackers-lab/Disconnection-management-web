@@ -1,10 +1,11 @@
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import { checkApiPermission } from "@/lib/permissions"
 import { getCatalogue, addMaterial, deleteMaterialFromCatalogue, updateMaterial } from "@/lib/material-service"
 import type { MaterialUnit } from "@/lib/material-types"
 import { uploadImageToDrive } from "@/lib/google-drive"
+import { withTenant } from "@/lib/tenant-context"
 
-export async function GET(req: Request) {
+export const GET = withTenant(async function GET(req: NextRequest) {
   const { authorized, error, status } = await checkApiPermission("material", ["read", "stock", "receive", "issue", "settings"])
   if (!authorized) return NextResponse.json({ error }, { status: status || 403 })
 
@@ -20,9 +21,9 @@ export async function GET(req: Request) {
     console.error("Material catalogue error:", e)
     return NextResponse.json({ error: e.message }, { status: 500 })
   }
-}
+})
 
-export async function POST(req: Request) {
+export const POST = withTenant(async function POST(req: NextRequest) {
   const { authorized, error, status, session } = await checkApiPermission("material", ["create", "settings"])
   if (!authorized) return NextResponse.json({ error }, { status: status || 403 })
 
@@ -59,9 +60,9 @@ export async function POST(req: Request) {
     console.error("Add material error:", e)
     return NextResponse.json({ error: e.message }, { status: 500 })
   }
-}
+})
 
-export async function PUT(req: Request) {
+export const PUT = withTenant(async function PUT(req: NextRequest) {
   const { authorized, error, status } = await checkApiPermission("material", ["create", "settings"])
   if (!authorized) return NextResponse.json({ error }, { status: status || 403 })
 
@@ -102,9 +103,9 @@ export async function PUT(req: Request) {
     console.error("Update material error:", e)
     return NextResponse.json({ error: e.message }, { status: 500 })
   }
-}
+})
 
-export async function DELETE(req: Request) {
+export const DELETE = withTenant(async function DELETE(req: NextRequest) {
   const { authorized, error, status } = await checkApiPermission("material", ["delete", "settings"])
   if (!authorized) return NextResponse.json({ error }, { status: status || 403 })
 
@@ -122,4 +123,4 @@ export async function DELETE(req: Request) {
     console.error("Delete material error:", e)
     return NextResponse.json({ error: e.message }, { status: 500 })
   }
-}
+})

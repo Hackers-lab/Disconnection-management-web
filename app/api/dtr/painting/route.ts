@@ -3,10 +3,12 @@ import { checkApiPermission } from "@/lib/permissions"
 import { updateDTRPainting } from "@/lib/dtr-service"
 import { appendDTRHistory } from "@/lib/dtr-history"
 import { nowTs } from "@/lib/date-utils"
+import { getTenantConfig } from "@/lib/tenant-resolver"
+import { withTenant } from "@/lib/tenant-context"
 
 export const dynamic = "force-dynamic"
 
-export async function POST(request: NextRequest) {
+export const POST = withTenant(async function POST(request: NextRequest) {
   // Painting updates can be performed by admin or anyone with update permission (including agency painters)
   let { authorized, error, status, session } = await checkApiPermission("dtr", "update")
   if (!authorized) {
@@ -37,7 +39,8 @@ export async function POST(request: NextRequest) {
     const remarks = String(body.remarks || "").trim()
     const verifiedBy = session.username || "painter"
 
-    await updateDTRPainting(dtrCode, painting, image, remarks, verifiedBy)
+    const tenantConfig = await getTenantConfig(session.cccCode)
+    await updateDTRPainting(dtrCode, painting, image, remarks, verifiedBy, tenantConfig.spreadsheetId)
 
     // Save update log to DTR History
     await appendDTRHistory({
@@ -53,11 +56,11 @@ export async function POST(request: NextRequest) {
       remarks: remarks || "Painting Completed Registrations",
       imageUrl: image,
       locationName: "Painting Site Work"
-    })
+    }, tenantConfig.spreadsheetId)
 
     return NextResponse.json({ success: true })
   } catch (e: any) {
     console.error("💥 DTR painting update error:", e)
     return NextResponse.json({ error: e.message || "Failed to update DTR painting status" }, { status: 500 })
   }
-}
+})

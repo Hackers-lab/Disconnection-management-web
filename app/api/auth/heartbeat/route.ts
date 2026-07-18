@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
 import { verifySession } from "@/lib/session"
+import { withTenant } from "@/lib/tenant-context"
 
 const COOKIE = "_audit_ts"
 
-export async function GET(request: NextRequest) {
+export const GET = withTenant(async function GET(request: NextRequest) {
   const session = await verifySession()
   if (!session) return NextResponse.json({ ok: false }, { status: 401 })
 
@@ -46,4 +47,4 @@ export async function GET(request: NextRequest) {
     maxAge: 60 * 60 * 24 * 8, // 8 days — slightly longer than session TTL
   })
   return response
-}
+})

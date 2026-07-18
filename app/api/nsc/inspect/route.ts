@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
 import { verifySession } from "@/lib/session"
 import { submitInspection } from "@/lib/nsc-service"
+import { withTenant } from "@/lib/tenant-context"
 
-export async function POST(request: NextRequest) {
+export const POST = withTenant(async function POST(request: NextRequest) {
   const session = await verifySession()
   if (!session || session.role !== "agency") {
     return NextResponse.json({ error: "Unauthorized — agency only" }, { status: 401 })
@@ -46,4 +47,4 @@ export async function POST(request: NextRequest) {
     console.error("NSC inspect error:", e)
     return NextResponse.json({ error: e.message || "Failed" }, { status: 500 })
   }
-}
+})
