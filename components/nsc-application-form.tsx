@@ -42,8 +42,8 @@ const applyFilterToImage = (
       const origW = img.width
       const origH = img.height
 
-      // Downscale to maximum 1600px for storage efficiency
-      const MAX_SIZE = 1600
+      // Downscale to maximum 1200px for storage efficiency
+      const MAX_SIZE = 1200
       let w = origW
       let h = origH
       if (w > MAX_SIZE || h > MAX_SIZE) {
@@ -89,7 +89,7 @@ const applyFilterToImage = (
         ctx.putImageData(imgData, 0, 0)
       }
 
-      resolve(canvas.toDataURL("image/jpeg", 0.65))
+      resolve(canvas.toDataURL("image/jpeg", 0.55))
     }
     img.src = imgSrc
   })

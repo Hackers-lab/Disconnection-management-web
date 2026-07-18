@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ArrowLeft, Camera, Upload, Loader2, MapPin, Phone, IndianRupee, Monitor } from "lucide-react"
 import type { ReconnectionRequest } from "@/lib/reconnection-service"
+import { compressAndWatermarkImage } from "@/lib/image-processor"
 
 interface Props {
   request: ReconnectionRequest
@@ -60,37 +61,18 @@ export function ReconnectionUpdateForm({ request, userRole, username, onSave, on
 
   // ── Image compression (resize to 1024px + watermark date/GPS) ───────────
   const processImage = async (file: File): Promise<File> => {
-    return new Promise(resolve => {
-      const img = new Image()
-      img.src = URL.createObjectURL(file)
-      img.onload = () => {
-        let w = img.width, h = img.height
-        const max = 1024
-        if (w > max || h > max) {
-          if (w > h) { h = Math.round(h * max / w); w = max }
-          else { w = Math.round(w * max / h); h = max }
-        }
-        const canvas = document.createElement("canvas")
-        canvas.width = w; canvas.height = h
-        const ctx = canvas.getContext("2d")
-        if (!ctx) { resolve(file); return }
-        ctx.drawImage(img, 0, 0, w, h)
-
-        const fs = Math.max(20, w * 0.032)
-        const pad = fs / 2
-        const barH = fs * 1.3 * 2 + pad * 2
-        ctx.fillStyle = "rgba(0,0,0,0.6)"
-        ctx.fillRect(0, h - barH, w, barH)
-        ctx.font = `bold ${fs}px sans-serif`
-        ctx.fillStyle = "#fff"
-        ctx.textBaseline = "bottom"
-        const dateStr = new Date().toLocaleString("en-IN", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true })
-        ctx.fillText(`Date: ${dateStr}`, pad, h - barH + pad + fs)
-        ctx.fillText(`Reconnection — ID: ${request.consumerId}`, pad, h - pad)
-
-        canvas.toBlob(blob => resolve(blob ? new File([blob], file.name, { type: "image/jpeg" }) : file), "image/jpeg", 0.8)
-      }
-      img.onerror = () => resolve(file)
+    const dateStr = new Date().toLocaleString("en-IN", { 
+      day: "2-digit", 
+      month: "2-digit", 
+      year: "numeric", 
+      hour: "2-digit", 
+      minute: "2-digit", 
+      hour12: true 
+    })
+    return compressAndWatermarkImage(file, {
+      maxDim: 800,
+      watermarkLines: [`Date: ${dateStr}`, `Reconnection — ID: ${request.consumerId}`],
+      targetKb: 95
     })
   }
 

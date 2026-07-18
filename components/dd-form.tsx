@@ -12,6 +12,7 @@ import {
   ArrowLeft, Upload, Camera, MapPin, Smartphone, IndianRupee, Box, Monitor, Calendar, Loader2, ImageIcon
 } from "lucide-react"
 import type { DeemedVisitData } from "@/lib/dd-service"
+import { compressAndWatermarkImage } from "@/lib/image-processor"
 
 interface DDFormProps {
   consumer: DeemedVisitData
@@ -62,72 +63,18 @@ export function DDForm({ consumer, onSave, onCancel, userRole }: DDFormProps) {
 
   // --- IMAGE PROCESSING (Watermark & Compression) ---
   const processImage = async (imageFile: File): Promise<File> => {
-    return new Promise((resolve) => {
-      const img = new Image()
-      img.src = URL.createObjectURL(imageFile)
-      
-      img.onload = async () => {
-        let width = img.width
-        let height = img.height
-        const maxDim = 1024
-        
-        if (width > maxDim || height > maxDim) {
-          if (width > height) {
-            height = Math.round((height * maxDim) / width)
-            width = maxDim
-          } else {
-            width = Math.round((width * maxDim) / height)
-            height = maxDim
-          }
-        }
-
-        const canvas = document.createElement("canvas")
-        canvas.width = width
-        canvas.height = height
-        const ctx = canvas.getContext("2d")
-        
-        if (!ctx) {
-          resolve(imageFile)
-          return
-        }
-
-        ctx.drawImage(img, 0, 0, width, height)
-
-        const fontSize = Math.max(24, width * 0.035)
-        const padding = fontSize / 2
-        const lineHeight = fontSize * 1.3
-        const barHeight = (lineHeight * 2) + (padding * 2)
-
-        ctx.fillStyle = "rgba(0, 0, 0, 0.6)"
-        ctx.fillRect(0, height - barHeight, width, barHeight)
-
-        ctx.font = `bold ${fontSize}px sans-serif`
-        ctx.fillStyle = "#ffffff"
-        ctx.textBaseline = "bottom"
-        
-        const dateStr = new Date().toLocaleString("en-IN", { 
-          day: '2-digit', month: '2-digit', year: 'numeric', 
-          hour: '2-digit', minute: '2-digit', hour12: true 
-        })
-        ctx.fillText(`Date: ${dateStr}`, padding, height - barHeight + padding + fontSize)
-
-        let locStr = "GPS: Waiting for signal..."
-        if (location) {
-          locStr = `Lat: ${location.lat.toFixed(6)}, Long: ${location.lng.toFixed(6)}`
-        }
-        ctx.fillText(locStr, padding, height - padding)
-
-        canvas.toBlob(async (blob) => {
-          if (blob) {
-            const processedFile = new File([blob], imageFile.name, { type: "image/jpeg" })
-            resolve(processedFile)
-          } else {
-            resolve(imageFile)
-          }
-        }, "image/jpeg", 0.8)
-      }
-      
-      img.onerror = () => resolve(imageFile)
+    const dateStr = new Date().toLocaleString("en-IN", { 
+      day: '2-digit', month: '2-digit', year: 'numeric', 
+      hour: '2-digit', minute: '2-digit', hour12: true 
+    })
+    let locStr = "GPS: Waiting for signal..."
+    if (location) {
+      locStr = `Lat: ${location.lat.toFixed(6)}, Long: ${location.lng.toFixed(6)}`
+    }
+    return compressAndWatermarkImage(imageFile, {
+      maxDim: 800,
+      watermarkLines: [`Date: ${dateStr}`, locStr],
+      targetKb: 95
     })
   }
 

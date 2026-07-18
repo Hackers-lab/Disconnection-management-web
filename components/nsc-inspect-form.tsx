@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ArrowLeft, Camera, Upload, Loader2, CheckCircle2, XCircle, RefreshCw } from "lucide-react"
 import { NSC_CLASSES } from "@/lib/nsc-types"
 import type { NSCApplication } from "@/lib/nsc-types"
+import { compressAndWatermarkImage } from "@/lib/image-processor"
 
 interface Props {
   app: NSCApplication
@@ -113,7 +114,20 @@ function ImageSlot({ label, required, url, onUrl, tag }: {
   const upload = async (file: File) => {
     setPreview(URL.createObjectURL(file)); setUploading(true)
     try {
-      const fd = new FormData(); fd.append("file", file); fd.append("consumerId", tag)
+      const dateStr = new Date().toLocaleString("en-IN", { 
+        day: "2-digit", 
+        month: "2-digit", 
+        year: "numeric", 
+        hour: "2-digit", 
+        minute: "2-digit", 
+        hour12: true 
+      })
+      const compressed = await compressAndWatermarkImage(file, {
+        maxDim: 800,
+        watermarkLines: [`NSC: ${label} — ${tag}`, `Date: ${dateStr}`],
+        targetKb: 95
+      })
+      const fd = new FormData(); fd.append("file", compressed); fd.append("consumerId", tag)
       const res = await fetch("/api/upload-image", { method: "POST", body: fd })
       const d = await res.json()
       if (d.success) onUrl(d.url)
@@ -201,6 +215,7 @@ export function NscInspectForm({ app, onSave, onCancel }: Props) {
     if (!existingMeter)  { alert("Please answer: Existing meter?"); return }
     if (!validPartition) { alert("Please answer: Valid partition?"); return }
     if (!load.trim())    { alert("Applied load (kW) is required."); return }
+    if (poleRequired === "yes" && !poleDrawingImg) { alert("Pole / Line Drawing is required for pole cases."); return }
     if (!dtrCapacity.trim()) { alert("DTR Capacity is required."); return }
     if (!siteImg)        { alert("Site image is required."); return }
     if (!inspectionFormImg) { alert("Inspection form image is required."); return }
@@ -310,7 +325,7 @@ export function NscInspectForm({ app, onSave, onCancel }: Props) {
           <YesNo label="Pole Required?" value={poleRequired} onChange={setPoleRequired} />
           {poleRequired === "yes" && (
             <div className="pl-2 border-l-2 border-blue-200">
-              <ImageSlot label="Pole / Line Drawing" required={false} url={poleDrawingImg} onUrl={setPoleDrawingImg} tag={`${tag}-pole`} />
+              <ImageSlot label="Pole / Line Drawing" required={true} url={poleDrawingImg} onUrl={setPoleDrawingImg} tag={`${tag}-pole`} />
             </div>
           )}
 

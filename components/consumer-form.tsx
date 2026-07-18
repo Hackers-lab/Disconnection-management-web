@@ -19,6 +19,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import type { ConsumerData } from "@/lib/google-sheets"
 import { getFromCache, saveToCache } from "@/lib/indexed-db"
+import { compressAndWatermarkImage } from "@/lib/image-processor"
 
 interface ConsumerFormProps {
   consumer: ConsumerData
@@ -122,90 +123,25 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
 
   // --- 1. WATERMARK & COMPRESSION HELPER ---
   const processImage = async (imageFile: File): Promise<File> => {
-    return new Promise((resolve) => {
-      const img = new Image()
-      img.src = URL.createObjectURL(imageFile)
-      
-      img.onload = async () => {
-        // Resize logic: Max dimension 1024px
-        let width = img.width
-        let height = img.height
-        const maxDim = 1024
-        
-        if (width > maxDim || height > maxDim) {
-          if (width > height) {
-            height = Math.round((height * maxDim) / width)
-            width = maxDim
-          } else {
-            width = Math.round((width * maxDim) / height)
-            height = maxDim
-          }
-        }
-
-        const canvas = document.createElement("canvas")
-        canvas.width = width
-        canvas.height = height
-        const ctx = canvas.getContext("2d")
-        
-        if (!ctx) {
-          resolve(imageFile)
-          return
-        }
-
-        // Draw image scaled
-        ctx.drawImage(img, 0, 0, width, height)
-
-        // -- Watermark Config --
-        const fontSize = Math.max(24, width * 0.035) // Responsive font size
-        const padding = fontSize / 2
-        const lineHeight = fontSize * 1.3
-        const barHeight = (lineHeight * 2) + (padding * 2)
-
-        // Draw Semi-transparent Black Bar at Bottom
-        ctx.fillStyle = "rgba(0, 0, 0, 0.6)"
-        ctx.fillRect(0, height - barHeight, width, barHeight)
-
-        // Draw Text
-        ctx.font = `bold ${fontSize}px sans-serif`
-        ctx.fillStyle = "#ffffff"
-        ctx.textBaseline = "bottom"
-        
-        // Line 1: Date
-        const dateStr = new Date().toLocaleString("en-IN", { 
-          day: '2-digit', month: '2-digit', year: 'numeric', 
-          hour: '2-digit', minute: '2-digit', hour12: true 
-        })
-        ctx.fillText(`Date: ${dateStr}`, padding, height - barHeight + padding + fontSize)
-
-        // Line 2: GPS
-        let locStr = "GPS: Waiting for signal..."
-        if (location) {
-          locStr = `Lat: ${location.lat.toFixed(6)}, Long: ${location.lng.toFixed(6)}`
-        } else if (navigator.geolocation) {
-           // Try one last fetch if state was null
-           try {
-             const pos: any = await new Promise((res, rej) => navigator.geolocation.getCurrentPosition(res, rej, {timeout: 2000}))
-             locStr = `Lat: ${pos.coords.latitude.toFixed(6)}, Long: ${pos.coords.longitude.toFixed(6)}`
-           } catch (e) {
-             locStr = "GPS: Location Disabled/Unavailable"
-           }
-        }
-        ctx.fillText(locStr, padding, height - padding)
-
-        // Convert Canvas to File
-        canvas.toBlob(async (blob) => {
-          if (blob) {
-            // Create file from blob (Quality 0.8 gives better quality ~200KB for 1024px)
-            const processedFile = new File([blob], imageFile.name, { type: "image/jpeg" })
-            console.log(`Processed: ${(imageFile.size / 1024).toFixed(2)} KB -> ${(processedFile.size / 1024).toFixed(2)} KB`)
-            resolve(processedFile)
-          } else {
-            resolve(imageFile)
-          }
-        }, "image/jpeg", 0.8) // Increased quality to 0.8 for ~200KB target
-      }
-      
-      img.onerror = () => resolve(imageFile)
+    const dateStr = new Date().toLocaleString("en-IN", { 
+      day: '2-digit', month: '2-digit', year: 'numeric', 
+      hour: '2-digit', minute: '2-digit', hour12: true 
+    })
+    let locStr = "GPS: Waiting for signal..."
+    if (location) {
+      locStr = `Lat: ${location.lat.toFixed(6)}, Long: ${location.lng.toFixed(6)}`
+    } else if (navigator.geolocation) {
+       try {
+         const pos: any = await new Promise((res, rej) => navigator.geolocation.getCurrentPosition(res, rej, {timeout: 2000}))
+         locStr = `Lat: ${pos.coords.latitude.toFixed(6)}, Long: ${pos.coords.longitude.toFixed(6)}`
+       } catch (e) {
+         locStr = "GPS: Location Disabled/Unavailable"
+       }
+    }
+    return compressAndWatermarkImage(imageFile, {
+      maxDim: 800,
+      watermarkLines: [`Date: ${dateStr}`, locStr],
+      targetKb: 95
     })
   }
 

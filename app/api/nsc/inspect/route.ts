@@ -13,6 +13,9 @@ export async function POST(request: NextRequest) {
     if (!body.agencyDecision) return NextResponse.json({ error: "Agency decision required" }, { status: 400 })
     if (!body.siteImg)        return NextResponse.json({ error: "Site image required" }, { status: 400 })
     if (!body.inspectionFormImg) return NextResponse.json({ error: "Inspection form image required" }, { status: 400 })
+    if (body.poleRequired === "yes" && !body.poleDrawingImg) {
+      return NextResponse.json({ error: "Pole Drawing Image is required for pole cases" }, { status: 400 })
+    }
 
     await submitInspection({
       receiveNo:         body.receiveNo,

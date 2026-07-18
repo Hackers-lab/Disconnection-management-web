@@ -11,6 +11,7 @@ import { ArrowLeft, Search, Upload, Loader2, MapPin, Phone, Monitor, Building2 }
 import { getFromCache, saveToCache } from "@/lib/indexed-db"
 import type { ConsumerData } from "@/lib/google-sheets"
 import type { ConsumerMasterRow } from "@/components/consumer-master"
+import { compressAndWatermarkImage } from "@/lib/image-processor"
 
 interface Props {
   agencies: string[]
@@ -162,13 +163,25 @@ export function ReconnectionCreateForm({ agencies, onSave, onCancel }: Props) {
     }
   }
 
-  // ── Image upload ──────────────────────────────────────────────────────────
   const handleImageUpload = async (file: File) => {
     setPreviewUrl(URL.createObjectURL(file))
     setUploading(true)
     try {
+      const dateStr = new Date().toLocaleString("en-IN", { 
+        day: "2-digit", 
+        month: "2-digit", 
+        year: "numeric", 
+        hour: "2-digit", 
+        minute: "2-digit", 
+        hour12: true 
+      })
+      const processed = await compressAndWatermarkImage(file, {
+        maxDim: 800,
+        watermarkLines: [`Reconnection Manual — ${consumerId || "manual"}`, `Date: ${dateStr}`],
+        targetKb: 95
+      })
       const fd = new FormData()
-      fd.append("file", file)
+      fd.append("file", processed)
       fd.append("consumerId", consumerId || "manual")
       const res = await fetch("/api/upload-image", { method: "POST", body: fd })
       const data = await res.json()

@@ -45,6 +45,45 @@ const FIELD_LABELS: Record<keyof ConsumerMasterRow, string> = {
 const REQUIRED_FIELDS: (keyof ConsumerMasterRow)[] = ["consumerId", "name"]
 
 // ── Lookup widget (used by other components as a picker) ──────────────────────
+// ── Chunked Fetch Helper ──────────────────────────────────────────────────────
+export async function fetchMasterInChunks(options?: {
+  refresh?: boolean
+  onProgress?: (loaded: number, total: number) => void
+}): Promise<ConsumerMasterRow[]> {
+  const refresh = options?.refresh ?? false
+  const limit = 10000
+  let offset = 0
+  let allRows: ConsumerMasterRow[] = []
+  let total = 0
+
+  while (true) {
+    const url = `/api/consumer-master?offset=${offset}&limit=${limit}${refresh && offset === 0 ? "&refresh=true" : ""}`
+    const res = await fetch(url)
+    if (!res.ok) {
+      throw new Error(`Failed to fetch chunk at offset ${offset}`)
+    }
+    
+    const totalHeader = res.headers.get("x-total-count") || res.headers.get("X-Total-Count")
+    if (totalHeader) {
+      total = parseInt(totalHeader, 10)
+    }
+
+    const chunk: ConsumerMasterRow[] = await res.json()
+    allRows = allRows.concat(chunk)
+
+    if (options?.onProgress) {
+      options.onProgress(allRows.length, total || allRows.length)
+    }
+
+    if (chunk.length < limit || (total > 0 && allRows.length >= total)) {
+      break
+    }
+    offset += limit
+  }
+
+  return allRows
+}
+
 interface LookupProps {
   onSelect: (row: ConsumerMasterRow) => void
   placeholder?: string
@@ -55,6 +94,7 @@ export function ConsumerMasterLookup({ onSelect, placeholder = "Search by consum
   const [results, setResults]   = useState<ConsumerMasterRow[]>([])
   const [data, setData]         = useState<ConsumerMasterRow[]>([])
   const [loading, setLoading]   = useState(false)
+  const [loadingProgress, setLoadingProgress] = useState("")
   const [fetched, setFetched]   = useState(false)
   const { toast }               = useToast()
 
@@ -71,9 +111,11 @@ export function ConsumerMasterLookup({ onSelect, placeholder = "Search by consum
           setFetched(true)
           return
         }
-        const res = await fetch("/api/consumer-master")
-        if (!res.ok) throw new Error("Failed to load consumer master")
-        const fresh: ConsumerMasterRow[] = await res.json()
+        const fresh = await fetchMasterInChunks({
+          onProgress: (loaded, total) => {
+            setLoadingProgress(`Syncing: ${loaded.toLocaleString()} / ${total.toLocaleString()}`)
+          }
+        })
         await saveToCache(CACHE_KEY, fresh)
         setData(fresh)
         setFetched(true)
@@ -81,6 +123,7 @@ export function ConsumerMasterLookup({ onSelect, placeholder = "Search by consum
         toast({ title: "Consumer master unavailable", description: e.message, variant: "destructive" })
       } finally {
         setLoading(false)
+        setLoadingProgress("")
       }
     })()
   }, [fetched, toast])
@@ -110,7 +153,7 @@ export function ConsumerMasterLookup({ onSelect, placeholder = "Search by consum
         onChange={e => handleQuery(e.target.value)}
         disabled={loading}
       />
-      {loading && <p className="text-xs text-muted-foreground">Loading consumer master…</p>}
+      {loading && <p className="text-xs text-muted-foreground">{loadingProgress || "Loading consumer master…"}</p>}
       {results.length > 0 && (
         <div className="border rounded-md max-h-52 overflow-y-auto divide-y text-sm">
           {results.map((r, i) => (
@@ -159,6 +202,7 @@ export function ConsumerMaster({ role }: ConsumerMasterProps) {
   const [count, setCount]                 = useState<number | null>(null)
   const [cacheAge, setCacheAge]           = useState<number | null>(null)
   const [loadingStats, setLoadingStats]   = useState(false)
+  const [syncProgress, setSyncProgress]   = useState("")
 
   // Search / browse state (for non-admin or after upload)
   const [query, setQuery]                 = useState("")
@@ -170,54 +214,43 @@ export function ConsumerMaster({ role }: ConsumerMasterProps) {
   const timerRef                          = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
-    loadStats()
-    loadData()
+    loadMasterData(false)
   }, [])
 
-  async function loadStats(force = false) {
+  async function loadMasterData(force = false) {
     setLoadingStats(true)
     try {
       const age = await getCacheAgeMs(CACHE_KEY)
       setCacheAge(typeof age === "number" ? age : null)
+      
       if (!force) {
         const cached = await getFromCache<ConsumerMasterRow[]>(CACHE_KEY)
-        if (cached && Array.isArray(cached)) {
+        if (cached && Array.isArray(cached) && cached.length > 0) {
           setCount(cached.length)
+          setAllData(cached)
+          setDataLoaded(true)
           setLoadingStats(false)
           return
         }
       }
-      const url = force ? "/api/consumer-master?refresh=true" : "/api/consumer-master"
-      const res = await fetch(url)
-      if (!res.ok) throw new Error()
-      const data: ConsumerMasterRow[] = await res.json()
-      await saveToCache(CACHE_KEY, data)
-      setCount(data.length)
-    } catch { /* silent */ } finally {
-      setLoadingStats(false)
-    }
-  }
 
-  async function loadData(force = false) {
-    try {
-      if (!force) {
-        const cached = await getFromCache<ConsumerMasterRow[]>(CACHE_KEY)
-        const age    = await getCacheAgeMs(CACHE_KEY)
-        if (cached && Array.isArray(cached) && typeof age === "number" && age < CACHE_TTL) {
-          setAllData(cached)
-          setDataLoaded(true)
-          return
+      setDataLoaded(false)
+      const data = await fetchMasterInChunks({
+        refresh: force,
+        onProgress: (loaded, total) => {
+          setSyncProgress(`Syncing: ${loaded.toLocaleString()} / ${total.toLocaleString()}`)
         }
-      }
-      const url = force ? "/api/consumer-master?refresh=true" : "/api/consumer-master"
-      const res = await fetch(url)
-      if (!res.ok) return
-      const data: ConsumerMasterRow[] = await res.json()
+      })
       await saveToCache(CACHE_KEY, data)
-      setAllData(data)
       setCount(data.length)
+      setAllData(data)
       setDataLoaded(true)
-    } catch { /* silent */ }
+    } catch (e: any) {
+      toast({ title: "Sync failed", description: e.message, variant: "destructive" })
+    } finally {
+      setLoadingStats(false)
+      setSyncProgress("")
+    }
   }
 
   const handleSearch = (q: string) => {
@@ -317,7 +350,12 @@ export function ConsumerMaster({ role }: ConsumerMasterProps) {
       setCount(serverConfirmed)
       // Refresh IndexedDB cache
       setUploadProgress("Refreshing cache…")
-      const fresh = await fetch("/api/consumer-master").then(r => r.json())
+      const fresh = await fetchMasterInChunks({
+        refresh: true,
+        onProgress: (loaded, total) => {
+          setUploadProgress(`Refreshing cache: ${loaded.toLocaleString()} / ${total.toLocaleString()}`)
+        }
+      })
       await saveToCache(CACHE_KEY, fresh)
       setAllData(fresh)
       setDataLoaded(true)
@@ -355,13 +393,14 @@ export function ConsumerMaster({ role }: ConsumerMasterProps) {
         <div>
           <h2 className="text-xl font-bold">Consumer Master</h2>
           <p className="text-sm text-muted-foreground">
-            {loadingStats ? "Loading…"
+            {loadingStats 
+              ? (syncProgress || "Loading…")
               : count !== null ? `${count.toLocaleString()} consumers loaded${cacheAge !== null ? " · cached " + formatAge(cacheAge) : ""}`
               : "No data yet"}
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={() => { setDataLoaded(false); loadStats(true); loadData(true) }}>
+          <Button variant="outline" size="sm" onClick={() => { loadMasterData(true) }} disabled={loadingStats}>
             Refresh Cache
           </Button>
         </div>

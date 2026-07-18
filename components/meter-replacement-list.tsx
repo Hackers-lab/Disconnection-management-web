@@ -19,6 +19,7 @@ import { getFromCache, saveToCache } from "@/lib/indexed-db"
 import type { ConsumerData } from "@/lib/google-sheets"
 import type { ConsumerMasterRow } from "@/components/consumer-master"
 import type { MeterReplacement } from "@/lib/meter-replacement-service"
+import { compressAndWatermarkImage } from "@/lib/image-processor"
 
 const CACHE_KEY = "meter_replacement_data_cache"
 
@@ -504,14 +505,27 @@ function MeterReplacementCreateForm({ agencies, onSave, onCancel }: FormProps) {
   const handleFileUpload = async (file: File) => {
     setUploading(true)
     try {
+      const dateStr = new Date().toLocaleString("en-IN", { 
+        day: "2-digit", 
+        month: "2-digit", 
+        year: "numeric", 
+        hour: "2-digit", 
+        minute: "2-digit", 
+        hour12: true 
+      })
+      const processed = await compressAndWatermarkImage(file, {
+        maxDim: 800,
+        watermarkLines: [`Meter Replacement — ${consumerId || "replacement"}`, `Date: ${dateStr}`],
+        targetKb: 95
+      })
       const fd = new FormData()
-      fd.append("file", file)
+      fd.append("file", processed)
       fd.append("consumerId", consumerId || "replacement")
       const res = await fetch("/api/upload-image", { method: "POST", body: fd })
       const data = await res.json()
       if (data.success) {
         setAttachmentUrl(data.url)
-        setUploadedFileName(file.name)
+        setUploadedFileName(processed.name)
       } else {
         alert("Upload failed: " + (data.error || "unknown error"))
       }

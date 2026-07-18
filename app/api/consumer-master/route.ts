@@ -14,14 +14,25 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const isRefresh = searchParams.get("refresh") === "true"
+    const offsetStr = searchParams.get("offset")
+    const limitStr = searchParams.get("limit")
 
     if (isRefresh) {
       invalidateMasterCache()
     }
 
     const data = await fetchMasterData()
-    return NextResponse.json(data, {
+    
+    let result = data
+    if (offsetStr !== null || limitStr !== null) {
+      const offset = parseInt(offsetStr || "0", 10)
+      const limit = parseInt(limitStr || "10000", 10)
+      result = data.slice(offset, offset + limit)
+    }
+
+    return NextResponse.json(result, {
       headers: {
+        'X-Total-Count': String(data.length),
         'Cache-Control': isRefresh
           ? 'no-store'
           : 'public, s-maxage=2592000, stale-while-revalidate=86400',

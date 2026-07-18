@@ -10,6 +10,7 @@ import { ArrowLeft, Camera, Upload, Loader2, MapPin, Phone, Home } from "lucide-
 import type { MeterIssue } from "@/lib/meter-types"
 import { getFromCache } from "@/lib/indexed-db"
 import type { ConsumerData } from "@/lib/google-sheets"
+import { compressAndWatermarkImage } from "@/lib/image-processor"
 
 const PURPOSE_LABELS: Record<string, string> = {
   faulty_replacement: "Faulty/Defective Replacement",
@@ -77,22 +78,12 @@ export function MeterCompleteForm({ issue, onSave, onCancel }: Props) {
 
   // ── Image compression ─────────────────────────────────────────────────────
   const compressImage = async (file: File, slot: "before" | "after"): Promise<File> => {
-    return new Promise(resolve => {
-      const img = new Image(); img.src = URL.createObjectURL(file)
-      img.onload = () => {
-        let w = img.width, h = img.height; const max = 1024
-        if (w > max || h > max) { if (w > h) { h = Math.round(h * max / w); w = max } else { w = Math.round(w * max / h); h = max } }
-        const canvas = document.createElement("canvas"); canvas.width = w; canvas.height = h
-        const ctx = canvas.getContext("2d"); if (!ctx) { resolve(file); return }
-        ctx.drawImage(img, 0, 0, w, h)
-        const fs = Math.max(18, w * 0.03); const pad = fs / 2; const barH = fs * 1.3 * 2 + pad * 2
-        ctx.fillStyle = "rgba(0,0,0,0.6)"; ctx.fillRect(0, h - barH, w, barH)
-        ctx.font = `bold ${fs}px sans-serif`; ctx.fillStyle = "#fff"; ctx.textBaseline = "bottom"
-        ctx.fillText(`${slot === "before" ? "Before" : "After"} Installation — ${issue.issueId}`, pad, h - barH + pad + fs)
-        ctx.fillText(new Date().toLocaleString("en-IN"), pad, h - pad)
-        canvas.toBlob(blob => resolve(blob ? new File([blob], file.name, { type: "image/jpeg" }) : file), "image/jpeg", 0.8)
-      }
-      img.onerror = () => resolve(file)
+    const dateStr = new Date().toLocaleString("en-IN")
+    const titleStr = `${slot === "before" ? "Before" : "After"} Installation — ${issue.issueId}`
+    return compressAndWatermarkImage(file, {
+      maxDim: 800,
+      watermarkLines: [titleStr, `Date: ${dateStr}`],
+      targetKb: 95
     })
   }
 
