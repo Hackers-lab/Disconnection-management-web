@@ -28,10 +28,16 @@ export async function GET(request: NextRequest) {
 
   const clientId = process.env.GOOGLE_CLIENT_ID
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET
-  const redirectUri = process.env.GOOGLE_REDIRECT_URI
+  let redirectUri = process.env.GOOGLE_REDIRECT_URI
 
-  if (!clientId || !clientSecret || !redirectUri) {
-    return NextResponse.json({ error: "Google OAuth parameters are not configured on the server." }, { status: 500 })
+  if (!redirectUri) {
+    const host = request.headers.get("host") || "localhost:3000"
+    const protocol = host.includes("localhost") || host.includes("127.0.0.1") ? "http" : "https"
+    redirectUri = `${protocol}://${host}/api/auth/google/callback`
+  }
+
+  if (!clientId || !clientSecret) {
+    return NextResponse.json({ error: "Google OAuth parameters are not configured on the server. Please set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET." }, { status: 500 })
   }
 
   try {
@@ -112,8 +118,8 @@ export async function GET(request: NextRequest) {
     // Invalidate the cache to apply the changes immediately
     invalidateTenantCache()
 
-    // Redirect to admin onboarding success screen
-    return NextResponse.redirect(new URL("/admin/onboarding?success=true", request.nextUrl.origin))
+    // Redirect back to dashboard with success query param
+    return NextResponse.redirect(new URL("/dashboard?success=true", request.nextUrl.origin))
   } catch (error: any) {
     console.error("Google OAuth Callback Error:", error)
     return NextResponse.json({ error: error.message || "Failed to process Google OAuth callback." }, { status: 500 })

@@ -12,7 +12,30 @@ export const GET = withTenant(async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const permissions = await roleStorage.getPermissionsForRole(session.role)
+    let permissions
+    try {
+      permissions = await roleStorage.getPermissionsForRole(session.role)
+    } catch (e: any) {
+      console.warn("Failed to retrieve custom role permissions (likely sheet not linked yet):", e.message || e)
+      // Fallback: If they are an admin, give them access to the admin module so they can link Google account
+      if (session.role === "admin") {
+        permissions = {
+          disconnection: [],
+          reconnection: [],
+          deemed: [],
+          dtr: [],
+          meter: [],
+          nsc: [],
+          consumer_master: [],
+          admin: ["read", "create", "update", "delete"],
+          meter_replacement: [],
+          material: [],
+        }
+      } else {
+        permissions = null
+      }
+    }
+
     if (!permissions) {
       // Default to empty permissions if role is not configured
       return NextResponse.json({

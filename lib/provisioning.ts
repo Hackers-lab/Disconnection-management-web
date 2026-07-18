@@ -27,9 +27,9 @@ export async function duplicateSpreadsheetTemplate(
   driveClient: any,
   folderId: string
 ): Promise<string> {
-  const templateId = process.env.TEMPLATE_SPREADSHEET_ID
+  const templateId = process.env.TEMPLATE_SPREADSHEET_ID || process.env.DISCONNECTION_SHEET
   if (!templateId) {
-    console.warn("⚠️ TEMPLATE_SPREADSHEET_ID is not defined in environment variables. Skipping sheet auto-provisioning.")
+    console.warn("⚠️ TEMPLATE_SPREADSHEET_ID or DISCONNECTION_SHEET is not defined in environment variables. Skipping sheet auto-provisioning.")
     return ""
   }
 

@@ -11,6 +11,7 @@ export const POST = withTenant(async function POST(request: NextRequest) {
     const formData = await request.formData()
     const file = formData.get("file") as File
     const consumerId = formData.get("consumerId") as string
+    const moduleName = (formData.get("module") || formData.get("moduleName")) as string
 
     if (!file) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 })
@@ -21,7 +22,7 @@ export const POST = withTenant(async function POST(request: NextRequest) {
     }
 
     // Upload to Google Drive
-    const publicUrl = await uploadImageToDrive(file, consumerId)
+    const publicUrl = await uploadImageToDrive(file, consumerId, moduleName)
 
     return NextResponse.json({
       success: true,

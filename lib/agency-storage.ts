@@ -1,12 +1,17 @@
 import { google } from "googleapis"
+import { getTenantContext } from "./tenant-context"
 
-const SHEET_ID = process.env.USERS_SHEET!
-const AGENCY_SHEET_NAME = "Agencies" // Change if your sheet name is different
+const SHEET_ID = process.env.MASTER_CONFIG_SHEET!
+const AGENCY_SHEET_NAME = "Agencies"
 
-// Simple in-memory cache to reduce Google Sheets API calls
-let agenciesCache: any[] | null = null
-let lastCacheTime = 0
-const CACHE_TTL = 24 * 60 * 60 * 1000 // 24 hours (effectively server session)
+interface CacheEntry {
+  data: any[]
+  timestamp: number
+}
+
+// In-memory cache per CCC subdivision to support multi-tenancy
+let agenciesCache: Record<string, CacheEntry> = {}
+const CACHE_TTL = 5 * 60 * 1000 // 5 minutes
 
 async function getSheetsClient() {
   const auth = new google.auth.GoogleAuth({
@@ -19,20 +24,52 @@ async function getSheetsClient() {
   return google.sheets({ version: "v4", auth })
 }
 
+let tabReady = false
+async function ensureTab() {
+  if (tabReady) return
+  if (!SHEET_ID) {
+    throw new Error("MASTER_CONFIG_SHEET environment variable is not defined")
+  }
+  const sheets = await getSheetsClient()
+  const meta = await sheets.spreadsheets.get({ spreadsheetId: SHEET_ID })
+  const existing = (meta.data.sheets || []).map(s => s.properties?.title)
+  if (!existing.includes(AGENCY_SHEET_NAME)) {
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId: SHEET_ID,
+      requestBody: {
+        requests: [{ addSheet: { properties: { title: AGENCY_SHEET_NAME } } }],
+      },
+    })
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: SHEET_ID,
+      range: `${AGENCY_SHEET_NAME}!A1:E1`,
+      valueInputOption: "RAW",
+      requestBody: {
+        values: [["ID", "Name", "Description", "IsActive", "cccCode"]],
+      },
+    })
+  }
+  tabReady = true
+}
+
 export async function getAgencies() {
+  const context = getTenantContext()
+  const cccCode = context?.cccCode || "SYSTEM"
+
   // Return cached data if valid
-  if (agenciesCache && (Date.now() - lastCacheTime < CACHE_TTL)) {
-    return agenciesCache
+  const cached = agenciesCache[cccCode]
+  if (cached && (Date.now() - cached.timestamp < CACHE_TTL)) {
+    return cached.data
   }
 
+  await ensureTab()
   const sheets = await getSheetsClient()
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId: SHEET_ID,
-    range: `${AGENCY_SHEET_NAME}!A2:D`,
+    range: `${AGENCY_SHEET_NAME}!A2:E`,
   })
   const rows = res.data.values || []
-  // Get all rows, including empty ones, to track real row numbers
-  // Use sheets.spreadsheets.values.get to get all rows, then filter in-place
+  
   let realRow = 2
   const processed = rows
     .map(row => {
@@ -42,7 +79,8 @@ export async function getAgencies() {
             name: row[1],
             description: row[2],
             isActive: String(row[3]).toLowerCase() === "true" || row[3] === true,
-            _sheetRow: realRow, // Track the actual sheet row number
+            cccCode: String(row[4] || "").trim(),
+            _sheetRow: realRow,
           }
         : null
       realRow++
@@ -50,54 +88,113 @@ export async function getAgencies() {
     })
     .filter(Boolean)
 
+  // Filter to keep only the agencies belonging to the active CCC subdivision
+  const tenantAgencies = processed.filter(a => a && a.cccCode === cccCode)
+
   // Update cache
-  agenciesCache = processed
-  lastCacheTime = Date.now()
-  return processed
+  agenciesCache[cccCode] = { data: tenantAgencies, timestamp: Date.now() }
+  return tenantAgencies
 }
 
 export async function addAgency({ name, description, isActive }: { name: string; description: string; isActive: boolean }) {
-  const agencies = await getAgencies()
-  const newId = (Math.max(0, ...agencies.map(a => Number(a.id))) + 1).toString()
+  const context = getTenantContext()
+  const cccCode = context?.cccCode || "SYSTEM"
+
+  // Fetch all agencies to calculate correct auto-increment ID
+  await ensureTab()
   const sheets = await getSheetsClient()
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId: SHEET_ID,
+    range: `${AGENCY_SHEET_NAME}!A2:A`,
+  })
+  const ids = (res.data.values || []).map(r => Number(r[0])).filter(n => !isNaN(n))
+  const newId = (Math.max(0, ...ids) + 1).toString()
+
   await sheets.spreadsheets.values.append({
     spreadsheetId: SHEET_ID,
-    range: `${AGENCY_SHEET_NAME}!A:D`,
+    range: `${AGENCY_SHEET_NAME}!A:E`,
     valueInputOption: "RAW",
     requestBody: {
-      values: [[newId, name, description, isActive ? "true" : "false"]],
+      values: [[newId, name, description, isActive ? "true" : "false", cccCode]],
     },
   })
-  agenciesCache = null // Invalidate cache on write
+  
+  // Invalidate cache for this tenant
+  delete agenciesCache[cccCode]
   return { id: newId, name, description, isActive }
 }
 
 export async function updateAgency({ id, name, description, isActive }: { id: string; name: string; description: string; isActive: boolean }) {
-  const agencies = await getAgencies()
-  const agency = agencies.find(a => a.id === id)
-  if (!agency) return null
+  const context = getTenantContext()
+  const cccCode = context?.cccCode || "SYSTEM"
+
+  // We need to fetch the raw list to find the correct spreadsheet row of this agency
+  await ensureTab()
   const sheets = await getSheetsClient()
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId: SHEET_ID,
+    range: `${AGENCY_SHEET_NAME}!A2:E`,
+  })
+  const rows = res.data.values || []
+  let sheetRow = -1
+  for (let i = 0; i < rows.length; i++) {
+    if (rows[i] && String(rows[i][0]) === id) {
+      sheetRow = i + 2
+      break
+    }
+  }
+
+  if (sheetRow === -1) return null
+
   await sheets.spreadsheets.values.update({
     spreadsheetId: SHEET_ID,
-    range: `${AGENCY_SHEET_NAME}!A${agency._sheetRow}:D${agency._sheetRow}`,
+    range: `${AGENCY_SHEET_NAME}!A${sheetRow}:E${sheetRow}`,
     valueInputOption: "RAW",
     requestBody: {
-      values: [[id, name, description, isActive ? "true" : "false"]],
+      values: [[id, name, description, isActive ? "true" : "false", cccCode]],
     },
   })
-  agenciesCache = null // Invalidate cache on write
+  
+  // Invalidate cache for this tenant
+  delete agenciesCache[cccCode]
   return { id, name, description, isActive }
 }
 
 export async function deleteAgency(id: string) {
-  const agencies = await getAgencies()
-  const agency = agencies.find(a => a.id === id)
-  if (!agency) return null
+  const context = getTenantContext()
+  const cccCode = context?.cccCode || "SYSTEM"
+
+  await ensureTab()
   const sheets = await getSheetsClient()
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId: SHEET_ID,
+    range: `${AGENCY_SHEET_NAME}!A2:E`,
+  })
+  const rows = res.data.values || []
+  let sheetRow = -1
+  let agency = null
+  for (let i = 0; i < rows.length; i++) {
+    if (rows[i] && String(rows[i][0]) === id) {
+      sheetRow = i + 2
+      agency = {
+        id: String(rows[i][0]),
+        name: String(rows[i][1] || ""),
+        description: String(rows[i][2] || ""),
+        isActive: String(rows[i][3]).toLowerCase() === "true",
+        cccCode: String(rows[i][4] || ""),
+      }
+      break
+    }
+  }
+
+  if (sheetRow === -1 || !agency) return null
+
   await sheets.spreadsheets.values.clear({
     spreadsheetId: SHEET_ID,
-    range: `${AGENCY_SHEET_NAME}!A${agency._sheetRow}:D${agency._sheetRow}`,
+    range: `${AGENCY_SHEET_NAME}!A${sheetRow}:E${sheetRow}`,
   })
-  agenciesCache = null // Invalidate cache on write
+  
+  // Invalidate cache for this tenant
+  delete agenciesCache[cccCode]
   return agency
 }

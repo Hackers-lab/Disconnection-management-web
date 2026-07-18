@@ -26,7 +26,7 @@ const DTRPaintingList = dynamic(() => import("@/components/dtr-painting-list").t
 const MeterReplacementList = dynamic(() => import("@/components/meter-replacement-list").then(m => ({ default: m.MeterReplacementList })), { ssr: false })
 const MaterialList = dynamic(() => import("@/components/material-list").then(m => ({ default: m.MaterialList })), { ssr: false })
 
-import { Loader2 } from "lucide-react"
+import { Loader2, AlertTriangle, KeyRound, CheckCircle2 } from "lucide-react"
 
 // UI Components for the Dialog
 import { Button } from "@/components/ui/button"
@@ -53,6 +53,40 @@ interface DashboardClientProps {
 export default function DashboardClient({ role, agencies }: DashboardClientProps) {
   const [showAdminPanel, setShowAdminPanel] = useState(false)
   const [activeView, setActiveViewInternal] = useState<ViewType | "home">("home")
+  const [showOnboardingModal, setShowOnboardingModal] = useState(false)
+
+  const [showSuccessModal, setShowSuccessModal] = useState(false)
+
+  // Check if tenant is linked to Google Drive/Sheets on mount
+  useEffect(() => {
+    const checkTenantStatus = async () => {
+      try {
+        const res = await fetch("/api/admin/tenant-status")
+        if (res.ok) {
+          const status = await res.json()
+          if (status && status.linked === false) {
+            setShowOnboardingModal(true)
+          }
+        }
+      } catch (e) {
+        console.error("Failed to check tenant status", e)
+      }
+    }
+    checkTenantStatus()
+  }, [])
+
+  // Check for success=true query parameter on mount
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search)
+      if (params.get("success") === "true") {
+        setShowSuccessModal(true)
+        // Clean up search params to avoid popping up again on refresh
+        const cleanUrl = window.location.pathname + window.location.hash
+        window.history.replaceState(null, "", cleanUrl)
+      }
+    }
+  }, [])
 
   // Handle setting active view and updating hash/history
   const setActiveView = (newView: ViewType | "home") => {
@@ -1244,6 +1278,70 @@ export default function DashboardClient({ role, agencies }: DashboardClientProps
         {activeView === "admin" && (
            <AdminPanel onClose={() => setActiveView("home")} />
         )}
+
+        {/* Global Onboarding Required Dialog Modal */}
+        <Dialog open={showOnboardingModal} onOpenChange={() => {}}>
+          <DialogContent className="sm:max-w-[425px] bg-slate-900 border-slate-800 text-slate-100 dark" aria-describedby="onboarding-description">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-yellow-500 font-bold text-lg">
+                <AlertTriangle className="h-5 w-5 text-yellow-500 animate-bounce" />
+                Google Integration Required
+              </DialogTitle>
+              <DialogDescription id="onboarding-description" className="text-slate-400 pt-2 text-sm leading-relaxed">
+                This subdivision Customer Care Center (CCC) has not been linked to a Google Spreadsheet database or Drive folder yet.
+                {role === "admin" ? (
+                  <>
+                    <br /><br />
+                    As an <strong>Administrator</strong>, you must authenticate with your Google Account to duplicate the master database template and begin managing consumer records.
+                  </>
+                ) : (
+                  <>
+                    <br /><br />
+                    Please request an <strong>Administrator</strong> of your office to log in and authorize the application to link your database.
+                  </>
+                )}
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="mt-6 flex flex-col gap-2 sm:flex-col">
+              {role === "admin" ? (
+                <Button asChild className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2">
+                  <a href="/api/auth/google/login">
+                    <KeyRound className="h-4 w-4 mr-2" />
+                    Link Google Account Now
+                  </a>
+                </Button>
+              ) : (
+                <div className="w-full text-center py-2 px-3 bg-slate-800/50 rounded-lg text-slate-400 text-xs italic">
+                  Awaiting Admin Authentication
+                </div>
+              )}
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Global Onboarding Success Dialog Modal */}
+        <Dialog open={showSuccessModal} onOpenChange={setShowSuccessModal}>
+          <DialogContent className="sm:max-w-[425px] bg-slate-900 border-slate-800 text-slate-100 dark" aria-describedby="success-description">
+            <DialogHeader className="flex flex-col items-center justify-center text-center">
+              <div className="h-16 w-16 bg-emerald-500/10 rounded-full flex items-center justify-center mb-4 mt-2">
+                <CheckCircle2 className="h-10 w-10 text-emerald-500 animate-pulse" />
+              </div>
+              <DialogTitle className="text-xl font-bold text-slate-100 text-center">
+                Onboarding Completed!
+              </DialogTitle>
+              <DialogDescription id="success-description" className="text-slate-400 pt-2 text-sm leading-relaxed text-center">
+                Your subdivision Customer Care Center (CCC) database has been set up successfully.
+                <br /><br />
+                The system has cloned the master spreadsheet template and created your cloud storage folders. You can now start managing records.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="mt-6">
+              <Button onClick={() => setShowSuccessModal(false)} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2">
+                Go to Dashboard Home
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
       </DashboardShell>
     </DashboardProvider>

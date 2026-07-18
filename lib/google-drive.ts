@@ -73,7 +73,37 @@ export const auth = new DynamicAuth()
 
 const drive = google.drive({ version: "v3", auth })
 
-export async function uploadImageToDrive(file: File, consumerId: string): Promise<string> {
+function detectFolderForModule(consumerId: string, moduleName?: string): string {
+  if (moduleName) return moduleName.trim().toLowerCase()
+
+  const id = String(consumerId).toUpperCase()
+  if (id.includes("MAT-RECV-") || id.includes("MAT-ISSUE-") || id.includes("MAT-CAT-")) {
+    return "material"
+  }
+  if (id.startsWith("NSC-")) {
+    return "nsc"
+  }
+  if (id.startsWith("DTR-")) {
+    return "dtr"
+  }
+  if (id.startsWith("PAINT-")) {
+    return "dtr_painting"
+  }
+  if (id.startsWith("RECON-")) {
+    return "reconnection"
+  }
+  if (id.startsWith("MTR-") || id.startsWith("METER-") || id.startsWith("REPL-")) {
+    return "meter_replacement"
+  }
+  if (id.startsWith("DD-")) {
+    return "deemed"
+  }
+
+  // Fallback to disconnection
+  return "disconnection"
+}
+
+export async function uploadImageToDrive(file: File, consumerId: string, moduleName?: string): Promise<string> {
   try {
     const hasServiceAccount = client_email && private_key
     const hasOAuth = client_id && client_secret && refresh_token
@@ -93,15 +123,57 @@ export async function uploadImageToDrive(file: File, consumerId: string): Promis
     const ext = file.name ? (file.name.split(".").pop() || "jpg") : (file.type === "application/pdf" ? "pdf" : "jpg")
     const fileName = `${consumerId}_${Date.now()}.${ext}`
     
-    const folderId = context?.driveFolderId || process.env.GOOGLE_DRIVE_FOLDER_ID
+    const rootFolderId = context?.driveFolderId || process.env.GOOGLE_DRIVE_FOLDER_ID
     
-    if (!folderId) {
+    if (!rootFolderId) {
       throw new Error("GOOGLE_DRIVE_FOLDER_ID is not set in .env.local and no tenant folder is provisioned")
+    }
+
+    // Determine subfolder based on module name
+    let targetFolderId = rootFolderId
+    const folderName = detectFolderForModule(consumerId, moduleName)
+    
+    if (folderName) {
+      try {
+        // Query to check if the module subfolder already exists inside the root folder
+        const query = `name = '${folderName}' and mimeType = 'application/vnd.google-apps.folder' and '${rootFolderId}' in parents and trashed = false`
+        const listResponse = await drive.files.list({
+          q: query,
+          spaces: 'drive',
+          fields: 'files(id)',
+          supportsAllDrives: true,
+          includeItemsFromAllDrives: true,
+        })
+
+        const existingFolder = listResponse.data.files?.[0]
+        if (existingFolder?.id) {
+          targetFolderId = existingFolder.id
+        } else {
+          // Create the subfolder under the root folder
+          const folderMetadata = {
+            name: folderName,
+            mimeType: 'application/vnd.google-apps.folder',
+            parents: [rootFolderId],
+          }
+          const createResponse = await drive.files.create({
+            requestBody: folderMetadata,
+            fields: 'id',
+            supportsAllDrives: true,
+          })
+          if (createResponse.data.id) {
+            targetFolderId = createResponse.data.id
+          }
+        }
+      } catch (err) {
+        console.error(`Failed to locate or create Drive subfolder '${folderName}':`, err)
+        // Fallback to uploading to root folder
+        targetFolderId = rootFolderId
+      }
     }
 
     const fileMetadata = {
       name: fileName,
-      parents: [folderId],
+      parents: [targetFolderId],
     }
 
     const media = {

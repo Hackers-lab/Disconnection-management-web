@@ -1,21 +1,22 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { verifySession } from "@/lib/session"
 import { getAgencies, addAgency, updateAgency, deleteAgency } from "@/lib/agency-storage"
+import { withTenant } from "@/lib/tenant-context"
 
 export const dynamic = "force-dynamic"
 
 // GET - List all agencies
-export async function GET() {
+export const GET = withTenant(async function GET(request: NextRequest) {
   const session = await verifySession()
   if (!session || session.role !== "admin") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
   const agencies = await getAgencies()
   return NextResponse.json(agencies)
-}
+})
 
 // POST - Add new agency
-export async function POST(request: NextRequest) {
+export const POST = withTenant(async function POST(request: NextRequest) {
   const session = await verifySession()
   if (!session || session.role !== "admin") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -35,10 +36,10 @@ export async function POST(request: NextRequest) {
     console.error("Error adding agency:", error)
     return NextResponse.json({ error: "Failed to add agency" }, { status: 500 })
   }
-}
+})
 
 // PUT - Update agency
-export async function PUT(request: NextRequest) {
+export const PUT = withTenant(async function PUT(request: NextRequest) {
   const session = await verifySession()
   if (!session || session.role !== "admin") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -59,10 +60,10 @@ export async function PUT(request: NextRequest) {
     console.error("Error updating agency:", error)
     return NextResponse.json({ error: "Failed to update agency" }, { status: 500 })
   }
-}
+})
 
 // DELETE - Delete agency
-export async function DELETE(request: NextRequest) {
+export const DELETE = withTenant(async function DELETE(request: NextRequest) {
   const session = await verifySession()
   if (!session || session.role !== "admin") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -84,4 +85,4 @@ export async function DELETE(request: NextRequest) {
     console.error("Error deleting agency:", error)
     return NextResponse.json({ error: "Failed to delete agency" }, { status: 500 })
   }
-}
+})

@@ -28,7 +28,10 @@ export const colLetter = (i: number) => {
 
 export function getSpreadsheetId() {
   const context = getTenantContext()
-  if (context?.spreadsheetId) {
+  if (context) {
+    if (!context.spreadsheetId) {
+      throw new Error("No Google Spreadsheet ID is configured for this Customer Care Center (CCC). Please complete Google Onboarding first.")
+    }
     return context.spreadsheetId
   }
 
@@ -64,6 +67,39 @@ export async function ensureHeaders(
 
   const missing = expected.filter((h) => !existingNorm.has(norm(h)))
   if (missing.length === 0) return existing
+
+  // Ensure sheet has enough columns to accommodate the new headers
+  const requiredCols = existing.length + missing.length
+  try {
+    const meta = await sheets.spreadsheets.get({ spreadsheetId })
+    const sheet = meta.data.sheets?.find((s) => s.properties?.title === sheetName)
+    if (sheet) {
+      const currentCols = sheet.properties?.gridProperties?.columnCount || 0
+      if (currentCols < requiredCols) {
+        console.log(`Resizing sheet "${sheetName}" columns from ${currentCols} to ${requiredCols}...`)
+        await sheets.spreadsheets.batchUpdate({
+          spreadsheetId,
+          requestBody: {
+            requests: [
+              {
+                updateSheetProperties: {
+                  properties: {
+                    sheetId: sheet.properties?.sheetId,
+                    gridProperties: {
+                      columnCount: requiredCols,
+                    },
+                  },
+                  fields: "gridProperties.columnCount",
+                },
+              },
+            ],
+          },
+        })
+      }
+    }
+  } catch (err: any) {
+    console.error(`Failed to resize columns for sheet "${sheetName}":`, err.message || err)
+  }
 
   const startCol = colLetter(existing.length)
   const endCol = colLetter(existing.length + missing.length - 1)

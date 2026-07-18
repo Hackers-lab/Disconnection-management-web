@@ -9,8 +9,17 @@ import { getSpreadsheetId } from "@/lib/google-sheets-api";
 
 export const GET = withTenant(async function GET(req: NextRequest) {
   try {
-    const spreadsheetId = getSpreadsheetId();
-    const data = await fetchConsumerData(spreadsheetId);
+    let data = [];
+    try {
+      const spreadsheetId = getSpreadsheetId();
+      data = await fetchConsumerData(spreadsheetId);
+    } catch (e: any) {
+      console.warn("Failed to fetch base consumer data (likely sheet not linked yet):", e.message || e);
+      return NextResponse.json([], {
+        status: 200,
+        headers: { 'Cache-Control': 'no-store' },
+      });
+    }
     const lastRow = data[data.length - 1];
 
     // If the last row has an ID but no agency, the sheet may still be loading.

@@ -13,9 +13,14 @@ export const GET = withTenant(async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams
     const type = searchParams.get('type') || 'consumer'
 
-    const spreadsheetId = getSpreadsheetId()
-    if (!spreadsheetId) {
-      throw new Error("Missing required spreadsheet ID")
+    let spreadsheetId
+    try {
+      spreadsheetId = getSpreadsheetId()
+    } catch (e: any) {
+      console.warn("Failed to get spreadsheet ID for row count (likely sheet not linked yet):", e.message || e)
+      return NextResponse.json({ count: 0, version: null }, {
+        headers: { "Cache-Control": "no-store" },
+      })
     }
 
     // Consumer counts reuse the shared, cross-instance cache of parsed consumer

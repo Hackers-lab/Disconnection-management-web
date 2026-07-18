@@ -54,10 +54,10 @@ export async function getTenantRegistry(): Promise<Record<string, TenantConfig>>
   const tenants: Record<string, TenantConfig> = {}
 
   for (const row of rows) {
-    if (!row || row.length < 3 || !row[0]) continue
+    if (!row || !row[0]) continue
     const cccCode = String(row[0]).trim()
     const cccName = String(row[1] || "").trim()
-    const spreadsheetId = String(row[2]).trim()
+    const spreadsheetId = String(row[2] || "").trim()
     const driveFolderId = String(row[3] || "").trim()
     const encryptedToken = String(row[4] || "").trim()
 

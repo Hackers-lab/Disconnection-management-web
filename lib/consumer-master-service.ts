@@ -71,14 +71,29 @@ export async function _fetchMasterRaw(spreadsheetId: string): Promise<ConsumerMa
   return (res.data.values || []).slice(1).filter(r => r[0]).map(r => parseRow(r.map(String)))
 }
 
-// ── Cached read ───────────────────────────────────────────────────────────────
-export const fetchMasterData = unstable_cache(
-  async (spreadsheetId: string) => _fetchMasterRaw(spreadsheetId),
-  ["consumer-master-data"],
-  { revalidate: MASTER_REVALIDATE, tags: [MASTER_TAG] },
-)
+let memoryCache: Record<string, { data: ConsumerMasterRow[], timestamp: number }> = {}
 
-export function invalidateMasterCache() { revalidateTag(MASTER_TAG) }
+// ── Cached read ───────────────────────────────────────────────────────────────
+export async function fetchMasterData(spreadsheetId: string): Promise<ConsumerMasterRow[]> {
+  const cached = memoryCache[spreadsheetId]
+  // Cache for 30 days (or until invalidated) to match MASTER_REVALIDATE
+  if (cached && Date.now() - cached.timestamp < MASTER_REVALIDATE * 1000) {
+    return cached.data
+  }
+
+  const data = await _fetchMasterRaw(spreadsheetId)
+  memoryCache[spreadsheetId] = { data, timestamp: Date.now() }
+  return data
+}
+
+export function invalidateMasterCache(spreadsheetId?: string) {
+  if (spreadsheetId) {
+    delete memoryCache[spreadsheetId]
+  } else {
+    memoryCache = {}
+  }
+  revalidateTag(MASTER_TAG)
+}
 
 // ── Upload (replaces entire sheet data) ──────────────────────────────────────
 export async function uploadMasterData(rows: ConsumerMasterRow[], clearExisting: boolean = true, spreadsheetId: string): Promise<{ count: number }> {

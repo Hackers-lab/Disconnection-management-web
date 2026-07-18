@@ -79,6 +79,38 @@ async function ensureHeaders(spreadsheetId: string) {
     const missing = DTR_HEADERS.filter(h => !existingNorm.has(norm(h)))
     if (missing.length === 0) return
 
+    // Ensure sheet has enough columns to accommodate the new headers
+    const requiredCols = existing.length + missing.length
+    try {
+      const sheet = meta.data.sheets?.find((s) => s.properties?.title === TAB)
+      if (sheet) {
+        const currentCols = sheet.properties?.gridProperties?.columnCount || 0
+        if (currentCols < requiredCols) {
+          console.log(`Resizing sheet "${TAB}" columns from ${currentCols} to ${requiredCols}...`)
+          await sheets.spreadsheets.batchUpdate({
+            spreadsheetId,
+            requestBody: {
+              requests: [
+                {
+                  updateSheetProperties: {
+                    properties: {
+                      sheetId: sheet.properties?.sheetId,
+                      gridProperties: {
+                        columnCount: requiredCols,
+                      },
+                    },
+                    fields: "gridProperties.columnCount",
+                  },
+                },
+              ],
+            },
+          })
+        }
+      }
+    } catch (err: any) {
+      console.error(`Failed to resize columns for sheet "${TAB}":`, err.message || err)
+    }
+
     // Append missing headers
     const startCol = colLetter(existing.length)
     const endCol = colLetter(existing.length + missing.length - 1)
