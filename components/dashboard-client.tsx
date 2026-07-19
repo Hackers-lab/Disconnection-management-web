@@ -59,6 +59,9 @@ export default function DashboardClient({ role, agencies }: DashboardClientProps
   const [showSuccessModal, setShowSuccessModal] = useState(false)
   const [isSubscribed, setIsSubscribed] = useState(true)
   const [subscriptionExpiresAt, setSubscriptionExpiresAt] = useState("")
+  const [profileName, setProfileName] = useState("")
+  const [bypassSubscription, setBypassSubscription] = useState(false)
+  const [profileCccCode, setProfileCccCode] = useState("")
 
   // Check if tenant is linked to Google Drive/Sheets on mount
   useEffect(() => {
@@ -195,6 +198,9 @@ export default function DashboardClient({ role, agencies }: DashboardClientProps
           if (data && typeof data.isSubscribed === "boolean") {
             setIsSubscribed(data.isSubscribed)
             setSubscriptionExpiresAt(data.subscriptionExpiresAt || "")
+            setProfileName(data.name || "")
+            setBypassSubscription(!!data.bypassSubscription)
+            setProfileCccCode(data.cccCode || "")
           }
         }
       })
@@ -1286,6 +1292,140 @@ export default function DashboardClient({ role, agencies }: DashboardClientProps
 
         {activeView === "admin" && (
            <AdminPanel onClose={() => setActiveView("home")} />
+        )}
+
+        {activeView === "profile" && (
+          <div className="max-w-4xl mx-auto px-4 py-8 sm:px-6 lg:px-8 space-y-6">
+            <div className="flex items-center justify-between border-b border-slate-200 pb-4">
+              <div>
+                <h1 className="text-2xl font-bold tracking-tight text-slate-900">User Profile</h1>
+                <p className="text-sm text-slate-500">Manage account credentials and billing subscriptions.</p>
+              </div>
+              <Button variant="outline" onClick={() => setActiveView("home")} className="border-slate-300 text-slate-700 hover:bg-slate-50">
+                Back to Dashboard
+              </Button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {/* Profile Details Card */}
+              <div className="md:col-span-2 bg-white rounded-xl border border-slate-200 p-6 shadow-sm space-y-5">
+                <h2 className="text-lg font-bold text-slate-800 border-b border-slate-100 pb-2 flex items-center gap-2">
+                  <User className="h-5 w-5 text-blue-500" />
+                  Account Details
+                </h2>
+                <div className="grid grid-cols-3 gap-2 text-sm">
+                  <span className="text-slate-400 font-medium">Full Name:</span>
+                  <span className="col-span-2 font-semibold text-slate-800">{profileName || "N/A"}</span>
+                </div>
+                <div className="grid grid-cols-3 gap-2 text-sm border-t border-slate-100 pt-3">
+                  <span className="text-slate-400 font-medium">Agency ID:</span>
+                  <span className="col-span-2 font-mono font-semibold text-slate-700">{(agencies[0] || role)}</span>
+                </div>
+                <div className="grid grid-cols-3 gap-2 text-sm border-t border-slate-100 pt-3">
+                  <span className="text-slate-400 font-medium">Subdivision:</span>
+                  <span className="col-span-2 font-mono font-semibold text-blue-600">{profileCccCode || "SYSTEM"}</span>
+                </div>
+                <div className="grid grid-cols-3 gap-2 text-sm border-t border-slate-100 pt-3">
+                  <span className="text-slate-400 font-medium">Access Role:</span>
+                  <span className="col-span-2 capitalize font-semibold text-slate-700">{role}</span>
+                </div>
+                <div className="grid grid-cols-3 gap-2 text-sm border-t border-slate-100 pt-3">
+                  <span className="text-slate-400 font-medium">Assigned Scope:</span>
+                  <span className="col-span-2 text-xs font-semibold text-slate-700">
+                    {agencies && agencies.length > 0 ? agencies.join(", ") : "None (All Access)"}
+                  </span>
+                </div>
+              </div>
+
+              {/* Billing / Subscription Info Card */}
+              <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm flex flex-col justify-between h-full min-h-[300px]">
+                <div>
+                  <h2 className="text-lg font-bold text-slate-800 border-b border-slate-100 pb-2 mb-4">
+                    Subscription Status
+                  </h2>
+                  <div className="space-y-3">
+                    {(() => {
+                      const roleLower = role.toLowerCase()
+                      const isExempt = roleLower === "admin" || roleLower === "superuser" || roleLower === "monitor" || bypassSubscription
+                      const billingStartDate = new Date("2026-09-01T00:00:00")
+                      const isTrial = Date.now() < billingStartDate.getTime()
+
+                      if (isExempt) {
+                        return (
+                          <div className="space-y-2">
+                            <span className="inline-flex px-2.5 py-0.5 rounded-full text-xs font-bold uppercase bg-slate-100 text-slate-600 border border-slate-200">
+                              Bypassed / Free Access
+                            </span>
+                            <p className="text-xs text-slate-500 leading-relaxed">Your role or user account has been exempted from billing.</p>
+                          </div>
+                        )
+                      } else if (isTrial) {
+                        return (
+                          <div className="space-y-2">
+                            <span className="inline-flex px-2.5 py-0.5 rounded-full text-xs font-bold uppercase bg-indigo-50 text-indigo-700 border border-indigo-100 animate-pulse">
+                              Trial Period Active
+                            </span>
+                            <p className="text-xs text-slate-500 leading-relaxed">Billing starts on <strong>01-09-2026</strong>. You have unrestricted trial access until then.</p>
+                          </div>
+                        )
+                      } else if (isSubscribed) {
+                        return (
+                          <div className="space-y-2">
+                            <span className="inline-flex px-2.5 py-0.5 rounded-full text-xs font-bold uppercase bg-emerald-50 text-emerald-700 border border-emerald-100">
+                              Active Subscription
+                            </span>
+                            <p className="text-xs text-slate-500 leading-relaxed">
+                              Expires on: <strong>{subscriptionExpiresAt}</strong>
+                            </p>
+                          </div>
+                        )
+                      } else {
+                        return (
+                          <div className="space-y-2">
+                            <span className="inline-flex px-2.5 py-0.5 rounded-full text-xs font-bold uppercase bg-red-50 text-red-700 border border-red-100">
+                              Subscription Expired
+                            </span>
+                            <p className="text-xs text-slate-500 leading-relaxed">Your subscription is inactive. Please subscribe below to restore full access.</p>
+                          </div>
+                        )
+                      }
+                    })()}
+                  </div>
+                </div>
+
+                {/* Simulated Payment Action inside Profile */}
+                {!(role === "admin" || role === "superuser" || role === "monitor" || bypassSubscription) && (
+                  <div className="mt-6 pt-4 border-t border-slate-100 space-y-3">
+                    <div className="p-3 rounded-lg border border-indigo-100 bg-indigo-50/20 flex items-center justify-between">
+                      <div className="flex flex-col">
+                        <span className="text-[10px] text-indigo-600 font-bold uppercase tracking-wider">Promo Offer</span>
+                        <span className="text-lg font-bold text-slate-800">₹99 <span className="text-xs text-slate-400 line-through">₹199</span></span>
+                      </div>
+                      <span className="text-[10px] font-semibold text-slate-400">/ month</span>
+                    </div>
+                    <Button 
+                      onClick={async () => {
+                        try {
+                          const res = await fetch("/api/billing/checkout", { method: "POST" })
+                          if (res.ok) {
+                            const data = await res.json()
+                            if (data.success) {
+                              window.location.reload()
+                            }
+                          }
+                        } catch (e) {
+                          console.error("Simulation failed", e)
+                        }
+                      }}
+                      className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-xs font-semibold py-2 rounded-lg"
+                    >
+                      {isSubscribed ? "Extend Subscription" : "Activate Subscription"}
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
         )}
 
         {/* Global Onboarding Required Dialog Modal */}

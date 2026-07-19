@@ -22,7 +22,7 @@ import type { ConsumerData } from "@/lib/google-sheets"
 import { Badge } from "@/components/ui/badge"
 
 // Define the available views
-export type ViewType = "disconnection" | "reconnection" | "deemed" | "nsc" | "meter" | "admin" | "home" | "analysis" | "agency-updates" | "consumer-master" | "dtr" | "meter-replacement" | "dtr-painting" | "material"
+export type ViewType = "disconnection" | "reconnection" | "deemed" | "nsc" | "meter" | "admin" | "home" | "analysis" | "agency-updates" | "consumer-master" | "dtr" | "meter-replacement" | "dtr-painting" | "material" | "profile"
 
 interface AppSidebarProps {
   activeView: ViewType

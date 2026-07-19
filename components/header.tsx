@@ -942,10 +942,17 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
           {/* RIGHT SIDE: Actions */}
           <div className="flex items-center space-x-2 sm:space-x-4">
             
-            {/* User Info (Icon only on mobile, Text on desktop) */}
-            <div className="flex items-center space-x-2 text-sm text-gray-600 bg-gray-50 px-2 py-1.5 rounded-full border">
-              <User className="h-4 w-4" />
-              <span className="capitalize inline truncate max-w-[120px]">{displayAgencyName || userRole}</span>
+            {/* User Info / Profile Link (Available on both desktop & mobile) */}
+            <div 
+              onClick={() => {
+                if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
+                setActiveView("profile")
+              }}
+              className="flex items-center space-x-2 text-sm text-blue-700 bg-blue-50/50 hover:bg-blue-100/50 px-2.5 py-1.5 rounded-full border border-blue-200 cursor-pointer transition-colors"
+              title="View Profile & Subscription"
+            >
+              <User className="h-4 w-4 text-blue-600" />
+              <span className="capitalize inline truncate max-w-[120px] font-semibold">{displayAgencyName || userRole}</span>
             </div>
 
             {/* --- DESKTOP VIEW (Hidden on Mobile) --- */}
@@ -1172,14 +1179,8 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
                  </Button>
               )}
 
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setShowProfileDialog(true)}
-                title="My Profile"
-              >
-                <User className="h-4 w-4" />
-              </Button>
+
+
 
               <Button
                 variant="ghost"
