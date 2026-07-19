@@ -85,7 +85,14 @@ export async function getTenantRegistry(): Promise<Record<string, TenantConfig>>
 
 export async function getTenantConfig(cccCode: string): Promise<TenantConfig> {
   const registry = await getTenantRegistry()
-  const tenant = registry[cccCode]
+  let tenant = registry[cccCode]
+  if (!tenant && cccCode === "SYSTEM") {
+    const firstCode = Object.keys(registry)[0]
+    if (firstCode) {
+      tenant = registry[firstCode]
+      console.log(`🔧 [Superuser Tenant Fallback] Resolving SYSTEM cccCode to tenant '${firstCode}'`)
+    }
+  }
   if (!tenant) {
     throw new Error(`CCC Code '${cccCode}' is not registered in the Master Config Registry`)
   }
