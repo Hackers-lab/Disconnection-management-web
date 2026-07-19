@@ -10,6 +10,13 @@ const nextConfig = {
     unoptimized: true,
   },
   serverExternalPackages: ["googleapis", "google-auth-library", "googleapis-common"],
+  experimental: {
+    outputFileTracingExcludes: {
+      "*": [
+        "node_modules/googleapis/build/src/apis/!(sheets|drive)/**/*",
+      ],
+    },
+  },
 }
 
 export default nextConfig
