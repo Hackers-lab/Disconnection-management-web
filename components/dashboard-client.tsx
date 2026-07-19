@@ -27,7 +27,7 @@ const DTRPaintingList = dynamic(() => import("@/components/dtr-painting-list").t
 const MeterReplacementList = dynamic(() => import("@/components/meter-replacement-list").then(m => ({ default: m.MeterReplacementList })), { ssr: false })
 const MaterialList = dynamic(() => import("@/components/material-list").then(m => ({ default: m.MaterialList })), { ssr: false })
 
-import { Loader2, AlertTriangle, KeyRound, CheckCircle2 } from "lucide-react"
+import { Loader2, AlertTriangle, KeyRound, CheckCircle2, User } from "lucide-react"
 
 // UI Components for the Dialog
 import { Button } from "@/components/ui/button"
