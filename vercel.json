@@ -1,4 +1,4 @@
 {
-  "fluid": false,
+  "fluid": true,
   "ignoreCommand": "bash vercel-ignore-build.sh"
 }
