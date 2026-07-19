@@ -1,0 +1,709 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Supply Admin Onboarding & Setup Guide</title>
+  
+  <!-- Import Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <style>
+    /* Premium CSS Variables & Reset */
+    :root {
+      --primary: #2563eb;
+      --primary-hover: #1d4ed8;
+      --primary-light: #eff6ff;
+      --text-dark: #0f172a;
+      --text-muted: #475569;
+      --bg-main: #f8fafc;
+      --bg-card: #ffffff;
+      --border-color: #e2e8f0;
+      --success: #16a34a;
+      --success-light: #f0fdf4;
+      --warning: #ca8a04;
+      --warning-light: #fefce8;
+      --accent: #6366f1;
+      --shadow-sm: 0 1px 3px rgba(0,0,0,0.05);
+      --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -2px rgba(0,0,0,0.05);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: var(--bg-main);
+      color: var(--text-dark);
+      line-height: 1.6;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    /* Outer Container */
+    .container {
+      max-width: 900px;
+      margin: 40px auto;
+      padding: 0 20px;
+    }
+
+    /* Premium Header */
+    .header {
+      background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%);
+      color: white;
+      padding: 48px;
+      border-radius: 20px;
+      box-shadow: var(--shadow-md);
+      position: relative;
+      overflow: hidden;
+      margin-bottom: 32px;
+    }
+
+    .header::before {
+      content: '';
+      position: absolute;
+      top: -50%;
+      right: -20%;
+      width: 400px;
+      height: 400px;
+      background: radial-gradient(circle, rgba(255,255,255,0.08) 0%, transparent 60%);
+      border-radius: 50%;
+    }
+
+    .header-badge {
+      display: inline-block;
+      background: rgba(255, 255, 255, 0.15);
+      backdrop-filter: blur(8px);
+      padding: 6px 14px;
+      border-radius: 9999px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      margin-bottom: 16px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+
+    .header h1 {
+      font-family: 'Outfit', sans-serif;
+      font-size: 2.25rem;
+      font-weight: 800;
+      line-height: 1.25;
+      margin-bottom: 12px;
+      letter-spacing: -0.02em;
+    }
+
+    .header p {
+      font-size: 1.05rem;
+      opacity: 0.9;
+      max-width: 600px;
+      font-weight: 300;
+    }
+
+    /* Print action bar */
+    .action-bar {
+      display: flex;
+      justify-content: flex-end;
+      margin-bottom: 20px;
+    }
+
+    .print-btn {
+      background-color: var(--primary);
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      border-radius: 8px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      box-shadow: var(--shadow-sm);
+      transition: background-color 0.2s;
+    }
+
+    .print-btn:hover {
+      background-color: var(--primary-hover);
+    }
+
+    /* Index Checkbox / Progress Panel */
+    .checklist-panel {
+      background-color: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 16px;
+      padding: 24px;
+      margin-bottom: 32px;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .checklist-panel h2 {
+      font-family: 'Outfit', sans-serif;
+      font-size: 1.25rem;
+      font-weight: 700;
+      margin-bottom: 16px;
+      color: var(--text-dark);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .checklist-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 12px;
+    }
+
+    @media (min-width: 640px) {
+      .checklist-grid {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+
+    .check-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      font-size: 0.9rem;
+      color: var(--text-muted);
+    }
+
+    .check-item-icon {
+      flex-shrink: 0;
+      width: 18px;
+      height: 18px;
+      color: var(--primary);
+    }
+
+    /* Content Cards / Steps */
+    .step-card {
+      background-color: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 16px;
+      padding: 32px;
+      margin-bottom: 24px;
+      box-shadow: var(--shadow-sm);
+      position: relative;
+    }
+
+    .step-number {
+      position: absolute;
+      top: 32px;
+      right: 32px;
+      font-family: 'Outfit', sans-serif;
+      font-size: 2.5rem;
+      font-weight: 800;
+      color: rgba(37, 99, 235, 0.1);
+      line-height: 1;
+    }
+
+    .step-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 20px;
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 16px;
+    }
+
+    .step-icon-wrapper {
+      width: 40px;
+      height: 40px;
+      background-color: var(--primary-light);
+      color: var(--primary);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .step-title-group h3 {
+      font-family: 'Outfit', sans-serif;
+      font-size: 1.35rem;
+      font-weight: 700;
+      color: var(--text-dark);
+    }
+
+    .step-title-group p {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+
+    .step-content p {
+      margin-bottom: 16px;
+      color: var(--text-muted);
+      font-size: 0.95rem;
+    }
+
+    .step-content ul {
+      margin-left: 20px;
+      margin-bottom: 16px;
+      color: var(--text-muted);
+      font-size: 0.95rem;
+    }
+
+    .step-content li {
+      margin-bottom: 8px;
+    }
+
+    /* Code block/Console */
+    .code-block {
+      background-color: #0f172a;
+      color: #cbd5e1;
+      padding: 16px 20px;
+      border-radius: 10px;
+      font-family: monospace;
+      font-size: 0.85rem;
+      overflow-x: auto;
+      margin-bottom: 16px;
+      border: 1px solid #334155;
+    }
+
+    /* Info Alerts */
+    .alert {
+      display: flex;
+      gap: 12px;
+      padding: 16px;
+      border-radius: 10px;
+      margin-bottom: 16px;
+      font-size: 0.9rem;
+    }
+
+    .alert-info {
+      background-color: var(--primary-light);
+      border-left: 4px solid var(--primary);
+      color: #1e40af;
+    }
+
+    .alert-success {
+      background-color: var(--success-light);
+      border-left: 4px solid var(--success);
+      color: #166534;
+    }
+
+    .alert-warning {
+      background-color: var(--warning-light);
+      border-left: 4px solid var(--warning);
+      color: #854d0e;
+    }
+
+    .alert-icon {
+      flex-shrink: 0;
+      width: 20px;
+      height: 20px;
+      margin-top: 1px;
+    }
+
+    .tag {
+      display: inline-block;
+      background-color: var(--bg-main);
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 0.85rem;
+      font-family: monospace;
+      border: 1px solid var(--border-color);
+      color: #0f172a;
+    }
+
+    .optional-badge {
+      background-color: #f1f5f9;
+      color: #64748b;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 4px;
+      letter-spacing: 0.05em;
+      border: 1px solid #e2e8f0;
+      display: inline-block;
+      margin-left: 6px;
+      vertical-align: middle;
+    }
+
+    /* Footer styling */
+    .footer {
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 0.85rem;
+      margin-top: 48px;
+      padding-top: 24px;
+      border-top: 1px solid var(--border-color);
+    }
+
+    /* PRINT SPECIFIC STYLING - Optimize for A4 PDF */
+    @media print {
+      body {
+        background-color: white;
+        color: black;
+        font-size: 11pt;
+      }
+
+      .container {
+        max-width: 100%;
+        margin: 0;
+        padding: 0;
+      }
+
+      .action-bar {
+        display: none !important;
+      }
+
+      .header {
+        background: white !important;
+        color: black !important;
+        border: 2px solid black;
+        border-radius: 0;
+        box-shadow: none;
+        padding: 24px;
+        margin-bottom: 24px;
+      }
+
+      .header h1 {
+        font-size: 24pt;
+        color: black;
+      }
+
+      .header p {
+        color: #333;
+      }
+
+      .header-badge {
+        color: black !important;
+        border-color: black !important;
+        background: transparent !important;
+      }
+
+      .step-card {
+        border-radius: 0 !important;
+        border: 1px solid #ccc !important;
+        box-shadow: none !important;
+        page-break-inside: avoid;
+        padding: 20px !important;
+        margin-bottom: 20px !important;
+      }
+
+      .step-number {
+        color: #777 !important;
+        font-size: 20pt;
+      }
+
+      .step-icon-wrapper {
+        background: transparent !important;
+        border: 1px solid #999;
+        color: black !important;
+      }
+
+      .code-block {
+        background: #f1f5f9 !important;
+        color: black !important;
+        border: 1px solid #ccc !important;
+        white-space: pre-wrap;
+      }
+
+      .alert {
+        border-left: 4px solid black !important;
+        background: #f8fafc !important;
+        color: black !important;
+      }
+
+      .footer {
+        page-break-before: always;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    
+    <!-- Printable Action Bar -->
+    <div class="action-bar">
+      <button class="print-btn" onclick="window.print()">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect width="12" height="8" x="6" y="14" rx="1"/><path d="M6 9V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v5"/></svg>
+        Print / Save to PDF
+      </button>
+    </div>
+
+    <!-- Header Block -->
+    <header class="header">
+      <span class="header-badge">Administration Onboarding</span>
+      <h1>Supply Subdivision Instance Setup Guide</h1>
+      <p>A step-by-step technical handbook for new Supply Admins to configure, map, and launch the Disconnection Management Web Application for their division.</p>
+    </header>
+
+    <!-- Checklist Overview -->
+    <div class="checklist-panel">
+      <h2>
+        <svg xmlns="http://www.w3.org/2000/svg" class="check-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="m9 12 2 2 4-4"/></svg>
+        Task Checklist
+      </h2>
+      <div class="checklist-grid">
+        <div class="check-item">
+          <svg class="check-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+          1. Link Google Drive Backup Sync
+        </div>
+        <div class="check-item">
+          <svg class="check-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+          2. Create Contract Agencies
+        </div>
+        <div class="check-item">
+          <svg class="check-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+          3. Register Agency & Admin Users
+        </div>
+        <div class="check-item">
+          <svg class="check-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+          4. Set Up Zone/MRU Mapping
+        </div>
+        <div class="check-item">
+          <svg class="check-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+          5. Import Outstanding DC lists
+        </div>
+        <div class="check-item">
+          <svg class="check-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+          6. Export Login Credentials
+        </div>
+        <div class="check-item">
+          <svg class="check-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+          7. Sync Base Consumer Data (Optional)
+        </div>
+        <div class="check-item">
+          <svg class="check-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+          8. Validate Setup & Ready
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 1 -->
+    <section class="step-card">
+      <div class="step-number">01</div>
+      <div class="step-header">
+        <div class="step-icon-wrapper">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+        </div>
+        <div class="step-title-group">
+          <h3>Linking Google Drive & Photo Backup Sync</h3>
+          <p>Initial connection to cloud folder system</p>
+        </div>
+      </div>
+      <div class="step-content">
+        <p>The application requires integration with Google Drive to backup disconnection photos, geolocation markers, and field inspection receipts directly inside the folder registry.</p>
+        <ul>
+          <li>Navigate to the **Admin Settings** page in your sidebar menu.</li>
+          <li>Under **Google Drive Sync**, click the **Link Account** button.</li>
+          <li>You will be redirected to the secure Google OAuth login page. Log in with the official Gmail / Google account designated for your subdivision storage.</li>
+          <li>Accept the requested permissions: **View and manage Google Drive files** and **Manage your Google Sheets**.</li>
+          <li>Once authentication is finished, you will be redirected back with a success banner. The backup storage folder structure is automatically configured.</li>
+        </ul>
+        <div class="alert alert-info">
+          <svg class="alert-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></svg>
+          The system secures access by encrypting the Google API refresh token inside the database. It is recommended to use a dedicated subdivision Gmail account (e.g. <span class="tag">discon.yourdivision@gmail.com</span>) instead of a personal account.
+        </div>
+      </div>
+    </section>
+
+    <!-- Step 2 -->
+    <section class="step-card">
+      <div class="step-number">02</div>
+      <div class="step-header">
+        <div class="step-icon-wrapper">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="7" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+        </div>
+        <div class="step-title-group">
+          <h3>Create Agencies</h3>
+          <p>Admin Panel &gt; Manage Agency</p>
+        </div>
+      </div>
+      <div class="step-content">
+        <p>Agencies are the contract entities responsible for sending field crews to carry out disconnection/reconnection processes. You must add them to allow routing of jobs.</p>
+        <ul>
+          <li>Go to the **Admin Panel** $\rightarrow$ Click the **Manage Agency** tab.</li>
+          <li>Click **Add New Agency**.</li>
+          <li>Fill in the details:
+            <ul>
+              <li>**Agency Code**: A unique code identifier (e.g. <span class="tag">JOY_GURU</span> or <span class="tag">M_ROY</span>). Keep it short and alphanumeric.</li>
+              <li>**Agency Name**: Full name of the contractor agency for billing and reports.</li>
+              <li>**Contact Person**: Name of contractor supervisor.</li>
+              <li>**Phone Number**: Contact phone for communication.</li>
+            </ul>
+          </li>
+          <li>Click **Save**. The agency will appear in the agency listing instantly.</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- Step 3 -->
+    <section class="step-card">
+      <div class="step-number">03</div>
+      <div class="step-header">
+        <div class="step-icon-wrapper">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        </div>
+        <div class="step-title-group">
+          <h3>Create Users</h3>
+          <p>Admin Panel &gt; Manage Users</p>
+        </div>
+      </div>
+      <div class="step-content">
+        <p>You must add user accounts for engineers, managers, and agency operators. There are three roles supported:</p>
+        <ul>
+          <li>**Admin**: Has full configuration access, uploads DC lists, manages users/agencies, and validates completions.</li>
+          <li>**Agency**: Access limited to assigned consumers, DTRs, and replacement logs. They update status, log pole connections, and upload proof images.</li>
+          <li>**Viewer**: Read-only access to stats, maps, and report tables.</li>
+        </ul>
+        <p><strong>Steps:</strong></p>
+        <ul>
+          <li>Navigate to **Admin Panel** $\rightarrow$ Click **Manage Users** tab.</li>
+          <li>Enter the **Username** and a temporary **Password** (case-sensitive).</li>
+          <li>Select the appropriate **Role** (e.g., Select <span class="tag">agency</span> for field contractor logins).</li>
+          <li>For **Agency** role, select which agency they belong to (e.g. <span class="tag">JOY_GURU</span>).</li>
+          <li>Click **Add User**.</li>
+        </ul>
+        <div class="alert alert-warning">
+          <svg class="alert-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" x2="12" y1="9" y2="13"/><line x1="12" x2="12.01" y1="17" y2="17"/></svg>
+          Ensure usernames do not contain special characters or spaces. Usernames are unique globally within the subdivision.
+        </div>
+      </div>
+    </section>
+
+    <!-- Step 4 -->
+    <section class="step-card">
+      <div class="step-number">04</div>
+      <div class="step-header">
+        <div class="step-icon-wrapper">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+        </div>
+        <div class="step-title-group">
+          <h3>Zone-Agency Map</h3>
+          <p>Admin Panel &gt; Zone-Agency Map</p>
+        </div>
+      </div>
+      <div class="step-content">
+        <p>This links subdivision areas/units (Meter Reading Units / MRUs or Zones) to specific contractor agencies. When a list is uploaded, consumers are automatically routed to the correct agency based on this map.</p>
+        <ul>
+          <li>Go to **Admin Panel** $\rightarrow$ Click **Zone-Agency Map** tab.</li>
+          <li>You will see a form listing all active **Zones/MRUs** detected in your subdivision system and a dropdown selector next to them.</li>
+          <li>Select the appropriate **Agency** from the dropdown menu for each Zone/MRU.</li>
+          <li>Click **Save Mapping**.</li>
+          <li>*If a new MRU code is imported later, return to this tab to assign its mapping.*</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- Step 5 -->
+    <section class="step-card">
+      <div class="step-number">05</div>
+      <div class="step-header">
+        <div class="step-icon-wrapper">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
+        </div>
+        <div class="step-title-group">
+          <h3>Upload Disconnection (DC) List</h3>
+          <p>Admin Panel &gt; Upload DC List</p>
+        </div>
+      </div>
+      <div class="step-content">
+        <p>This allows importing the weekly or monthly outstanding consumers directly from your billing system via a CSV file.</p>
+        <ul>
+          <li>Go to **Admin Panel** $\rightarrow$ Click **Upload DC List**.</li>
+          <li>Ensure your CSV file matches the standard columns exported by the billing system:
+            <div class="code-block">
+              off_code, MRU, Consumer Id, Name, Address, Base Class, Class, Nature of Conn, Gov/Non-Gov, Device, O/S Duedate Range, D2 Net O/S, Discon Status, Pole
+            </div>
+          </li>
+          <li>Click **Choose File**, select the CSV from your computer, and click **Process & Import**.</li>
+          <li>The system will parse the rows, match the MRUs against your **Zone-Agency Map**, automatically assign the jobs to the designated contractors, and update the status of matching users.</li>
+        </ul>
+        <div class="alert alert-success">
+          <svg class="alert-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+          Duplicates are handled automatically: if a consumer is already in the list, the system will update their Net Outstanding (Net O/S) and due date without creating duplicate entries.
+        </div>
+      </div>
+    </section>
+
+    <!-- Step 6 -->
+    <section class="step-card">
+      <div class="step-number">06</div>
+      <div class="step-header">
+        <div class="step-icon-wrapper">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        </div>
+        <div class="step-title-group">
+          <h3>Sharing Credentials to Field Agencies</h3>
+          <p>Handing off logins to agency users</p>
+        </div>
+      </div>
+      <div class="step-content">
+        <p>Now that the agencies and users are created and matched, you must distribute the credentials to the agency team leads.</p>
+        <ul>
+          <li>Provide agency users with their specific login ID and temporary password created in **Step 3**.</li>
+          <li>Instruct them to log in at the subdomain URL (e.g. `https://kushida.vercel.app/login`).</li>
+          <li>Upon logging in, field operators will automatically see their assigned lists in the **Disconnection List**, **Reconnection**, and **Deemed Visit** dashboards. They will have access to snap pictures, upload GPS logs, and update status directly from their mobile web browsers.</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- Step 7 -->
+    <section class="step-card">
+      <div class="step-number">07</div>
+      <div class="step-header">
+        <div class="step-icon-wrapper">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5V19A9 3 0 0 0 21 19V5"/><path d="M3 12A9 3 0 0 0 21 12"/></svg>
+        </div>
+        <div class="step-title-group">
+          <h3>Import Consumer Master Data <span class="optional-badge">Optional</span></h3>
+          <p>Sync base consumer geolocation/addresses</p>
+        </div>
+      </div>
+      <div class="step-content">
+        <p>This allows pre-seeding the database with structural details (GPS poles, pre-registered latitude/longitude, structural addresses) directly into the database before importing active DC worklists.</p>
+        <ul>
+          <li>Go to the **Consumer Master** tab from the sidebar.</li>
+          <li>Click **Import Master Database**.</li>
+          <li>Upload your base master list spreadsheet/CSV. This seeds the system with pole associations, coordinates, and contact details, ensuring field workers can navigate to pole locations using Google Maps route guidance right away.</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- Step 8 -->
+    <section class="step-card">
+      <div class="step-number">08</div>
+      <div class="step-header">
+        <div class="step-icon-wrapper">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>
+        </div>
+        <div class="step-title-group">
+          <h3>Validation & System Readiness</h3>
+          <p>All ready out-of-the-box</p>
+        </div>
+      </div>
+      <div class="step-content">
+        <p>Once steps 1 through 6 are completed, the system is fully active. The following operational modules are pre-linked and require no additional code modifications or setup:</p>
+        <ul>
+          <li>**Dashboard Home**: Visual charts, pending disconnections, reconnect stats, and map clusters.</li>
+          <li>**Reconnection**: Handles tracking payments, logging receipts, and marking re-connections.</li>
+          <li>**Deemed Visit**: Tracks attempts where the consumer meter wasn't accessible or locked.</li>
+          <li>**NSC Inspection**: Handles new service connection requests, material issuance, and validation loops.</li>
+          <li>**DTR Verification & Painting**: Transformer inventory audits, asset painting registers, and maintenance alerts.</li>
+          <li>**Replacement List**: Tracks meter replacements, burned meters, and old-to-new asset registration.</li>
+          <li>**Material Management**: Issues or receives cable, meters, and accessories to contractors with inventory counts.</li>
+        </ul>
+        <div class="alert alert-success">
+          <svg class="alert-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+          System check completed successfully. The application is ready to track disconnections and manage subdivision workflows.
+        </div>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <p>© 2026 Utility Disconnection Management System. Prepared for Supply Subdivision Administrators.</p>
+    </footer>
+
+  </div>
+
+</body>
+</html>
