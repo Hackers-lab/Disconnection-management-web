@@ -18,7 +18,7 @@ export const GET = withTenant(async function GET(request: NextRequest) {
     const tenantConfig = await getTenantConfig(session.cccCode)
     const roles = await roleStorage.getRoles(tenantConfig.spreadsheetId)
     return NextResponse.json(roles, {
-      headers: { 'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600' },
+      headers: { 'Cache-Control': 'no-store' }, // Security-sensitive: always serve fresh
     })
   } catch (error) {
     console.error("Error fetching roles:", error)

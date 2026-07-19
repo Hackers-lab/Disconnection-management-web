@@ -13,7 +13,7 @@ export const GET = withTenant(async function GET(request: NextRequest) {
   }
   const agencies = await getAgencies()
   return NextResponse.json(agencies, {
-    headers: { 'Cache-Control': 'public, s-maxage=120, stale-while-revalidate=300' },
+    headers: { 'Cache-Control': 'private, max-age=60, stale-while-revalidate=120' },
   })
 })
 
