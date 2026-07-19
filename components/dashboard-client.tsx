@@ -27,7 +27,7 @@ const DTRPaintingList = dynamic(() => import("@/components/dtr-painting-list").t
 const MeterReplacementList = dynamic(() => import("@/components/meter-replacement-list").then(m => ({ default: m.MeterReplacementList })), { ssr: false })
 const MaterialList = dynamic(() => import("@/components/material-list").then(m => ({ default: m.MaterialList })), { ssr: false })
 
-import { Loader2, AlertTriangle, KeyRound, CheckCircle2, User } from "lucide-react"
+import { Loader2, AlertTriangle, KeyRound, CheckCircle2, User, ArrowLeft } from "lucide-react"
 
 // UI Components for the Dialog
 import { Button } from "@/components/ui/button"
@@ -1296,14 +1296,20 @@ export default function DashboardClient({ role, agencies }: DashboardClientProps
 
         {activeView === "profile" && (
           <div className="max-w-4xl mx-auto px-4 py-8 sm:px-6 lg:px-8 space-y-6">
-            <div className="flex items-center justify-between border-b border-slate-200 pb-4">
+            <div className="flex items-center space-x-3 border-b border-slate-200 pb-4">
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                onClick={() => setActiveView("home")} 
+                className="h-9 w-9 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-full"
+                title="Back to Dashboard"
+              >
+                <ArrowLeft className="h-5 w-5" />
+              </Button>
               <div>
                 <h1 className="text-2xl font-bold tracking-tight text-slate-900">User Profile</h1>
                 <p className="text-sm text-slate-500">Manage account credentials and billing subscriptions.</p>
               </div>
-              <Button variant="outline" onClick={() => setActiveView("home")} className="border-slate-300 text-slate-700 hover:bg-slate-50">
-                Back to Dashboard
-              </Button>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
