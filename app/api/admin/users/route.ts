@@ -20,7 +20,7 @@ export const GET = withTenant(async function GET(request: NextRequest) {
   const tenantUsers = allUsers.filter((u) => u.cccCode === cccCode)
   
   return NextResponse.json(tenantUsers, {
-    headers: { 'Cache-Control': 'private, max-age=7200, stale-while-revalidate=1800' },
+    headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' },
   })
 })
 
@@ -53,7 +53,6 @@ export const POST = withTenant(async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Username already exists" }, { status: 400 })
     }
 
-    // Create new user
     const newUser = await userStorage.addUser({
       username,
       password,
@@ -61,6 +60,9 @@ export const POST = withTenant(async function POST(request: NextRequest) {
       cccCode,
       name: username,
       agencies: agencies || [],
+      subscriptionStatus: "active",
+      subscriptionExpiresAt: "",
+      bypassSubscription: false,
     })
 
     console.log("✅ User added successfully:", username)
