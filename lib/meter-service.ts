@@ -39,7 +39,7 @@ const ISSUES_HEADERS = [
 // Read paths use the cached wrappers; write paths use the raw fetch so row
 // positions / next IDs are always computed against live data.
 const METER_TAG = "meter"
-const METER_REVALIDATE_S = 60
+const METER_REVALIDATE_S = 10 * 60 // 10 minutes
 let tabsReady = false
 
 export function invalidateMeterCache() { revalidateTag(METER_TAG) }

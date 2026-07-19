@@ -38,7 +38,7 @@ const ISSUE_HEADERS = [
 
 // ─── Cache ────────────────────────────────────────────────────────────────────
 const MATERIAL_TAG = "material"
-const REVALIDATE_S = 60
+const REVALIDATE_S = 10 * 60 // 10 minutes — inventory changes are infrequent
 let tabsReady = false
 let ensureTabsPromise: Promise<void> | null = null
 

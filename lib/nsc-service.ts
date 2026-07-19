@@ -93,7 +93,7 @@ const NSC_FIELD_MAP: Record<keyof NSCApplication, string[]> = {
 // Read paths use the cached wrapper; write paths use the raw fetch so row
 // positions / next receive numbers are always computed against live data.
 const NSC_TAG = "nsc"
-const NSC_REVALIDATE_S = 60
+const NSC_REVALIDATE_S = 5 * 60 // 5 minutes
 let tabReady = false
 
 export function invalidateNSCCache() { revalidateTag(NSC_TAG) }

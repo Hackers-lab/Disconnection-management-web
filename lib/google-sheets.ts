@@ -194,7 +194,7 @@ export async function getAgencyLastUpdates(spreadsheetId: string): Promise<
 // cold start), unstable_cache stores the *parsed* result in storage shared by
 // all instances and revalidates it in the background. Repeated calls skip both
 // the Google Sheets fetch AND the row-by-row parse — near-zero CPU per call.
-const CONSUMER_REVALIDATE_S = 60
+const CONSUMER_REVALIDATE_S = 5 * 60 // 5 minutes — read-heavy, rarely changes
 
 // Allow other modules (e.g. /api/consumers/update) to invalidate the cache
 // after a successful write so the next read reflects the change immediately.

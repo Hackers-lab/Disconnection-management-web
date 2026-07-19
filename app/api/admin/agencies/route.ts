@@ -12,7 +12,9 @@ export const GET = withTenant(async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
   const agencies = await getAgencies()
-  return NextResponse.json(agencies)
+  return NextResponse.json(agencies, {
+    headers: { 'Cache-Control': 'public, s-maxage=120, stale-while-revalidate=300' },
+  })
 })
 
 // POST - Add new agency

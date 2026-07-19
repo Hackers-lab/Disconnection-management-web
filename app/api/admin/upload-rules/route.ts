@@ -12,7 +12,9 @@ export async function GET() {
   }
   try {
     const sets = await getRuleSetsForUser(session.userId)
-    return NextResponse.json(sets)
+    return NextResponse.json(sets, {
+      headers: { 'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600' },
+    })
   } catch (error) {
     console.error("Error loading upload rules:", error)
     return NextResponse.json({ error: "Failed to load rules" }, { status: 500 })

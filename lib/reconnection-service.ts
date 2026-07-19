@@ -37,7 +37,7 @@ export interface ReconnectionRequest {
 // wrapper; write paths use the raw fetch so row positions / next IDs are always
 // computed against live data.
 const RECONNECTION_TAG = "reconnection"
-const RECONNECTION_REVALIDATE_S = 60
+const RECONNECTION_REVALIDATE_S = 5 * 60 // 5 minutes
 let tabReady = false
 
 export function invalidateReconnectionCache() { revalidateTag(RECONNECTION_TAG) }

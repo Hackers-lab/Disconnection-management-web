@@ -19,7 +19,9 @@ export const GET = withTenant(async function GET(request: NextRequest) {
   // Filter users by current tenant cccCode
   const tenantUsers = allUsers.filter((u) => u.cccCode === cccCode)
   
-  return NextResponse.json(tenantUsers)
+  return NextResponse.json(tenantUsers, {
+    headers: { 'Cache-Control': 'public, s-maxage=120, stale-while-revalidate=300' },
+  })
 })
 
 // POST - Add new user

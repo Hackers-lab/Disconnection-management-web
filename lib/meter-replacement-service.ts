@@ -33,7 +33,7 @@ const REPLACEMENT_HEADERS = [
 ]
 
 const REPLACEMENT_TAG = "meter-replacement"
-const REVAL_S = 60
+const REVAL_S = 10 * 60 // 10 minutes
 let tabReady = false
 
 export function invalidateReplacementCache() {

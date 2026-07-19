@@ -11,7 +11,9 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
   try {
-    return NextResponse.json(await getTemplatesForUser(session.userId))
+    return NextResponse.json(await getTemplatesForUser(session.userId), {
+      headers: { 'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600' },
+    })
   } catch (error) {
     console.error("Error loading report templates:", error)
     return NextResponse.json({ error: "Failed to load templates" }, { status: 500 })
