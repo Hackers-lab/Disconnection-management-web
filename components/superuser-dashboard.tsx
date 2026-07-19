@@ -598,7 +598,9 @@ export function SuperuserDashboard() {
                           <SelectItem value="admin">Admin</SelectItem>
                           <SelectItem value="executive">Executive</SelectItem>
                           <SelectItem value="viewer">Viewer</SelectItem>
+                          <SelectItem value="agency">Agency</SelectItem>
                           <SelectItem value="superuser">Superuser</SelectItem>
+                          <SelectItem value="monitor">Monitor</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -624,7 +626,7 @@ export function SuperuserDashboard() {
                         />
                       </div>
                     )}
-                    {(newUser.role === "executive" || newUser.role === "viewer") && (
+                    {(newUser.role !== "admin" && newUser.role !== "superuser" && newUser.role !== "monitor") && (
                       <>
                         <div className="space-y-1">
                           <Label className="text-xs text-slate-400 font-medium">Subscription Status</Label>
@@ -748,7 +750,7 @@ export function SuperuserDashboard() {
                           </TableHeader>
                           <TableBody>
                             {filteredUsers.map(u => (
-                              <TableRow key={u.id} className="border-slate-800 hover:bg-slate-800/40">
+                              <TableRow key={`${u.id}-${u.username}-${u.role}`} className="border-slate-800 hover:bg-slate-800/40">
                                 <TableCell>
                                   <div>
                                     <div className="font-semibold text-slate-200">{u.name || "N/A"}</div>
@@ -880,6 +882,25 @@ export function SuperuserDashboard() {
               </Select>
             </div>
             <div className="space-y-1">
+              <Label className="text-xs text-slate-400 font-medium">Access Role</Label>
+              <Select
+                value={editForm.role}
+                onValueChange={val => setEditForm({...editForm, role: val})}
+              >
+                <SelectTrigger className="bg-slate-950 border-slate-700 text-slate-100">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-slate-800 border-slate-700 text-slate-100">
+                  <SelectItem value="admin">Admin</SelectItem>
+                  <SelectItem value="executive">Executive</SelectItem>
+                  <SelectItem value="viewer">Viewer</SelectItem>
+                  <SelectItem value="agency">Agency</SelectItem>
+                  <SelectItem value="superuser">Superuser</SelectItem>
+                  <SelectItem value="monitor">Monitor</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
               <Label className="text-xs text-slate-400 font-medium">Allowed Agencies (Optional)</Label>
               <Input
                 placeholder="e.g. AGENCY_A, AGENCY_B"
@@ -902,7 +923,7 @@ export function SuperuserDashboard() {
               </div>
             )}
 
-            {(editForm.role === "executive" || editForm.role === "viewer") && (
+            {(editForm.role !== "admin" && editForm.role !== "superuser" && editForm.role !== "monitor") && (
               <>
                 <div className="space-y-1">
                   <Label className="text-xs text-slate-400 font-medium">Subscription Status</Label>
