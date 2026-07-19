@@ -54,6 +54,12 @@ export const GET = withTenant(async function GET(req: NextRequest) {
         },
         isSubscribed: session.isSubscribed,
         subscriptionExpiresAt: session.subscriptionExpiresAt,
+        name: session.name,
+        username: session.username,
+        cccCode: session.cccCode,
+        agencies: session.agencies,
+        subscriptionStatus: session.subscriptionStatus,
+        bypassSubscription: session.bypassSubscription,
       })
     }
 
@@ -62,6 +68,12 @@ export const GET = withTenant(async function GET(req: NextRequest) {
       permissions,
       isSubscribed: session.isSubscribed,
       subscriptionExpiresAt: session.subscriptionExpiresAt,
+      name: session.name,
+      username: session.username,
+      cccCode: session.cccCode,
+      agencies: session.agencies,
+      subscriptionStatus: session.subscriptionStatus,
+      bypassSubscription: session.bypassSubscription,
     })
   } catch (error) {
     console.error("Error in permissions API:", error)

@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react"
 import dynamic from "next/dynamic"
 import { getFromCache, saveToCache } from "@/lib/indexed-db"
+import { logout } from "@/app/actions/auth"
 import { DashboardShell } from "@/components/dashboard-shell"
 import { ViewType } from "@/components/app-sidebar"
 import { DashboardProvider } from "@/components/dashboard-context"
@@ -1353,40 +1354,65 @@ export default function DashboardClient({ role, agencies }: DashboardClientProps
 
         {/* Global Subscription Required Dialog Modal */}
         <Dialog open={!isSubscribed && permsLoaded} onOpenChange={() => {}}>
-          <DialogContent className="sm:max-w-[425px] bg-slate-900 border-slate-800 text-slate-100 dark" aria-describedby="subscription-description">
+          <DialogContent className="sm:max-w-[425px] bg-slate-950 border-slate-800 text-slate-100 dark backdrop-blur-md" aria-describedby="subscription-description">
             <DialogHeader className="flex flex-col items-center justify-center text-center">
-              <div className="h-16 w-16 bg-red-500/10 rounded-full flex items-center justify-center mb-4 mt-2">
-                <AlertTriangle className="h-10 w-10 text-red-500 animate-pulse" />
+              <div className="h-14 w-14 bg-indigo-500/10 rounded-full flex items-center justify-center mb-4 mt-2 border border-indigo-500/20">
+                <AlertTriangle className="h-7 w-7 text-indigo-400 animate-pulse" />
               </div>
-              <DialogTitle className="text-xl font-bold text-slate-100 text-center">
-                Subscription Required
+              <DialogTitle className="text-xl font-bold tracking-tight text-slate-100 text-center">
+                Workspace Subscription Required
               </DialogTitle>
               <DialogDescription id="subscription-description" className="text-slate-400 pt-2 text-sm leading-relaxed text-center">
-                Your account subscription is currently inactive or has expired.
-                {subscriptionExpiresAt && (
-                  <span className="block mt-2 text-xs text-slate-500 font-semibold">
-                    Expired on: {subscriptionExpiresAt}
-                  </span>
-                )}
-                <br />
-                Please subscribe and pay the subscription amount to restore full access to all workspace modules.
+                Your account subscription is currently inactive. Please activate to continue accessing your subdivision Customer Care Center (CCC) modules.
               </DialogDescription>
             </DialogHeader>
-            <DialogFooter className="mt-6 flex flex-col gap-3 w-full">
-              <Button onClick={async () => {
-                try {
-                  const res = await fetch("/api/billing/checkout", { method: "POST" })
-                  if (res.ok) {
-                    const data = await res.json()
-                    if (data.success) {
-                      window.location.reload()
+
+            {/* Premium Pricing Card */}
+            <div className="my-5 p-4 rounded-xl border border-indigo-500/20 bg-indigo-500/5 flex flex-col items-center justify-center relative overflow-hidden">
+              <span className="absolute top-0 right-0 bg-indigo-600 text-white text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-bl-lg">
+                Save 50%
+              </span>
+              <p className="text-[10px] text-indigo-400 font-semibold uppercase tracking-wider mb-1">Special Promotional Offer</p>
+              <div className="flex items-baseline gap-2.5">
+                <span className="text-4xl font-extrabold text-white tracking-tight">₹99</span>
+                <span className="text-sm text-slate-400">/ month</span>
+                <span className="text-sm text-slate-500 line-through font-medium">₹199</span>
+              </div>
+              {subscriptionExpiresAt && (
+                <span className="block mt-3 text-[10px] text-red-400 bg-red-500/5 px-2 py-0.5 rounded border border-red-500/10">
+                  Last session expired: {subscriptionExpiresAt}
+                </span>
+              )}
+            </div>
+
+            <DialogFooter className="mt-2 flex flex-col gap-2.5 sm:flex-col w-full">
+              <Button 
+                onClick={async () => {
+                  try {
+                    const res = await fetch("/api/billing/checkout", { method: "POST" })
+                    if (res.ok) {
+                      const data = await res.json()
+                      if (data.success) {
+                        window.location.reload()
+                      }
                     }
+                  } catch (e) {
+                    console.error("Simulation failed", e)
                   }
-                } catch (e) {
-                  console.error("Simulation failed", e)
-                }
-              }} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2">
+                }} 
+                className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold py-2.5 rounded-lg shadow-md hover:shadow-indigo-500/10 transition-all duration-200"
+              >
                 Simulate Payment & Activate
+              </Button>
+              <Button 
+                onClick={async () => {
+                  await logout()
+                  window.location.href = "/"
+                }}
+                variant="outline"
+                className="w-full bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-800 hover:text-white font-semibold py-2.5 rounded-lg transition-all duration-150"
+              >
+                Logout Securely
               </Button>
             </DialogFooter>
           </DialogContent>

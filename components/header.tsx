@@ -29,6 +29,7 @@ import {
   CalendarDays,
   BarChart3,
   Upload,
+  Loader2,
 } from "lucide-react"
 import { useState, useEffect } from "react"
 import {
@@ -139,6 +140,17 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
   const [changePwdSuccess, setChangePwdSuccess] = useState(false)
   const [changePwdLoading, setChangePwdLoading] = useState(false)
   const [showHistoryReportDialog, setShowHistoryReportDialog] = useState(false)
+  const [showProfileDialog, setShowProfileDialog] = useState(false)
+  const [profileData, setProfileData] = useState<any>(null)
+
+  useEffect(() => {
+    fetch("/api/auth/permissions")
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data) setProfileData(data)
+      })
+      .catch(e => console.error("Failed to load profile", e))
+  }, [])
 
 
 
@@ -1163,6 +1175,15 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
               <Button
                 variant="ghost"
                 size="sm"
+                onClick={() => setShowProfileDialog(true)}
+                title="My Profile"
+              >
+                <User className="h-4 w-4" />
+              </Button>
+
+              <Button
+                variant="ghost"
+                size="sm"
                 onClick={openChangePwdDialog}
                 title="Change Password"
               >
@@ -1598,6 +1619,99 @@ export function Header({ userRole, userAgencies = [], onAdminClick, onDownload, 
               </Button>
             </DialogFooter>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Profile & Subscription Status Dialog */}
+      <Dialog open={showProfileDialog} onOpenChange={setShowProfileDialog}>
+        <DialogContent className="sm:max-w-md bg-slate-900 border-slate-800 text-slate-100 dark">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <User className="h-5 w-5 text-indigo-400" />
+              My Profile & Workspace Status
+            </DialogTitle>
+          </DialogHeader>
+          {profileData ? (
+            <div className="space-y-4 py-3 text-sm text-slate-300">
+              <div className="grid grid-cols-3 gap-2 border-b border-slate-800 pb-3">
+                <span className="text-slate-400 font-medium">Name:</span>
+                <span className="col-span-2 font-semibold text-slate-100">{profileData.name || "N/A"}</span>
+              </div>
+              <div className="grid grid-cols-3 gap-2 border-b border-slate-800 pb-3">
+                <span className="text-slate-400 font-medium">Agency ID:</span>
+                <span className="col-span-2 font-mono font-semibold text-slate-200">{profileData.username}</span>
+              </div>
+              <div className="grid grid-cols-3 gap-2 border-b border-slate-800 pb-3">
+                <span className="text-slate-400 font-medium">Subdivision:</span>
+                <span className="col-span-2 font-mono font-semibold text-blue-400">{profileData.cccCode}</span>
+              </div>
+              <div className="grid grid-cols-3 gap-2 border-b border-slate-800 pb-3">
+                <span className="text-slate-400 font-medium">Role:</span>
+                <span className="col-span-2 capitalize font-semibold text-slate-200">{profileData.role}</span>
+              </div>
+              <div className="grid grid-cols-3 gap-2 border-b border-slate-800 pb-3">
+                <span className="text-slate-400 font-medium">Assigned:</span>
+                <span className="col-span-2 text-xs font-semibold text-slate-200">
+                  {profileData.agencies && profileData.agencies.length > 0
+                    ? profileData.agencies.join(", ")
+                    : "None (All Access)"}
+                </span>
+              </div>
+              <div className="grid grid-cols-3 gap-2 pb-1">
+                <span className="text-slate-400 font-medium">Subscription:</span>
+                <span className="col-span-2">
+                  {(() => {
+                    const roleLower = (profileData.role || "").toLowerCase()
+                    const isExempt = roleLower === "admin" || roleLower === "superuser" || roleLower === "monitor" || profileData.bypassSubscription
+                    const billingStartDate = new Date("2026-09-01T00:00:00")
+                    const isTrial = Date.now() < billingStartDate.getTime()
+
+                    if (isExempt) {
+                      return (
+                        <span className="inline-flex px-2 py-0.5 rounded text-[10px] uppercase font-bold bg-slate-800 text-slate-400 border border-slate-700">
+                          Free Pass / Bypassed
+                        </span>
+                      )
+                    } else if (isTrial) {
+                      return (
+                        <span className="inline-flex px-2 py-0.5 rounded text-[10px] uppercase font-bold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 animate-pulse">
+                          Under Trial (Starts 01-09-2026)
+                        </span>
+                      )
+                    } else if (profileData.subscriptionStatus === "active") {
+                      return (
+                        <div className="flex flex-col gap-1">
+                          <span className="inline-flex w-fit px-2 py-0.5 rounded text-[10px] uppercase font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                            Active
+                          </span>
+                          {profileData.subscriptionExpiresAt && (
+                            <span className="text-[10px] text-slate-500 font-semibold">
+                              Expires: {profileData.subscriptionExpiresAt}
+                            </span>
+                          )}
+                        </div>
+                      )
+                    } else {
+                      return (
+                        <span className="inline-flex px-2 py-0.5 rounded text-[10px] uppercase font-bold bg-red-500/10 text-red-400 border border-red-500/20">
+                          Expired / Inactive
+                        </span>
+                      )
+                    }
+                  })()}
+                </span>
+              </div>
+            </div>
+          ) : (
+            <div className="flex justify-center items-center py-10">
+              <Loader2 className="h-6 w-6 animate-spin text-indigo-500" />
+            </div>
+          )}
+          <DialogFooter>
+            <Button className="bg-slate-800 text-white hover:bg-slate-700 w-full font-semibold" onClick={() => setShowProfileDialog(false)}>
+              Close Profile
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

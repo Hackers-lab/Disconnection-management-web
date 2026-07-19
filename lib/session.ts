@@ -65,19 +65,27 @@ export async function verifySession() {
 
   let isSubscribed = true
   let subscriptionExpiresAt = ""
+  let name = ""
+  let bypassSubscription = false
+  let subscriptionStatus = ""
 
   try {
     const users = await userStorage.getUsers()
     const user = users.find(u => u.id === session.userId)
     if (user) {
+      name = user.name || ""
+      bypassSubscription = user.bypassSubscription || false
+      subscriptionStatus = user.subscriptionStatus || "active"
       subscriptionExpiresAt = user.subscriptionExpiresAt || ""
       const roleLower = user.role.toLowerCase()
       
+      const billingStartDate = new Date("2026-09-01T00:00:00")
       const isExempt =
         roleLower === "admin" ||
         roleLower === "superuser" ||
         roleLower === "monitor" ||
-        user.bypassSubscription
+        user.bypassSubscription ||
+        Date.now() < billingStartDate.getTime()
 
       if (!isExempt) {
         if (user.subscriptionStatus === "active") {
@@ -113,5 +121,8 @@ export async function verifySession() {
     agencies: session.agencies,
     isSubscribed,
     subscriptionExpiresAt,
+    name,
+    bypassSubscription,
+    subscriptionStatus,
   }
 }
