@@ -12,7 +12,7 @@ export async function GET() {
   }
   try {
     return NextResponse.json(await getTemplatesForUser(session.userId), {
-      headers: { 'Cache-Control': 'private, max-age=120, stale-while-revalidate=300' },
+      headers: { 'Cache-Control': 'private, max-age=86400, stale-while-revalidate=3600' },
     })
   } catch (error) {
     console.error("Error loading report templates:", error)

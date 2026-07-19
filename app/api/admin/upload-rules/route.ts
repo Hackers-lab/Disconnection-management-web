@@ -13,7 +13,7 @@ export async function GET() {
   try {
     const sets = await getRuleSetsForUser(session.userId)
     return NextResponse.json(sets, {
-      headers: { 'Cache-Control': 'private, max-age=120, stale-while-revalidate=300' },
+      headers: { 'Cache-Control': 'private, max-age=86400, stale-while-revalidate=3600' },
     })
   } catch (error) {
     console.error("Error loading upload rules:", error)

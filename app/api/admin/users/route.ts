@@ -20,7 +20,7 @@ export const GET = withTenant(async function GET(request: NextRequest) {
   const tenantUsers = allUsers.filter((u) => u.cccCode === cccCode)
   
   return NextResponse.json(tenantUsers, {
-    headers: { 'Cache-Control': 'private, max-age=60, stale-while-revalidate=120' },
+    headers: { 'Cache-Control': 'private, max-age=7200, stale-while-revalidate=1800' },
   })
 })
 
