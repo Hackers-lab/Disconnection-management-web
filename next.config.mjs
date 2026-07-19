@@ -9,7 +9,7 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
-  serverExternalPackages: ["googleapis"],
+  serverExternalPackages: ["googleapis", "google-auth-library", "googleapis-common"],
 }
 
 export default nextConfig
