@@ -16,7 +16,9 @@ export const GET = withTenant(async function GET(request: NextRequest) {
     fetchStock(),
     fetchIssues(),
   ])
-  return NextResponse.json({ summary, stock, issues })
+  return NextResponse.json({ summary, stock, issues }, {
+    headers: { "Cache-Control": "no-store" },
+  })
 })
 export const POST = withTenant(async function POST(request: NextRequest) {
   const session = await verifySession()

@@ -9,7 +9,9 @@ export const GET = withTenant(async function GET(req: NextRequest) {
 
   try {
     const receives = await getReceiveHistory()
-    return NextResponse.json(receives)
+    return NextResponse.json(receives, {
+      headers: { "Cache-Control": "no-store" },
+    })
   } catch (e: any) {
     console.error("Material receive history error:", e)
     return NextResponse.json({ error: e.message }, { status: 500 })

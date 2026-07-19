@@ -13,7 +13,7 @@ const sheets = google.sheets({ version: "v4", auth })
 
 export const PROJECT_TAB = "NSC_Projects"
 const PROJECT_TAG        = "nsc-projects"
-const PROJECT_REVALIDATE = 15 * 60 // 15 minutes — project list changes rarely
+const PROJECT_REVALIDATE = 30 * 24 * 60 * 60 // 30 days — write-invalidated infinite cache
 
 const PROJECT_HEADERS = [
   "Project ID", "Created At", "Created By",

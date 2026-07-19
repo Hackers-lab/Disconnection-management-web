@@ -14,9 +14,13 @@ export const GET = withTenant(async function GET(request: NextRequest) {
 
   if (session.agencies && session.agencies.length > 0) {
     const upper = session.agencies.map((a: string) => a.toUpperCase())
-    return NextResponse.json(all.filter(a => upper.includes((a.agency || "").toUpperCase())))
+    return NextResponse.json(all.filter(a => upper.includes((a.agency || "").toUpperCase())), {
+      headers: { "Cache-Control": "no-store" },
+    })
   }
-  return NextResponse.json(all)
+  return NextResponse.json(all, {
+    headers: { "Cache-Control": "no-store" },
+  })
 })
 export const POST = withTenant(async function POST(request: NextRequest) {
   const { authorized, error, status, session } = await checkApiPermission("nsc", "create")

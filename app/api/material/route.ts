@@ -13,7 +13,9 @@ export const GET = withTenant(async function GET(req: NextRequest) {
       invalidateMaterialCache()
     }
     const [stock, catalogue] = await Promise.all([getStock(), getCatalogue()])
-    return NextResponse.json({ stock, catalogue })
+    return NextResponse.json({ stock, catalogue }, {
+      headers: { "Cache-Control": "no-store" },
+    })
   } catch (e: any) {
     console.error("Material stock error:", e)
     return NextResponse.json({ error: e.message }, { status: 500 })

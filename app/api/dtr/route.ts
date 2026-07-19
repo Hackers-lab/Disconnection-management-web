@@ -24,7 +24,9 @@ export const GET = withTenant(async function GET(request: NextRequest) {
   try {
     const spreadsheetId = getSpreadsheetId()
     const all = await fetchDTRData(spreadsheetId)
-    return NextResponse.json(all)
+    return NextResponse.json(all, {
+      headers: { "Cache-Control": "no-store" },
+    })
   } catch (e: any) {
     console.error("💥 DTR fetch error:", e)
     return NextResponse.json({ error: e.message || "Failed to fetch DTR data" }, { status: 500 })

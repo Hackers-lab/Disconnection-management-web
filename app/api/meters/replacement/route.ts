@@ -15,9 +15,13 @@ export const GET = withTenant(async function GET(request: NextRequest) {
 
   if (session.role === "agency") {
     const upper = session.agencies.map((a: string) => a.toUpperCase())
-    return NextResponse.json(all.filter(r => upper.includes((r.agency || "").toUpperCase())))
+    return NextResponse.json(all.filter(r => upper.includes((r.agency || "").toUpperCase())), {
+      headers: { "Cache-Control": "no-store" },
+    })
   }
-  return NextResponse.json(all)
+  return NextResponse.json(all, {
+    headers: { "Cache-Control": "no-store" },
+  })
 })
 export const POST = withTenant(async function POST(request: NextRequest) {
   const session = await verifySession()

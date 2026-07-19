@@ -4,7 +4,7 @@ import { auth } from "./google-drive"
 
 const TAB = "DTR"
 const DTR_TAG = "dtr-data"
-const DTR_REVALIDATE = 5 * 60 // 5 minutes
+const DTR_REVALIDATE = 30 * 24 * 60 * 60 // 30 days — write-invalidated infinite cache
 
 const sheets = google.sheets({ version: "v4", auth })
 
