@@ -1,4 +1,7 @@
-import { unstable_cache, revalidateTag } from "next/cache"
+import { revalidateTag } from "next/cache"
+import * as fs from "fs"
+import * as path from "path"
+import * as os from "os"
 
 // Tag used to invalidate the shared Data Cache after any consumer write.
 export const CONSUMERS_TAG = "consumers"
@@ -196,11 +199,99 @@ export async function getAgencyLastUpdates(spreadsheetId: string): Promise<
 // the Google Sheets fetch AND the row-by-row parse — near-zero CPU per call.
 const CONSUMER_REVALIDATE_S = 5 * 60 // 5 minutes — read-heavy, rarely changes
 
+// In-memory caches (with request coalescing)
+let memoryCache: { [spreadsheetId: string]: { data: ConsumerData[]; timestamp: number } } = {}
+let activeFetches: { [spreadsheetId: string]: Promise<ConsumerData[]> } = {}
+let backgroundFetching: { [spreadsheetId: string]: boolean } = {}
+
+function getCacheFilePath(spreadsheetId: string): string {
+  const sanitizedId = spreadsheetId.replace(/[^a-zA-Z0-9_-]/g, "")
+  const nextCacheDir = path.join(process.cwd(), ".next", "cache")
+  const dir = fs.existsSync(nextCacheDir) ? nextCacheDir : os.tmpdir()
+  return path.join(dir, `consumer-data-${sanitizedId}.json`)
+}
+
+async function getCachedData(spreadsheetId: string): Promise<{ data: ConsumerData[]; timestamp: number } | null> {
+  // 1. Check memory cache first
+  if (memoryCache[spreadsheetId]) {
+    return memoryCache[spreadsheetId]
+  }
+
+  // 2. Check disk cache
+  const filePath = getCacheFilePath(spreadsheetId)
+  try {
+    if (fs.existsSync(filePath)) {
+      const content = fs.readFileSync(filePath, "utf-8")
+      const parsed = JSON.parse(content)
+      if (parsed && Array.isArray(parsed.data) && typeof parsed.timestamp === "number") {
+        // Hydrate memory cache
+        memoryCache[spreadsheetId] = parsed
+        return parsed
+      }
+    }
+  } catch (err) {
+    console.warn("Failed to read disk cache for spreadsheetId:", spreadsheetId, err)
+  }
+
+  return null
+}
+
+async function writeCache(spreadsheetId: string, data: ConsumerData[]) {
+  const entry = {
+    timestamp: Date.now(),
+    data,
+  }
+  // Update memory cache
+  memoryCache[spreadsheetId] = entry
+
+  // Update disk cache
+  const filePath = getCacheFilePath(spreadsheetId)
+  try {
+    const dir = path.dirname(filePath)
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true })
+    }
+    fs.writeFileSync(filePath, JSON.stringify(entry), "utf-8")
+  } catch (err) {
+    console.warn("Failed to write disk cache for spreadsheetId:", spreadsheetId, err)
+  }
+}
+
 // Allow other modules (e.g. /api/consumers/update) to invalidate the cache
 // after a successful write so the next read reflects the change immediately.
 // Works across all instances because it busts the shared Data Cache tag.
 export function invalidateConsumerCache() {
-  revalidateTag(CONSUMERS_TAG)
+  memoryCache = {}
+  activeFetches = {}
+  backgroundFetching = {}
+
+  // Delete cache files from disk
+  try {
+    const nextCacheDir = path.join(process.cwd(), ".next", "cache")
+    const dirs = [nextCacheDir, os.tmpdir()]
+    for (const dir of dirs) {
+      if (fs.existsSync(dir)) {
+        const files = fs.readdirSync(dir)
+        for (const file of files) {
+          if (file.startsWith("consumer-data-") && file.endsWith(".json")) {
+            try {
+              fs.unlinkSync(path.join(dir, file))
+            } catch (e) {
+              // Ignore file removal errors
+            }
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.error("Error clearing disk cache files:", err)
+  }
+
+  try {
+    revalidateTag(CONSUMERS_TAG)
+  } catch (e) {
+    // Ignore if next/cache is not supported in the current environment
+  }
 }
 
 // Lazy import to avoid loading googleapis on cold paths that don't need it.
@@ -397,17 +488,54 @@ const MOCK_CONSUMERS: ConsumerData[] = [
   },
 ]
 
-// Cross-instance cached read. Errors propagate (and are NOT cached) so the
-// public wrapper below can fall back to mock data without poisoning the cache.
-const _cachedConsumerData = unstable_cache(
-  async (spreadsheetId: string) => _fetchConsumerDataRaw(spreadsheetId),
-  ["consumer-data"],
-  { revalidate: CONSUMER_REVALIDATE_S, tags: [CONSUMERS_TAG] }
-)
-
 export async function fetchConsumerData(spreadsheetId: string): Promise<ConsumerData[]> {
   try {
-    return await _cachedConsumerData(spreadsheetId)
+    if (!spreadsheetId) {
+      throw new Error("spreadsheetId parameter is required")
+    }
+
+    const cached = await getCachedData(spreadsheetId)
+    const now = Date.now()
+    const cacheExpiryMs = CONSUMER_REVALIDATE_S * 1000
+
+    if (cached) {
+      const isExpired = now - cached.timestamp > cacheExpiryMs
+      if (isExpired) {
+        // Cache has expired. Trigger background revalidation to prevent blocking the user request.
+        if (!backgroundFetching[spreadsheetId] && !activeFetches[spreadsheetId]) {
+          backgroundFetching[spreadsheetId] = true
+          
+          _fetchConsumerDataRaw(spreadsheetId)
+            .then(async (freshData) => {
+              await writeCache(spreadsheetId, freshData)
+              console.log(`[Cache] Successfully revalidated consumer data in background for spreadsheet: ${spreadsheetId}`)
+            })
+            .catch((err) => {
+              console.error(`[Cache] Background revalidation failed for spreadsheet: ${spreadsheetId}`, err)
+            })
+            .finally(() => {
+              delete backgroundFetching[spreadsheetId]
+            })
+        }
+      }
+      // Return cached (potentially stale) data immediately
+      return cached.data
+    }
+
+    // Cache is completely cold. Must fetch synchronously.
+    // Use request coalescing to share active fetches.
+    if (!activeFetches[spreadsheetId]) {
+      activeFetches[spreadsheetId] = _fetchConsumerDataRaw(spreadsheetId)
+        .then(async (freshData) => {
+          await writeCache(spreadsheetId, freshData)
+          return freshData
+        })
+        .finally(() => {
+          delete activeFetches[spreadsheetId]
+        })
+    }
+
+    return await activeFetches[spreadsheetId]
   } catch (error) {
     console.error("Detailed error in fetchConsumerData:", error)
     return MOCK_CONSUMERS
