@@ -9,6 +9,8 @@
     "start": "next start"
   },
   "dependencies": {
+    "@googleapis/drive": "^20.2.0",
+    "@googleapis/sheets": "^13.0.2",
     "@hookform/resolvers": "^3.9.1",
     "@radix-ui/react-accordion": "latest",
     "@radix-ui/react-alert-dialog": "latest",
@@ -46,7 +48,6 @@
     "date-fns": "4.1.0",
     "embla-carousel-react": "latest",
     "fs": "latest",
-    "googleapis": "latest",
     "input-otp": "latest",
     "jose": "latest",
     "jspdf": "^3.0.1",

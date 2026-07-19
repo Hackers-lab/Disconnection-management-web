@@ -1,4 +1,4 @@
-import { google } from "googleapis"
+import { sheets as googleSheets } from "@googleapis/sheets"
 import { unstable_cache, revalidateTag } from "next/cache"
 import { auth } from "./google-drive"
 
@@ -6,7 +6,7 @@ const TAB = "DTR"
 const DTR_TAG = "dtr-data"
 const DTR_REVALIDATE = 30 * 24 * 60 * 60 // 30 days — write-invalidated infinite cache
 
-const sheets = google.sheets({ version: "v4", auth })
+const sheets = googleSheets({ version: "v4", auth })
 
 export interface DTRRecord {
   dtrCode: string

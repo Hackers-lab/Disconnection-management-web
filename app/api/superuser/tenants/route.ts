@@ -1,19 +1,20 @@
 import { NextRequest, NextResponse } from "next/server"
 import { verifySession } from "@/lib/session"
 import { getTenantRegistry, invalidateTenantCache } from "@/lib/tenant-resolver"
-import { google } from "googleapis"
+import { sheets as googleSheets } from "@googleapis/sheets"
+import { GoogleAuth } from "google-auth-library"
 
 export const dynamic = "force-dynamic"
 
 const getSheetsClient = () => {
-  const auth = new google.auth.GoogleAuth({
+  const auth = new GoogleAuth({
     credentials: {
       client_email: process.env.GOOGLE_SHEETS_CLIENT_EMAIL,
       private_key: process.env.GOOGLE_SHEETS_PRIVATE_KEY?.replace(/\\n/g, "\n"),
     },
     scopes: ["https://www.googleapis.com/auth/spreadsheets"],
   })
-  return google.sheets({ version: "v4", auth })
+  return googleSheets({ version: "v4", auth })
 }
 
 export async function GET(request: NextRequest) {

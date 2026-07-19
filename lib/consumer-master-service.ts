@@ -1,10 +1,10 @@
-// Server-only — imports googleapis. Never import in "use client" components.
-import { google } from "googleapis"
+// Server-only — imports @googleapis/sheets. Never import in "use client" components.
+import { sheets as googleSheets } from "@googleapis/sheets"
 import { unstable_cache, revalidateTag } from "next/cache"
 import { auth } from "./google-drive"
 import { getSpreadsheetId } from "./google-sheets-api"
 
-const sheets = google.sheets({ version: "v4", auth })
+const sheets = googleSheets({ version: "v4", auth })
 
 export const MASTER_TAB = "Consumer_Master"
 const MASTER_TAG        = "consumer-master"

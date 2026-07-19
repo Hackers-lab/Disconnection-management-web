@@ -1,4 +1,4 @@
-import { google } from "googleapis"
+import { sheets as googleSheets } from "@googleapis/sheets"
 import { unstable_cache, revalidateTag } from "next/cache"
 import { auth } from "./google-drive"
 import { getSpreadsheetId } from "./google-sheets-api"
@@ -22,7 +22,7 @@ export interface MeterReplacement {
   workOrderNo?: string
 }
 
-const sheets = google.sheets({ version: "v4", auth })
+const sheets = googleSheets({ version: "v4", auth })
 
 export const REPLACEMENT_TAB = "Meter_Replacement"
 

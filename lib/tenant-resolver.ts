@@ -1,18 +1,19 @@
-import { google } from "googleapis"
+import { sheets as googleSheets } from "@googleapis/sheets"
+import { GoogleAuth } from "google-auth-library"
 import { decrypt } from "./encryption"
 
 const MASTER_CONFIG_SHEET = process.env.MASTER_CONFIG_SHEET!
 const REGISTRY_TAB = "CCC_Registry"
 
 async function getSheetsClient() {
-  const auth = new google.auth.GoogleAuth({
+  const auth = new GoogleAuth({
     credentials: {
       client_email: process.env.GOOGLE_SHEETS_CLIENT_EMAIL,
       private_key: process.env.GOOGLE_SHEETS_PRIVATE_KEY?.replace(/\\n/g, "\n"),
     },
     scopes: ["https://www.googleapis.com/auth/spreadsheets"],
   })
-  return google.sheets({ version: "v4", auth })
+  return googleSheets({ version: "v4", auth })
 }
 
 export interface TenantConfig {

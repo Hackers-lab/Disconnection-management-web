@@ -1,4 +1,4 @@
-import { google } from "googleapis"
+import { sheets as googleSheets } from "@googleapis/sheets"
 import { getSpreadsheetId } from "./google-sheets-api"
 
 const SHEET_ID = process.env.USERS_SHEET!
@@ -6,7 +6,7 @@ const SHEET_NAME = "AppRoles"
 
 async function getSheetsClient() {
   const { auth } = await import("./google-drive")
-  return google.sheets({ version: "v4", auth })
+  return googleSheets({ version: "v4", auth })
 }
 
 export interface RolePermissions {

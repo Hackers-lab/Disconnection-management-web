@@ -1,5 +1,6 @@
 // app/api/sheets/route.ts
-import { google } from "googleapis";
+import { sheets as googleSheets } from "@googleapis/sheets";
+import { GoogleAuth } from "google-auth-library";
 import { type NextRequest, NextResponse } from "next/server";
 import { withTenant } from "@/lib/tenant-context";
 
@@ -13,7 +14,7 @@ export const POST = withTenant(async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
-    const auth = new google.auth.GoogleAuth({
+    const auth = new GoogleAuth({
       credentials: {
         client_email: process.env.GOOGLE_SHEETS_CLIENT_EMAIL,
         private_key: process.env.GOOGLE_SHEETS_PRIVATE_KEY?.replace(/\\n/g, '\n'),
@@ -21,7 +22,7 @@ export const POST = withTenant(async function POST(request: NextRequest) {
       scopes: ["https://www.googleapis.com/auth/spreadsheets"],
     });
 
-    const sheets = google.sheets({ version: "v4", auth });
+    const sheets = googleSheets({ version: "v4", auth });
     
     const values = headers ? [headers, ...data] : data;
 

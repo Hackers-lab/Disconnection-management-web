@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { verifySession } from "@/lib/session"
-import { google } from "googleapis"
+import { OAuth2Client, GoogleAuth } from "google-auth-library"
+import { drive as googleDrive } from "@googleapis/drive"
+import { sheets as googleSheets } from "@googleapis/sheets"
 import { encrypt } from "@/lib/encryption"
 import { invalidateTenantCache } from "@/lib/tenant-resolver"
 import { createAppFolder, duplicateSpreadsheetTemplate } from "@/lib/provisioning"
@@ -41,7 +43,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const oauth2Client = new google.auth.OAuth2(clientId, clientSecret, redirectUri)
+    const oauth2Client = new OAuth2Client(clientId, clientSecret, redirectUri)
 
     // Exchange authorization code for tokens
     const { tokens } = await oauth2Client.getToken(code)
@@ -57,13 +59,13 @@ export async function GET(request: NextRequest) {
 
     // Set credentials on oauth client to perform auto-provisioning
     oauth2Client.setCredentials(tokens)
-    const driveClient = google.drive({ version: "v3", auth: oauth2Client })
+    const driveClient = googleDrive({ version: "v3", auth: oauth2Client })
 
     // 1. Create App Storage Folder on admin's Drive
     const folderId = await createAppFolder(driveClient)
 
     // 2. Fetch existing tenant sheet data from Master Registry using System credentials
-    const defaultAuth = new google.auth.GoogleAuth({
+    const defaultAuth = new GoogleAuth({
       credentials: {
         client_email: process.env.GOOGLE_SHEETS_CLIENT_EMAIL,
         private_key: process.env.GOOGLE_SHEETS_PRIVATE_KEY?.replace(/\\n/g, "\n"),
@@ -77,7 +79,7 @@ export async function GET(request: NextRequest) {
     }
 
     const registryTab = "CCC_Registry"
-    const masterSheetsClient = google.sheets({ version: "v4", auth: defaultAuth })
+    const masterSheetsClient = googleSheets({ version: "v4", auth: defaultAuth })
 
     const listRes = await masterSheetsClient.spreadsheets.values.get({
       spreadsheetId: masterSheetId,

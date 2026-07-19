@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { google } from "googleapis"
+import { sheets as googleSheets } from "@googleapis/sheets"
 import { auth } from "@/lib/google-drive"
 import { getSpreadsheetId } from "@/lib/google-sheets-api"
 import { withTenant } from "@/lib/tenant-context"
@@ -7,7 +7,7 @@ import { withTenant } from "@/lib/tenant-context"
 export const dynamic = 'force-dynamic'
 
 // Initialize the Google Sheets API client
-const sheets = google.sheets({ version: "v4", auth })
+const sheets = googleSheets({ version: "v4", auth })
 
 export const GET = withTenant(async function GET(req: NextRequest) {
   const spreadsheetId = getSpreadsheetId()

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { google } from "googleapis"
+import { sheets as googleSheets } from "@googleapis/sheets"
 import { auth } from "@/lib/google-drive"
 import { getSpreadsheetId, getSheetName, findColumn, colLetter, ensureHeaders } from "@/lib/google-sheets-api"
 import { _fetchMasterRaw } from "@/lib/consumer-master-service"
@@ -9,7 +9,7 @@ import { withTenant } from "@/lib/tenant-context"
 
 export const maxDuration = 60
 
-const sheets = google.sheets({ version: "v4", auth })
+const sheets = googleSheets({ version: "v4", auth })
 
 export const POST = withTenant(async function POST(req: NextRequest) {
   const session = await verifySession()

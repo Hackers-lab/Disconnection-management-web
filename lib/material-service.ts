@@ -1,6 +1,6 @@
-// Server-only — imports googleapis. Never import this in "use client" components.
+// Server-only — imports @googleapis/sheets. Never import this in "use client" components.
 // Client components should import types from lib/material-types.ts instead.
-import { google } from "googleapis"
+import { sheets as googleSheets } from "@googleapis/sheets"
 import { unstable_cache, revalidateTag } from "next/cache"
 import { auth, uploadImageToDrive } from "./google-drive"
 import { getSpreadsheetId } from "./google-sheets-api"
@@ -14,7 +14,7 @@ import {
   type MaterialUnit,
 } from "./material-types"
 
-const sheets = google.sheets({ version: "v4", auth })
+const sheets = googleSheets({ version: "v4", auth })
 
 // ─── Sheet names ──────────────────────────────────────────────────────────────
 const CAT_TAB     = "Mat_Catalogue"

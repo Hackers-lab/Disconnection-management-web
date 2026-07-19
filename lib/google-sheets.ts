@@ -296,9 +296,9 @@ export function invalidateConsumerCache() {
 
 // Lazy import to avoid loading googleapis on cold paths that don't need it.
 async function getSheetsClient() {
-  const { google } = await import("googleapis")
+  const { sheets: googleSheets } = await import("@googleapis/sheets")
   const { auth } = await import("./google-drive")
-  return google.sheets({ version: "v4", auth })
+  return googleSheets({ version: "v4", auth })
 }
 
 const COLUMN_MAPPINGS = {

@@ -1,7 +1,7 @@
-import { google } from "googleapis"
+import { sheets as googleSheets } from "@googleapis/sheets"
 import { auth } from "./google-drive"
 
-const sheets = google.sheets({ version: "v4", auth })
+const sheets = googleSheets({ version: "v4", auth })
 
 export const HISTORY_TAB = "DC_History"
 

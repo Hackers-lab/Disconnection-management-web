@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server"
-import { google, sheets_v4 } from "googleapis"
+import { sheets as googleSheets, type sheets_v4 } from "@googleapis/sheets"
 import { auth } from "@/lib/google-drive"
 import {
   ensureHeaders,
@@ -23,10 +23,12 @@ const FIELD_WORK_STATUSES = new Set([
   "deemed disconnected", "temprory disconnected",
 ])
 
+const sheets = googleSheets({ version: "v4", auth })
+
 async function loadAgencyZoneMap(spreadsheetId: string): Promise<Map<string, string>> {
   const map = new Map<string, string>()
   try {
-    const resp = await google.sheets({ version: "v4", auth }).spreadsheets.values.get({
+    const resp = await sheets.spreadsheets.values.get({
       spreadsheetId, range: "AgencyZoneMap!A:B",
     })
     const rows = resp.data.values || []
@@ -41,7 +43,6 @@ async function loadAgencyZoneMap(spreadsheetId: string): Promise<Map<string, str
 }
 
 async function getSheetTabId(spreadsheetId: string, sheetName: string): Promise<number> {
-  const sheets = google.sheets({ version: "v4", auth })
   const meta = await sheets.spreadsheets.get({ spreadsheetId })
   const cleanName = sheetName.trim().toLowerCase()
   const found = meta.data.sheets?.find(s => s.properties?.title?.trim().toLowerCase() === cleanName)
@@ -57,7 +58,6 @@ async function getSheetTabId(spreadsheetId: string, sheetName: string): Promise<
 }
 
 async function ensureHistoryTab(spreadsheetId: string) {
-  const sheets = google.sheets({ version: "v4", auth })
   const meta = await sheets.spreadsheets.get({ spreadsheetId })
   const exists = meta.data.sheets?.some(s => s.properties?.title === HISTORY_TAB)
   if (!exists) {
@@ -67,8 +67,6 @@ async function ensureHistoryTab(spreadsheetId: string) {
     })
   }
 }
-
-const sheets = google.sheets({ version: "v4", auth })
 
 const today = () => {
   const d = new Date()

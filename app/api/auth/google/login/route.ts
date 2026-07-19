@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { verifySession } from "@/lib/session"
-import { google } from "googleapis"
+import { OAuth2Client } from "google-auth-library"
 
 export const dynamic = "force-dynamic"
 
@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
     )
   }
 
-  const oauth2Client = new google.auth.OAuth2(clientId, clientSecret, redirectUri)
+  const oauth2Client = new OAuth2Client(clientId, clientSecret, redirectUri)
 
   // Generate the consent URL requesting offline access to get the refresh token
   const url = oauth2Client.generateAuthUrl({

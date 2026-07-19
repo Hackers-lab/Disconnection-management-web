@@ -1,6 +1,6 @@
-// Server-only — imports googleapis. Never import this in "use client" components.
+// Server-only — imports @googleapis/sheets. Never import this in "use client" components.
 // Client components should import types from lib/meter-types.ts instead.
-import { google } from "googleapis"
+import { sheets as googleSheets } from "@googleapis/sheets"
 import { unstable_cache, revalidateTag } from "next/cache"
 import { auth } from "./google-drive"
 import { getSpreadsheetId } from "./google-sheets-api"
@@ -17,7 +17,7 @@ import type {
 export { METER_TYPES }
 export type { MeterStock, MeterIssue, StockSummary, MeterTypeLabel, MeterCondition, IssuePurpose, IssueStatus }
 
-const sheets = google.sheets({ version: "v4", auth })
+const sheets = googleSheets({ version: "v4", auth })
 
 // ─── Sheet names ──────────────────────────────────────────────────────────────
 export const STOCK_TAB  = "Meter_Stock"

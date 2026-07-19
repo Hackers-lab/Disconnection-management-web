@@ -1,4 +1,4 @@
-import { google } from "googleapis";
+import { sheets as googleSheets } from "@googleapis/sheets";
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { getConsumerCountAndVersion } from "@/lib/google-sheets";
@@ -45,7 +45,7 @@ export const GET = withTenant(async function GET(request: NextRequest) {
     let range = "DD!C:C";
 
     const { auth } = await import("@/lib/google-drive")
-    const sheets = google.sheets({ version: "v4", auth })
+    const sheets = googleSheets({ version: "v4", auth })
 
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId,

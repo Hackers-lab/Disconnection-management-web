@@ -1,4 +1,5 @@
-import { google } from "googleapis"
+import { GoogleAuth, OAuth2Client } from "google-auth-library"
+import { drive as googleDrive } from "@googleapis/drive"
 import { Readable } from "stream"
 import { getTenantContext } from "./tenant-context"
 
@@ -10,7 +11,7 @@ const client_secret = process.env.GOOGLE_CLIENT_SECRET
 const refresh_token = process.env.GOOGLE_REFRESH_TOKEN
 
 // Dynamic Auth Delegate class
-class DynamicAuth extends google.auth.GoogleAuth {
+class DynamicAuth extends GoogleAuth {
   private defaultAuth: any
 
   constructor() {
@@ -23,11 +24,11 @@ class DynamicAuth extends google.auth.GoogleAuth {
     this.defaultAuth =
       client_id && client_secret && refresh_token
         ? (() => {
-            const oauth2Client = new google.auth.OAuth2(client_id, client_secret)
+            const oauth2Client = new OAuth2Client(client_id, client_secret)
             oauth2Client.setCredentials({ refresh_token })
             return oauth2Client
           })()
-        : new google.auth.GoogleAuth({
+        : new GoogleAuth({
             credentials: {
               client_email,
               private_key: private_key?.replace(/\\n/g, "\n"),
@@ -42,7 +43,7 @@ class DynamicAuth extends google.auth.GoogleAuth {
   private getActiveAuth() {
     const context = getTenantContext()
     if (context?.googleDriveRefreshToken) {
-      const oauth2Client = new google.auth.OAuth2(
+      const oauth2Client = new OAuth2Client(
         process.env.GOOGLE_CLIENT_ID,
         process.env.GOOGLE_CLIENT_SECRET
       )
@@ -71,7 +72,7 @@ class DynamicAuth extends google.auth.GoogleAuth {
 
 export const auth = new DynamicAuth()
 
-const drive = google.drive({ version: "v3", auth })
+const drive = googleDrive({ version: "v3", auth })
 
 function detectFolderForModule(consumerId: string, moduleName?: string): string {
   if (moduleName) return moduleName.trim().toLowerCase()

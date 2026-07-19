@@ -55,9 +55,9 @@ const DD_COLUMN_MAPPINGS = {
 }
 
 async function getSheetsClient() {
-  const { google } = await import("googleapis")
+  const { sheets: googleSheets } = await import("@googleapis/sheets")
   const { auth } = await import("./google-drive")
-  return google.sheets({ version: "v4", auth })
+  return googleSheets({ version: "v4", auth })
 }
 
 function findColumnIndex(headers: string[], searchTerms: string[]): number {

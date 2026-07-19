@@ -1,10 +1,10 @@
-import { google } from "googleapis"
+import { sheets as googleSheets } from "@googleapis/sheets"
 import { unstable_cache, revalidateTag } from "next/cache"
 import { auth } from "./google-drive"
 import { getSpreadsheetId } from "./google-sheets-api"
 import { nowTs, parseTs } from "./date-utils"
 
-const sheets = google.sheets({ version: "v4", auth })
+const sheets = googleSheets({ version: "v4", auth })
 const TAB = "Reconnection"
 
 export const RECONNECTION_HEADERS = [

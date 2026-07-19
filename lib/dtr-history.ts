@@ -1,9 +1,9 @@
-import { google } from "googleapis"
+import { sheets as googleSheets } from "@googleapis/sheets"
 import { auth } from "./google-drive"
 
 const HISTORY_TAB = "DTR_History"
 
-const sheets = google.sheets({ version: "v4", auth })
+const sheets = googleSheets({ version: "v4", auth })
 
 export interface DTRHistoryEntry {
   timestamp: string

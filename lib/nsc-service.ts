@@ -1,5 +1,5 @@
-// Server-only — imports googleapis. Never import in "use client" components.
-import { google } from "googleapis"
+// Server-only — imports @googleapis/sheets. Never import in "use client" components.
+import { sheets as googleSheets } from "@googleapis/sheets"
 import { unstable_cache, revalidateTag } from "next/cache"
 import { auth, renameDriveFile } from "./google-drive"
 import { getSpreadsheetId, ensureHeaders, findColumn, colLetter } from "./google-sheets-api"
@@ -8,7 +8,7 @@ import { nowTs, currentFY } from "./date-utils"
 
 export type { NSCApplication }
 
-const sheets = google.sheets({ version: "v4", auth })
+const sheets = googleSheets({ version: "v4", auth })
 
 export const NSC_TAB = "NSC_Applications"
 

@@ -1,4 +1,4 @@
-import { google } from "googleapis"
+// Provisioning functions — receive pre-configured clients as parameters
 
 /**
  * Creates the "Disconnection_App_Storage" folder on the tenant's Google Drive.

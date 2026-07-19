@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server"
-import { google, sheets_v4 } from "googleapis"
+import { sheets as googleSheets, type sheets_v4 } from "@googleapis/sheets"
 import { auth } from "@/lib/google-drive"
 import {
   ensureHeaders,
@@ -28,7 +28,7 @@ type BulkPaymentRequest = {
   payments: PaymentRow[]
 }
 
-const sheets = google.sheets({ version: "v4", auth })
+const sheets = googleSheets({ version: "v4", auth })
 
 // Parse a date string of DD-MM-YYYY, YYYY-MM-DD, MM/DD/YYYY etc. into a Date.
 function parseFlexDate(dateStr: string): Date | null {

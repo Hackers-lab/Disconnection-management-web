@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { google } from "googleapis"
+import { sheets as googleSheets } from "@googleapis/sheets"
 import { auth } from "@/lib/google-drive"
 import { getSpreadsheetId } from "@/lib/google-sheets-api"
 import { verifySession } from "@/lib/session"
@@ -7,7 +7,7 @@ import { withTenant } from "@/lib/tenant-context"
 
 const TAB = "AgencyZoneMap"
 const HISTORY_TAB = "ZoneMapHistory"
-const sheets = google.sheets({ version: "v4", auth })
+const sheets = googleSheets({ version: "v4", auth })
 
 const todayStr = () => {
   const d = new Date()

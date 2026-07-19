@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { google, sheets_v4 } from "googleapis"
+import { sheets as googleSheets, type sheets_v4 } from "@googleapis/sheets"
 import { auth } from "@/lib/google-drive"
 import {
   ensureHeaders,
@@ -15,7 +15,7 @@ import { withTenant } from "@/lib/tenant-context"
 
 export const maxDuration = 60
 
-const sheets = google.sheets({ version: "v4", auth })
+const sheets = googleSheets({ version: "v4", auth })
 
 // Statuses an agency (or admin) has already acted on — re-sync must NOT move
 // these consumers between agencies. Mirrors the protected set used elsewhere.
