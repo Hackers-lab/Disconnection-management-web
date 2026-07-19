@@ -108,31 +108,33 @@ function parseIssue(r: string[]): MeterIssue {
 }
 
 // ─── Reads ────────────────────────────────────────────────────────────────────
-async function _fetchStockRaw(): Promise<MeterStock[]> {
-  const id = getSpreadsheetId()
-  await ensureTabs(id)
-  const res = await sheets.spreadsheets.values.get({ spreadsheetId: id, range: `${STOCK_TAB}!A:I` })
+async function _fetchStockRaw(spreadsheetId: string): Promise<MeterStock[]> {
+  await ensureTabs(spreadsheetId)
+  const res = await sheets.spreadsheets.values.get({ spreadsheetId, range: `${STOCK_TAB}!A:I` })
   return (res.data.values || []).slice(1).filter(r => r[0]).map(r => parseStock(r.map(String)))
 }
 
-async function _fetchIssuesRaw(): Promise<MeterIssue[]> {
-  const id = getSpreadsheetId()
-  await ensureTabs(id)
-  const res = await sheets.spreadsheets.values.get({ spreadsheetId: id, range: `${ISSUES_TAB}!A:U` })
+async function _fetchIssuesRaw(spreadsheetId: string): Promise<MeterIssue[]> {
+  await ensureTabs(spreadsheetId)
+  const res = await sheets.spreadsheets.values.get({ spreadsheetId, range: `${ISSUES_TAB}!A:U` })
   return (res.data.values || []).slice(1).filter(r => r[0]).map(r => parseIssue(r.map(String)))
 }
 
 export const fetchStock = unstable_cache(
-  _fetchStockRaw, ["meter-stock"], { revalidate: METER_REVALIDATE_S, tags: [METER_TAG] },
+  async (spreadsheetId: string) => _fetchStockRaw(spreadsheetId),
+  ["meter-stock"],
+  { revalidate: METER_REVALIDATE_S, tags: [METER_TAG] },
 )
 
 export const fetchIssues = unstable_cache(
-  _fetchIssuesRaw, ["meter-issues"], { revalidate: METER_REVALIDATE_S, tags: [METER_TAG] },
+  async (spreadsheetId: string) => _fetchIssuesRaw(spreadsheetId),
+  ["meter-issues"],
+  { revalidate: METER_REVALIDATE_S, tags: [METER_TAG] },
 )
 
 // ─── Stock summary ────────────────────────────────────────────────────────────
-export async function getStockSummary(): Promise<StockSummary[]> {
-  const all = await fetchStock()
+export async function getStockSummary(spreadsheetId: string): Promise<StockSummary[]> {
+  const all = await fetchStock(spreadsheetId)
   return METER_TYPES.map(t => {
     const rows = all.filter(m => m.typeLabel === t.label)
     return {
@@ -171,7 +173,7 @@ export async function addMeterStock(meters: Array<{
 
 // ─── Next Issue ID ────────────────────────────────────────────────────────────
 async function nextIssueId(id: string): Promise<string> {
-  const all = await _fetchIssuesRaw()
+  const all = await _fetchIssuesRaw(id)
   const max = all.reduce((m, i) => {
     const n = parseInt(i.issueId.replace("MI-", ""), 10)
     return isNaN(n) ? m : Math.max(m, n)
@@ -194,7 +196,7 @@ export async function issueMeter(req: {
 }): Promise<string> {
   const id = getSpreadsheetId()
   await ensureTabs(id)
-  const stock = await _fetchStockRaw()
+  const stock = await _fetchStockRaw(id)
   const idx = stock.findIndex(m => m.serialNo === req.serialNo)
   if (idx === -1) throw new Error("Serial number not found in stock")
   if (stock[idx].condition !== "available") throw new Error("Meter is not available")
@@ -241,7 +243,7 @@ export async function completeMeterInstallation(req: {
 }): Promise<void> {
   const id = getSpreadsheetId()
   await ensureTabs(id)
-  const issues = await _fetchIssuesRaw()
+  const issues = await _fetchIssuesRaw(id)
   const issueIdx = issues.findIndex(i => i.issueId === req.issueId)
   if (issueIdx === -1) throw new Error("Issue not found")
   const row = issueIdx + 2
@@ -275,7 +277,7 @@ export async function finalizeMeterInstallation(req: {
 }): Promise<void> {
   const id = getSpreadsheetId()
   await ensureTabs(id)
-  const issues = await _fetchIssuesRaw()
+  const issues = await _fetchIssuesRaw(id)
   const issueIdx = issues.findIndex(i => i.issueId === req.issueId)
   if (issueIdx === -1) throw new Error("Issue not found")
   const issue = issues[issueIdx]
@@ -295,7 +297,7 @@ export async function finalizeMeterInstallation(req: {
     requestBody: { valueInputOption: "RAW", data: updates },
   })
   // Mark stock as installed
-  const stock = await _fetchStockRaw()
+  const stock = await _fetchStockRaw(id)
   const si = stock.findIndex(m => m.serialNo === issue.serialNo)
   if (si !== -1) {
     await sheets.spreadsheets.values.batchUpdate({
@@ -325,7 +327,7 @@ export async function bulkFinalizeMeterInstallations(req: {
 }): Promise<{ succeeded: number; failed: string[] }> {
   const id = getSpreadsheetId()
   await ensureTabs(id)
-  const [issues, stock] = await Promise.all([_fetchIssuesRaw(), _fetchStockRaw()])
+  const [issues, stock] = await Promise.all([_fetchIssuesRaw(id), _fetchStockRaw(id)])
   const now = nowDate()
 
   const issueUpdates: { range: string; values: any[][] }[] = []
@@ -387,7 +389,7 @@ export async function returnMeterToStock(req: {
 }): Promise<void> {
   const id = getSpreadsheetId()
   await ensureTabs(id)
-  const issues = await _fetchIssuesRaw()
+  const issues = await _fetchIssuesRaw(id)
   const issueIdx = issues.findIndex(i => i.issueId === req.issueId)
   if (issueIdx === -1) throw new Error("Issue not found")
   const issue = issues[issueIdx]
@@ -404,7 +406,7 @@ export async function returnMeterToStock(req: {
       ],
     },
   })
-  const stock = await _fetchStockRaw()
+  const stock = await _fetchStockRaw(id)
   const si = stock.findIndex(m => m.serialNo === issue.serialNo)
   if (si !== -1) {
     await sheets.spreadsheets.values.batchUpdate({

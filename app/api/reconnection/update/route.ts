@@ -4,6 +4,7 @@ import { updateReconnectionStatus, fetchReconnectionData } from "@/lib/reconnect
 import { checkApiPermission, isAgencyScopeRestricted } from "@/lib/permissions"
 import { roleStorage } from "@/lib/role-storage"
 import { withTenant } from "@/lib/tenant-context"
+import { getSpreadsheetId } from "@/lib/google-sheets-api"
 
 export const dynamic = "force-dynamic"
 
@@ -25,7 +26,8 @@ export const POST = withTenant(async function POST(request: NextRequest) {
     }
 
     // Load the request details to verify agency scoping
-    const allReqs = await fetchReconnectionData()
+    const id = getSpreadsheetId()
+    const allReqs = await fetchReconnectionData(id)
     const req = allReqs.find((r) => r.requestId === requestId)
     if (!req) {
       return NextResponse.json({ error: "Reconnection request not found" }, { status: 404 })

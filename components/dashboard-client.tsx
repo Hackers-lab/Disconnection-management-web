@@ -65,6 +65,7 @@ export default function DashboardClient({ role, agencies }: DashboardClientProps
 
   // Check if tenant is linked to Google Drive/Sheets on mount
   useEffect(() => {
+    if (role !== "admin") return
     const checkTenantStatus = async () => {
       try {
         const res = await fetch("/api/admin/tenant-status")
@@ -79,7 +80,7 @@ export default function DashboardClient({ role, agencies }: DashboardClientProps
       }
     }
     checkTenantStatus()
-  }, [])
+  }, [role])
 
   // Check for success=true query parameter on mount
   useEffect(() => {

@@ -3,6 +3,7 @@ import { verifySession } from "@/lib/session"
 import { fetchReplacements, addReplacement } from "@/lib/meter-replacement-service"
 import { checkApiPermission } from "@/lib/permissions"
 import { withTenant } from "@/lib/tenant-context"
+import { getSpreadsheetId } from "@/lib/google-sheets-api"
 
 export const GET = withTenant(async function GET(request: NextRequest) {
   const session = await verifySession()
@@ -11,7 +12,8 @@ export const GET = withTenant(async function GET(request: NextRequest) {
   const { authorized, error, status } = await checkApiPermission("meter_replacement", "read")
   if (!authorized) return NextResponse.json({ error }, { status })
 
-  const all = await fetchReplacements()
+  const id = getSpreadsheetId()
+  const all = await fetchReplacements(id)
 
   if (session.role === "agency") {
     const upper = session.agencies.map((a: string) => a.toUpperCase())

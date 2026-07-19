@@ -5,16 +5,18 @@ import {
   addMeterStock, METER_TYPES,
 } from "@/lib/meter-service"
 import { withTenant } from "@/lib/tenant-context"
+import { getSpreadsheetId } from "@/lib/google-sheets-api"
 
 export const GET = withTenant(async function GET(request: NextRequest) {
   const session = await verifySession()
   if (!session || !["admin", "executive"].includes(session.role)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
+  const id = getSpreadsheetId()
   const [summary, stock, issues] = await Promise.all([
-    getStockSummary(),
-    fetchStock(),
-    fetchIssues(),
+    getStockSummary(id),
+    fetchStock(id),
+    fetchIssues(id),
   ])
   return NextResponse.json({ summary, stock, issues }, {
     headers: { "Cache-Control": "no-store" },

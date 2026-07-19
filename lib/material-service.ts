@@ -242,11 +242,10 @@ function parseIssue(r: string[]): MaterialIssue {
 }
 
 // ─── Raw reads (live, for writes) ─────────────────────────────────────────────
-async function rawCatalogue() {
-  const id = getSpreadsheetId()
-  await ensureTabs(id)
+async function rawCatalogue(spreadsheetId: string) {
+  await ensureTabs(spreadsheetId)
   const res = await sheets.spreadsheets.values.get({
-    spreadsheetId: id,
+    spreadsheetId,
     range: `${CAT_TAB}!A2:J`,
   })
   const items = (res.data.values || []).map(parseCatalogue)
@@ -272,21 +271,19 @@ async function rawCatalogue() {
   })
 }
 
-async function rawReceives() {
-  const id = getSpreadsheetId()
-  await ensureTabs(id)
+async function rawReceives(spreadsheetId: string) {
+  await ensureTabs(spreadsheetId)
   const res = await sheets.spreadsheets.values.get({
-    spreadsheetId: id,
+    spreadsheetId,
     range: `${RECEIVE_TAB}!A2:L`,
   })
   return (res.data.values || []).map(parseReceive)
 }
 
-async function rawIssues() {
-  const id = getSpreadsheetId()
-  await ensureTabs(id)
+async function rawIssues(spreadsheetId: string) {
+  await ensureTabs(spreadsheetId)
   const res = await sheets.spreadsheets.values.get({
-    spreadsheetId: id,
+    spreadsheetId,
     range: `${ISSUE_TAB}!A2:M`,
   })
   return (res.data.values || []).map(parseIssue)
@@ -294,29 +291,29 @@ async function rawIssues() {
 
 // ─── Cached reads ─────────────────────────────────────────────────────────────
 export const getCatalogue = unstable_cache(
-  async () => rawCatalogue(),
+  async (spreadsheetId: string) => rawCatalogue(spreadsheetId),
   ["material-catalogue"],
   { tags: [MATERIAL_TAG], revalidate: REVALIDATE_S }
 )
 
 export const getReceiveHistory = unstable_cache(
-  async () => rawReceives(),
+  async (spreadsheetId: string) => rawReceives(spreadsheetId),
   ["material-receives"],
   { tags: [MATERIAL_TAG], revalidate: REVALIDATE_S }
 )
 
 export const getIssueHistory = unstable_cache(
-  async () => rawIssues(),
+  async (spreadsheetId: string) => rawIssues(spreadsheetId),
   ["material-issues"],
   { tags: [MATERIAL_TAG], revalidate: REVALIDATE_S }
 )
 
 // ─── Computed stock ───────────────────────────────────────────────────────────
-export async function getStock(): Promise<MaterialStock[]> {
+export async function getStock(spreadsheetId: string): Promise<MaterialStock[]> {
   const [catalogue, receives, issues] = await Promise.all([
-    getCatalogue(),
-    getReceiveHistory(),
-    getIssueHistory(),
+    getCatalogue(spreadsheetId),
+    getReceiveHistory(spreadsheetId),
+    getIssueHistory(spreadsheetId),
   ])
 
   const receiveMap = new Map<string, number>()
@@ -767,10 +764,10 @@ export async function updateMaterial(
 }
 
 /** Get per-material transaction history (receives + issues interleaved) */
-export async function getMaterialHistory(materialId: string) {
+export async function getMaterialHistory(materialId: string, spreadsheetId: string) {
   const [receives, issues] = await Promise.all([
-    getReceiveHistory(),
-    getIssueHistory(),
+    getReceiveHistory(spreadsheetId),
+    getIssueHistory(spreadsheetId),
   ])
 
   const matReceives = receives

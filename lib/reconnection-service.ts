@@ -85,24 +85,23 @@ function parseRow(r: string[]): ReconnectionRequest {
 }
 
 // ─── Fetch all ────────────────────────────────────────────────────────────────
-async function _fetchReconnectionDataRaw(): Promise<ReconnectionRequest[]> {
-  const id = getSpreadsheetId()
-  await ensureTab(id)
-  const res = await sheets.spreadsheets.values.get({ spreadsheetId: id, range: `${TAB}!A:P` })
+async function _fetchReconnectionDataRaw(spreadsheetId: string): Promise<ReconnectionRequest[]> {
+  await ensureTab(spreadsheetId)
+  const res = await sheets.spreadsheets.values.get({ spreadsheetId, range: `${TAB}!A:P` })
   const rows = (res.data.values || []).slice(1)
   return rows.filter(r => r[0]).map(r => parseRow(r.map(String)))
 }
 
 // Cached read for list/count endpoints (blocked-ids, notifications, GET).
 export const fetchReconnectionData = unstable_cache(
-  _fetchReconnectionDataRaw,
+  async (spreadsheetId: string) => _fetchReconnectionDataRaw(spreadsheetId),
   ["reconnection-data"],
   { revalidate: RECONNECTION_REVALIDATE_S, tags: [RECONNECTION_TAG] },
 )
 
 // ─── Next Request ID ──────────────────────────────────────────────────────────
 async function nextRequestId(id: string): Promise<string> {
-  const all = await _fetchReconnectionDataRaw()
+  const all = await _fetchReconnectionDataRaw(id)
   const max = all.reduce((m, r) => {
     const n = parseInt(r.requestId.replace("REC-", ""), 10)
     return isNaN(n) ? m : Math.max(m, n)
@@ -145,7 +144,7 @@ export async function updateReconnectionStatus(update: {
 }): Promise<void> {
   const id = getSpreadsheetId()
   await ensureTab(id)
-  const all = await _fetchReconnectionDataRaw()
+  const all = await _fetchReconnectionDataRaw(id)
   const idx = all.findIndex(r => r.requestId === update.requestId)
   if (idx === -1) throw new Error("Request not found")
   const sheetRow = idx + 2 // 1-based + header
@@ -173,7 +172,8 @@ export async function updateReconnectionStatus(update: {
 // When omitted, ALL overdue consumer IDs across every agency are returned
 // (used by admin/executive warning banners).
 export async function getBlockedConsumerIds(agencies?: string[]): Promise<string[]> {
-  const all = await fetchReconnectionData()
+  const id = getSpreadsheetId()
+  const all = await fetchReconnectionData(id)
   const agenciesUpper = agencies?.map(a => a.trim().toUpperCase())
   const now = Date.now()
   return all
@@ -193,4 +193,5 @@ export async function getBlockedConsumerIds(agencies?: string[]): Promise<string
     })
     .map(r => r.consumerId)
 }
+
 

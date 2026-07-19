@@ -4,6 +4,7 @@ import { getCatalogue, addMaterial, deleteMaterialFromCatalogue, updateMaterial 
 import type { MaterialUnit } from "@/lib/material-types"
 import { uploadImageToDrive } from "@/lib/google-drive"
 import { withTenant } from "@/lib/tenant-context"
+import { getSpreadsheetId } from "@/lib/google-sheets-api"
 
 export const GET = withTenant(async function GET(req: NextRequest) {
   const { authorized, error, status } = await checkApiPermission("material", ["read", "stock", "receive", "issue", "settings"])
@@ -15,7 +16,8 @@ export const GET = withTenant(async function GET(req: NextRequest) {
       const { invalidateMaterialCache } = await import("@/lib/material-service")
       invalidateMaterialCache()
     }
-    const catalogue = await getCatalogue()
+    const id = getSpreadsheetId()
+    const catalogue = await getCatalogue(id)
     return NextResponse.json(catalogue, {
       headers: { "Cache-Control": "no-store" },
     })

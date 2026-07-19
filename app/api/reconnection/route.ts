@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { verifySession } from "@/lib/session"
 import { checkApiPermission, isAgencyScopeRestricted } from "@/lib/permissions"
 import { withTenant } from "@/lib/tenant-context"
+import { getSpreadsheetId } from "@/lib/google-sheets-api"
 
 export const dynamic = "force-dynamic"
 import {
@@ -13,7 +14,8 @@ export const GET = withTenant(async function GET(request: NextRequest) {
   const { authorized, error, status, session } = await checkApiPermission("reconnection", "read")
   if (!authorized) return NextResponse.json({ error }, { status })
 
-  const all = await fetchReconnectionData()
+  const id = getSpreadsheetId()
+  const all = await fetchReconnectionData(id)
 
   // Filter by assigned agencies if user is restricted
   if (session.agencies && session.agencies.length > 0) {

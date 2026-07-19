@@ -70,15 +70,14 @@ function parseRow(r: string[]): NSCProject {
 }
 
 // ── Raw fetch ─────────────────────────────────────────────────────────────────
-async function _fetchProjectsRaw(): Promise<NSCProject[]> {
-  const id = getSpreadsheetId()
-  await ensureTab(id)
-  const res = await sheets.spreadsheets.values.get({ spreadsheetId: id, range: `${PROJECT_TAB}!A:O` })
+async function _fetchProjectsRaw(spreadsheetId: string): Promise<NSCProject[]> {
+  await ensureTab(spreadsheetId)
+  const res = await sheets.spreadsheets.values.get({ spreadsheetId, range: `${PROJECT_TAB}!A:O` })
   return (res.data.values || []).slice(1).filter(r => r[0]).map(r => parseRow(r.map(String)))
 }
 
 export const fetchProjects = unstable_cache(
-  _fetchProjectsRaw,
+  async (spreadsheetId: string) => _fetchProjectsRaw(spreadsheetId),
   ["nsc-projects-data"],
   { revalidate: PROJECT_REVALIDATE, tags: [PROJECT_TAG] },
 )
@@ -120,7 +119,7 @@ export async function createProject(req: {
 export async function updateProjectPO(projectId: string, poNumber: string): Promise<void> {
   const id = getSpreadsheetId()
   await ensureTab(id)
-  const all = await _fetchProjectsRaw()
+  const all = await _fetchProjectsRaw(id)
   const idx = all.findIndex(p => p.projectId === projectId)
   if (idx === -1) throw new Error("Project not found")
   const row = idx + 2
@@ -141,7 +140,7 @@ export async function agencyCompleteProject(req: {
 }): Promise<void> {
   const id = getSpreadsheetId()
   await ensureTab(id)
-  const all = await _fetchProjectsRaw()
+  const all = await _fetchProjectsRaw(id)
   const idx = all.findIndex(p => p.projectId === req.projectId)
   if (idx === -1) throw new Error("Project not found")
   const row = idx + 2
@@ -174,7 +173,7 @@ export async function adminApproveProject(req: {
 }): Promise<void> {
   const id = getSpreadsheetId()
   await ensureTab(id)
-  const all = await _fetchProjectsRaw()
+  const all = await _fetchProjectsRaw(id)
   const idx = all.findIndex(p => p.projectId === req.projectId)
   if (idx === -1) throw new Error("Project not found")
   const row = idx + 2
@@ -202,7 +201,7 @@ export async function adminApproveProject(req: {
 export async function addAppsToProject(projectId: string, newApps: string[]): Promise<void> {
   const id = getSpreadsheetId()
   await ensureTab(id)
-  const all = await _fetchProjectsRaw()
+  const all = await _fetchProjectsRaw(id)
   const idx = all.findIndex(p => p.projectId === projectId)
   if (idx === -1) throw new Error("Project not found")
   const project = all[idx]

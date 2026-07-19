@@ -95,11 +95,10 @@ function parseReplacement(r: string[]): MeterReplacement {
   }
 }
 
-async function _fetchReplacementsRaw(): Promise<MeterReplacement[]> {
-  const id = getSpreadsheetId()
-  await ensureReplacementTab(id)
+async function _fetchReplacementsRaw(spreadsheetId: string): Promise<MeterReplacement[]> {
+  await ensureReplacementTab(spreadsheetId)
   const res = await sheets.spreadsheets.values.get({
-    spreadsheetId: id,
+    spreadsheetId,
     range: `${REPLACEMENT_TAB}!A:O`
   })
   return (res.data.values || [])
@@ -109,13 +108,13 @@ async function _fetchReplacementsRaw(): Promise<MeterReplacement[]> {
 }
 
 export const fetchReplacements = unstable_cache(
-  _fetchReplacementsRaw,
+  async (spreadsheetId: string) => _fetchReplacementsRaw(spreadsheetId),
   ["meter-replacements"],
   { revalidate: REVAL_S, tags: [REPLACEMENT_TAG] }
 )
 
 async function nextReplacementId(id: string): Promise<string> {
-  const all = await _fetchReplacementsRaw()
+  const all = await _fetchReplacementsRaw(id)
   const max = all.reduce((m, r) => {
     const n = parseInt(r.replacementId.replace("MR-", ""), 10)
     return isNaN(n) ? m : Math.max(m, n)
@@ -172,7 +171,7 @@ export async function issueReplacement(
 ): Promise<void> {
   const id = getSpreadsheetId()
   await ensureReplacementTab(id)
-  const all = await _fetchReplacementsRaw()
+  const all = await _fetchReplacementsRaw(id)
   const idx = all.findIndex(r => r.replacementId === replacementId)
   if (idx === -1) throw new Error("Replacement record not found")
   const rowNum = idx + 2
@@ -198,7 +197,7 @@ export async function syncStatusFromIssue(
 ): Promise<void> {
   const id = getSpreadsheetId()
   await ensureReplacementTab(id)
-  const all = await _fetchReplacementsRaw()
+  const all = await _fetchReplacementsRaw(id)
   const idx = all.findIndex(r => r.issueId === issueId)
   if (idx === -1) return // Not linked to any proposed replacement
 

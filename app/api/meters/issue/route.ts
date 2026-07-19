@@ -2,12 +2,14 @@ import { NextRequest, NextResponse } from "next/server"
 import { verifySession } from "@/lib/session"
 import { fetchIssues, issueMeter } from "@/lib/meter-service"
 import { withTenant } from "@/lib/tenant-context"
+import { getSpreadsheetId } from "@/lib/google-sheets-api"
 
 export const GET = withTenant(async function GET(request: NextRequest) {
   const session = await verifySession()
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-  const all = await fetchIssues()
+  const id = getSpreadsheetId()
+  const all = await fetchIssues(id)
 
   if (session.role === "agency") {
     const upper = session.agencies.map((a: string) => a.toUpperCase())

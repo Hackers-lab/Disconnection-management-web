@@ -3,6 +3,7 @@ import { verifySession } from "@/lib/session"
 import { fetchApplications, createApplication } from "@/lib/nsc-service"
 import { checkApiPermission, isAgencyScopeRestricted } from "@/lib/permissions"
 import { withTenant } from "@/lib/tenant-context"
+import { getSpreadsheetId } from "@/lib/google-sheets-api"
 
 export const dynamic = "force-dynamic"
 
@@ -10,7 +11,8 @@ export const GET = withTenant(async function GET(request: NextRequest) {
   const { authorized, error, status, session } = await checkApiPermission("nsc", "read")
   if (!authorized) return NextResponse.json({ error }, { status })
 
-  const all = await fetchApplications()
+  const id = getSpreadsheetId()
+  const all = await fetchApplications(id)
 
   if (session.agencies && session.agencies.length > 0) {
     const upper = session.agencies.map((a: string) => a.toUpperCase())

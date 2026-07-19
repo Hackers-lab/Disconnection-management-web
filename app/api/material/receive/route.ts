@@ -2,13 +2,15 @@ import { NextRequest, NextResponse } from "next/server"
 import { checkApiPermission } from "@/lib/permissions"
 import { getReceiveHistory, addReceives, deleteReceive } from "@/lib/material-service"
 import { withTenant } from "@/lib/tenant-context"
+import { getSpreadsheetId } from "@/lib/google-sheets-api"
 
 export const GET = withTenant(async function GET(req: NextRequest) {
   const { authorized, error, status } = await checkApiPermission("material", ["read", "receive", "settings"])
   if (!authorized) return NextResponse.json({ error }, { status: status || 403 })
 
   try {
-    const receives = await getReceiveHistory()
+    const id = getSpreadsheetId()
+    const receives = await getReceiveHistory(id)
     return NextResponse.json(receives, {
       headers: { "Cache-Control": "no-store" },
     })

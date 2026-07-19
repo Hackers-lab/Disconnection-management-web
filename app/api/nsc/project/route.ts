@@ -9,12 +9,14 @@ import {
   addAppsToProject,
 } from "@/lib/nsc-project-service"
 import { withTenant } from "@/lib/tenant-context"
+import { getSpreadsheetId } from "@/lib/google-sheets-api"
 
 export const GET = withTenant(async function GET(request: NextRequest) {
   const session = await verifySession()
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   try {
-    const all = await fetchProjects()
+    const id = getSpreadsheetId()
+    const all = await fetchProjects(id)
     if (session.role === "agency") {
       const upper = (session.agencies || []).map((a: string) => a.toUpperCase())
       return NextResponse.json(all.filter(p => upper.includes(p.agency.toUpperCase())))
@@ -73,7 +75,8 @@ export const POST = withTenant(async function POST(request: NextRequest) {
       // Agency can complete their own project
       if (session.role === "agency") {
         const upper = (session.agencies || []).map((a: string) => a.toUpperCase())
-        const all = await fetchProjects()
+        const id = getSpreadsheetId()
+        const all = await fetchProjects(id)
         const project = all.find(p => p.projectId === body.projectId)
         if (!project || !upper.includes(project.agency.toUpperCase())) {
           return NextResponse.json({ error: "Unauthorized" }, { status: 401 })

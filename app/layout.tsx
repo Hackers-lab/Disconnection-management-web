@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import { SpeedInsights } from '@vercel/speed-insights/next'
+import { AuthInterceptor } from '@/components/auth-interceptor'
 import './globals.css'
 
 export const metadata: Metadata = {
@@ -20,9 +21,11 @@ export default function RootLayout({
         <meta name="theme-color" content="#2563eb" />
       </head>
       <body>
+        <AuthInterceptor />
         {children}
         <SpeedInsights />
       </body>
     </html>
   )
 }
+

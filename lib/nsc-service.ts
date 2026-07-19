@@ -181,17 +181,16 @@ function parseRow(r: string[], headers: string[]): NSCApplication {
 }
 
 // ─── Fetch ────────────────────────────────────────────────────────────────────
-async function _fetchApplicationsRaw(): Promise<NSCApplication[]> {
-  const id = getSpreadsheetId()
-  const headers = await ensureHeaders(id, NSC_TAB, NSC_HEADERS)
+async function _fetchApplicationsRaw(spreadsheetId: string): Promise<NSCApplication[]> {
+  const headers = await ensureHeaders(spreadsheetId, NSC_TAB, NSC_HEADERS)
   const lastColLetter = colLetter(headers.length - 1)
-  const res = await sheets.spreadsheets.values.get({ spreadsheetId: id, range: `${NSC_TAB}!A:${lastColLetter}` })
+  const res = await sheets.spreadsheets.values.get({ spreadsheetId, range: `${NSC_TAB}!A:${lastColLetter}` })
   return (res.data.values || []).slice(1).filter(r => r[0]).map(r => parseRow(r.map(String), headers))
 }
 
 // Cached read for list/count endpoints (notifications, GET).
 export const fetchApplications = unstable_cache(
-  _fetchApplicationsRaw,
+  async (spreadsheetId: string) => _fetchApplicationsRaw(spreadsheetId),
   ["nsc-data"],
   { revalidate: NSC_REVALIDATE_S, tags: [NSC_TAG] },
 )
@@ -200,7 +199,7 @@ export const fetchApplications = unstable_cache(
 // nextReceiveNo now embeds phase: NSC/26-27/1P/0001 or NSC/26-27/3P/0001
 // Separate counters per phase per FY prevent gaps when one type is common.
 async function nextReceiveNo(id: string, phase: string): Promise<string> {
-  const all = await _fetchApplicationsRaw()
+  const all = await _fetchApplicationsRaw(id)
   const fy  = currentFY()
   // Support legacy format (no phase segment) AND new format
   const phaseSegment = phase === "3P" ? "3P" : "1P"
@@ -310,7 +309,7 @@ export async function submitInspection(req: {
 }): Promise<void> {
   const id = getSpreadsheetId()
   const headers = await ensureHeaders(id, NSC_TAB, NSC_HEADERS)
-  const all = await _fetchApplicationsRaw()
+  const all = await _fetchApplicationsRaw(id)
   const idx = all.findIndex(a => a.receiveNo === req.receiveNo)
   if (idx === -1) throw new Error("Application not found")
   const row = idx + 2
@@ -375,7 +374,7 @@ export async function processApplication(req: {
 }): Promise<void> {
   const id = getSpreadsheetId()
   const headers = await ensureHeaders(id, NSC_TAB, NSC_HEADERS)
-  const all = await _fetchApplicationsRaw()
+  const all = await _fetchApplicationsRaw(id)
   const idx = all.findIndex(a => a.receiveNo === req.receiveNo)
   if (idx === -1) throw new Error("Application not found")
   const row = idx + 2
@@ -419,7 +418,7 @@ export async function updateNSCMeterIssued(receiveNo: string, serialNo: string, 
   if (!receiveNo) return
   const id = getSpreadsheetId()
   const headers = await ensureHeaders(id, NSC_TAB, NSC_HEADERS)
-  const all = await _fetchApplicationsRaw()
+  const all = await _fetchApplicationsRaw(id)
   const idx = all.findIndex(a => a.receiveNo === receiveNo)
   if (idx === -1) return
   const row = idx + 2
@@ -455,7 +454,7 @@ export async function updateNSCConnectionEffected(receiveNo: string): Promise<vo
   if (!receiveNo) return
   const id = getSpreadsheetId()
   const headers = await ensureHeaders(id, NSC_TAB, NSC_HEADERS)
-  const all = await _fetchApplicationsRaw()
+  const all = await _fetchApplicationsRaw(id)
   const idx = all.findIndex(a => a.receiveNo === receiveNo)
   if (idx === -1) return
   const row = idx + 2
@@ -489,7 +488,7 @@ export async function updateNSCMeterReturned(receiveNo: string): Promise<void> {
   if (!receiveNo) return
   const id = getSpreadsheetId()
   const headers = await ensureHeaders(id, NSC_TAB, NSC_HEADERS)
-  const all = await _fetchApplicationsRaw()
+  const all = await _fetchApplicationsRaw(id)
   const idx = all.findIndex(a => a.receiveNo === receiveNo)
   if (idx === -1) return
   const row = idx + 2
@@ -508,7 +507,7 @@ export async function updateNSCMeterReturned(receiveNo: string): Promise<void> {
 export async function updateOfficeRefNo(receiveNo: string, officeRefNo: string): Promise<void> {
   const id = getSpreadsheetId()
   const headers = await ensureHeaders(id, NSC_TAB, NSC_HEADERS)
-  const all = await _fetchApplicationsRaw()
+  const all = await _fetchApplicationsRaw(id)
   const idx = all.findIndex(a => a.receiveNo === receiveNo)
   if (idx === -1) throw new Error("Application not found")
   const row = idx + 2
@@ -527,7 +526,7 @@ export async function updateOfficeRefNo(receiveNo: string, officeRefNo: string):
 export async function updateNSCProjectLink(receiveNo: string, projectId: string, newStatus?: string): Promise<void> {
   const id = getSpreadsheetId()
   const headers = await ensureHeaders(id, NSC_TAB, NSC_HEADERS)
-  const all = await _fetchApplicationsRaw()
+  const all = await _fetchApplicationsRaw(id)
   const idx = all.findIndex(a => a.receiveNo === receiveNo)
   if (idx === -1) throw new Error("Application not found")
   const row = idx + 2
@@ -571,7 +570,7 @@ export interface LegacyImportRow {
 export async function importLegacyApplications(rows: LegacyImportRow[]): Promise<number> {
   const id = getSpreadsheetId()
   const headers = await ensureHeaders(id, NSC_TAB, NSC_HEADERS)
-  const existing = await _fetchApplicationsRaw()
+  const existing = await _fetchApplicationsRaw(id)
   const fy = currentFY()
   const prefix = `NSC/${fy}/`
   const nums = existing

@@ -7,8 +7,11 @@ export const dynamic = "force-dynamic"
 
 export const GET = withTenant(async function GET(request: NextRequest) {
   const session = await verifySession()
-  if (!session || session.role !== "admin") {
+  if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
+  if (session.role !== "admin") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
   try {
     const config = await getTenantConfig(session.cccCode)
