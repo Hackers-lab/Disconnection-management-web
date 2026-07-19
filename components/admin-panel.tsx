@@ -910,7 +910,7 @@ export function AdminPanel({ onClose }: AdminPanelProps) {
     if (!confirm("Are you sure you want to delete this agency? This will affect users assigned to this agency.")) return
     
     try {
-      const response = await fetch(`/api/admin/agencies/${id}`, { method: "DELETE" })
+      const response = await fetch(`/api/admin/agencies?id=${id}`, { method: "DELETE" })
       
       if (response.ok) {
         const agenciesResponse = await fetch("/api/admin/agencies")
