@@ -71,7 +71,10 @@ export function SuperuserDashboard() {
     role: "admin",
     cccCode: "",
     name: "",
-    agencies: ""
+    agencies: "",
+    subscriptionStatus: "active",
+    subscriptionExpiresAt: "",
+    bypassSubscription: false
   })
 
   const fetchTenants = async () => {
@@ -157,7 +160,17 @@ export function SuperuserDashboard() {
       const data = await res.json()
       if (res.ok && data.success) {
         setUserMsg({ type: "success", text: `User account '${newUser.username}' created successfully.` })
-        setNewUser({ username: "", password: "", role: "admin", cccCode: "", name: "", agencies: "" })
+        setNewUser({
+          username: "",
+          password: "",
+          role: "admin",
+          cccCode: "",
+          name: "",
+          agencies: "",
+          subscriptionStatus: "active",
+          subscriptionExpiresAt: "",
+          bypassSubscription: false
+        })
         await fetchUsers()
       } else {
         throw new Error(data.error || "Failed to create user account")
@@ -501,6 +514,47 @@ export function SuperuserDashboard() {
                         className="bg-slate-900 border-slate-700 text-slate-100"
                       />
                     </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs text-slate-400 font-medium">Subscription Status</Label>
+                      <Select
+                        value={newUser.subscriptionStatus}
+                        onValueChange={val => setNewUser({...newUser, subscriptionStatus: val})}
+                      >
+                        <SelectTrigger className="bg-slate-900 border-slate-700 text-slate-100">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent className="bg-slate-800 border-slate-700 text-slate-100">
+                          <SelectItem value="active">Active</SelectItem>
+                          <SelectItem value="expired">Expired</SelectItem>
+                          <SelectItem value="pending">Pending</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="subExpires" className="text-xs text-slate-400 font-medium">Subscription Expiry Date</Label>
+                      <Input
+                        id="subExpires"
+                        type="date"
+                        value={newUser.subscriptionExpiresAt}
+                        onChange={e => setNewUser({...newUser, subscriptionExpiresAt: e.target.value})}
+                        className="bg-slate-900 border-slate-700 text-slate-100"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs text-slate-400 font-medium">Bypass Subscription (Free Pass)</Label>
+                      <Select
+                        value={newUser.bypassSubscription ? "true" : "false"}
+                        onValueChange={val => setNewUser({...newUser, bypassSubscription: val === "true"})}
+                      >
+                        <SelectTrigger className="bg-slate-900 border-slate-700 text-slate-100">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent className="bg-slate-800 border-slate-700 text-slate-100">
+                          <SelectItem value="false">No (Follow Billing Rules)</SelectItem>
+                          <SelectItem value="true">Yes (Superadmin Granted Free Pass)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                     <Button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium" disabled={submittingUser}>
                       {submittingUser ? (
                         <>
@@ -548,6 +602,29 @@ export function SuperuserDashboard() {
                                 <div>
                                   <div className="font-semibold text-slate-200">{u.name || "N/A"}</div>
                                   <div className="text-xs text-slate-500 font-mono">{u.username}</div>
+                                  <div className="flex gap-1.5 mt-1.5 items-center flex-wrap">
+                                    <Badge 
+                                      className={`text-[9px] px-1.5 py-0 h-4.5 uppercase font-medium ${
+                                        u.role === "superuser" || u.role === "admin" || u.role === "monitor" || u.bypassSubscription
+                                          ? "bg-slate-800 text-slate-400 border-slate-700" 
+                                          : u.subscriptionStatus === "active" 
+                                            ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" 
+                                            : "bg-red-500/10 text-red-400 border-red-500/20"
+                                      }`}
+                                      variant="outline"
+                                    >
+                                      {u.role === "superuser" || u.role === "admin" || u.role === "monitor" || u.bypassSubscription
+                                        ? "Bypassed / Free" 
+                                        : u.subscriptionStatus === "active" 
+                                          ? "Subscribed" 
+                                          : "Inactive / Unpaid"}
+                                    </Badge>
+                                    {u.subscriptionExpiresAt && !u.bypassSubscription && (
+                                      <span className="text-[10px] text-slate-500">
+                                        Exp: {u.subscriptionExpiresAt}
+                                      </span>
+                                    )}
+                                  </div>
                                 </div>
                               </TableCell>
                               <TableCell>

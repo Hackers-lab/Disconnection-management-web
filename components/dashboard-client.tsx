@@ -56,6 +56,8 @@ export default function DashboardClient({ role, agencies }: DashboardClientProps
   const [showOnboardingModal, setShowOnboardingModal] = useState(false)
 
   const [showSuccessModal, setShowSuccessModal] = useState(false)
+  const [isSubscribed, setIsSubscribed] = useState(true)
+  const [subscriptionExpiresAt, setSubscriptionExpiresAt] = useState("")
 
   // Check if tenant is linked to Google Drive/Sheets on mount
   useEffect(() => {
@@ -180,12 +182,18 @@ export default function DashboardClient({ role, agencies }: DashboardClientProps
     fetch("/api/auth/permissions")
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
-        if (active && data?.permissions) {
-          setPermissions(data.permissions)
-          try {
-            sessionStorage.setItem("user_permissions", JSON.stringify(data.permissions))
-          } catch (e) {
-            console.error("Failed to save permissions to sessionStorage", e)
+        if (active) {
+          if (data?.permissions) {
+            setPermissions(data.permissions)
+            try {
+              sessionStorage.setItem("user_permissions", JSON.stringify(data.permissions))
+            } catch (e) {
+              console.error("Failed to save permissions to sessionStorage", e)
+            }
+          }
+          if (data && typeof data.isSubscribed === "boolean") {
+            setIsSubscribed(data.isSubscribed)
+            setSubscriptionExpiresAt(data.subscriptionExpiresAt || "")
           }
         }
       })
@@ -1338,6 +1346,47 @@ export default function DashboardClient({ role, agencies }: DashboardClientProps
             <DialogFooter className="mt-6">
               <Button onClick={() => setShowSuccessModal(false)} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2">
                 Go to Dashboard Home
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Global Subscription Required Dialog Modal */}
+        <Dialog open={!isSubscribed && permsLoaded} onOpenChange={() => {}}>
+          <DialogContent className="sm:max-w-[425px] bg-slate-900 border-slate-800 text-slate-100 dark" aria-describedby="subscription-description">
+            <DialogHeader className="flex flex-col items-center justify-center text-center">
+              <div className="h-16 w-16 bg-red-500/10 rounded-full flex items-center justify-center mb-4 mt-2">
+                <AlertTriangle className="h-10 w-10 text-red-500 animate-pulse" />
+              </div>
+              <DialogTitle className="text-xl font-bold text-slate-100 text-center">
+                Subscription Required
+              </DialogTitle>
+              <DialogDescription id="subscription-description" className="text-slate-400 pt-2 text-sm leading-relaxed text-center">
+                Your account subscription is currently inactive or has expired.
+                {subscriptionExpiresAt && (
+                  <span className="block mt-2 text-xs text-slate-500 font-semibold">
+                    Expired on: {subscriptionExpiresAt}
+                  </span>
+                )}
+                <br />
+                Please subscribe and pay the subscription amount to restore full access to all workspace modules.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="mt-6 flex flex-col gap-3 w-full">
+              <Button onClick={async () => {
+                try {
+                  const res = await fetch("/api/billing/checkout", { method: "POST" })
+                  if (res.ok) {
+                    const data = await res.json()
+                    if (data.success) {
+                      window.location.reload()
+                    }
+                  }
+                } catch (e) {
+                  console.error("Simulation failed", e)
+                }
+              }} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2">
+                Simulate Payment & Activate
               </Button>
             </DialogFooter>
           </DialogContent>

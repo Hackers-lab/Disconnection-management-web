@@ -1,5 +1,6 @@
 import { SignJWT, jwtVerify } from "jose"
 import { cookies } from "next/headers"
+import { userStorage } from "./user-storage"
 
 const secretKey = process.env.SESSION_SECRET || "pramod"
 const encodedKey = new TextEncoder().encode(secretKey)
@@ -62,11 +63,55 @@ export async function verifySession() {
     return null
   }
 
+  let isSubscribed = true
+  let subscriptionExpiresAt = ""
+
+  try {
+    const users = await userStorage.getUsers()
+    const user = users.find(u => u.id === session.userId)
+    if (user) {
+      subscriptionExpiresAt = user.subscriptionExpiresAt || ""
+      const roleLower = user.role.toLowerCase()
+      
+      const isExempt =
+        roleLower === "admin" ||
+        roleLower === "superuser" ||
+        roleLower === "monitor" ||
+        user.bypassSubscription
+
+      if (!isExempt) {
+        if (user.subscriptionStatus === "active") {
+          if (user.subscriptionExpiresAt) {
+            const expiry = new Date(user.subscriptionExpiresAt)
+            expiry.setHours(23, 59, 59, 999)
+            if (Date.now() > expiry.getTime()) {
+              isSubscribed = false
+            }
+          } else {
+            isSubscribed = false
+          }
+        } else {
+          isSubscribed = false
+        }
+      }
+    } else {
+      // User not found in storage, check role from session payload as fallback
+      const roleLower = (session.role || "").toLowerCase()
+      if (roleLower !== "admin" && roleLower !== "superuser" && roleLower !== "monitor") {
+        isSubscribed = false
+      }
+    }
+  } catch (err) {
+    console.error("Subscription validation error in verifySession:", err)
+  }
+
   return {
     userId: session.userId,
     username: session.username,
     role: session.role,
     cccCode: session.cccCode,
     agencies: session.agencies,
+    isSubscribed,
+    subscriptionExpiresAt,
   }
 }

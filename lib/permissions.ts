@@ -19,6 +19,11 @@ export async function checkApiPermission(module: string, action: string | string
     return { authorized: false, error: "Unauthorized", status: 401 }
   }
 
+  // Block users without an active subscription
+  if (!session.isSubscribed) {
+    return { authorized: false, error: "Subscription required", status: 402, session }
+  }
+
   // Admin bypass
   if (session.role === "admin") {
     return { authorized: true, session }

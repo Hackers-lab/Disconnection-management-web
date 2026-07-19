@@ -22,14 +22,15 @@ export interface MasterUser {
   cccCode: string
   name: string
   agencies: string[]
+  subscriptionStatus: string
+  subscriptionExpiresAt: string
+  bypassSubscription: boolean
 }
-
-type CachedUsers = { users: MasterUser[], timestamp: number }
 
 export class UserStorage {
   static instance: UserStorage
-  private _cache: CachedUsers | null = null
-  private readonly _CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes
+  // Infinite in-memory cache — only cleared by user writes (add/update/delete)
+  private _cache: MasterUser[] | null = null
 
   static getInstance() {
     if (!UserStorage.instance) UserStorage.instance = new UserStorage()
@@ -39,7 +40,7 @@ export class UserStorage {
   _parseRows(rows: any[][]): MasterUser[] {
     return rows
       .filter(row => row && row.length > 0 && row[1])
-      .map(([id, username, password, role, cccCode, name, agencies]) => ({
+      .map(([id, username, password, role, cccCode, name, agencies, subStatus, subExpiresAt, bypassSub]) => ({
         id: String(id || ""),
         username: String(username || ""),
         password: String(password || ""),
@@ -47,6 +48,9 @@ export class UserStorage {
         cccCode: String(cccCode || ""),
         name: String(name || ""),
         agencies: agencies ? String(agencies).split(",") : [] as string[],
+        subscriptionStatus: subStatus ? String(subStatus).trim() : "active",
+        subscriptionExpiresAt: subExpiresAt ? String(subExpiresAt).trim() : "",
+        bypassSubscription: bypassSub ? String(bypassSub).trim().toUpperCase() === "TRUE" : false,
       }))
   }
 
@@ -58,17 +62,17 @@ export class UserStorage {
     if (!SHEET_ID) {
       throw new Error("MASTER_CONFIG_SHEET environment variable is not defined")
     }
-    if (this._cache && Date.now() - this._cache.timestamp < this._CACHE_TTL_MS) {
-      return this._cache.users
+    if (this._cache) {
+      return this._cache
     }
     const sheets = await getSheetsClient()
     const res = await sheets.spreadsheets.values.get({
       spreadsheetId: SHEET_ID,
-      range: `${SHEET_NAME}!A2:G`,
+      range: `${SHEET_NAME}!A2:J`,
     })
     const rows = res.data.values || []
     const users = this._parseRows(rows)
-    this._cache = { users, timestamp: Date.now() }
+    this._cache = users
     return users
   }
 
@@ -83,10 +87,21 @@ export class UserStorage {
     const sheets = await getSheetsClient()
     await sheets.spreadsheets.values.append({
       spreadsheetId: SHEET_ID,
-      range: `${SHEET_NAME}!A:G`,
+      range: `${SHEET_NAME}!A:J`,
       valueInputOption: "RAW",
       requestBody: {
-        values: [[newId, user.username, user.password, user.role, user.cccCode, user.name, user.agencies.join(",")]],
+        values: [[
+          newId,
+          user.username,
+          user.password,
+          user.role,
+          user.cccCode,
+          user.name,
+          user.agencies.join(","),
+          user.subscriptionStatus || "active",
+          user.subscriptionExpiresAt || "",
+          user.bypassSubscription ? "TRUE" : "FALSE"
+        ]],
       },
     })
     this.invalidateCache()
@@ -101,10 +116,21 @@ export class UserStorage {
     const updated = { ...users[idx], ...updates }
     await sheets.spreadsheets.values.update({
       spreadsheetId: SHEET_ID,
-      range: `${SHEET_NAME}!A${idx + 2}:G${idx + 2}`,
+      range: `${SHEET_NAME}!A${idx + 2}:J${idx + 2}`,
       valueInputOption: "RAW",
       requestBody: {
-        values: [[updated.id, updated.username, updated.password, updated.role, updated.cccCode, updated.name, updated.agencies.join(",")]],
+        values: [[
+          updated.id,
+          updated.username,
+          updated.password,
+          updated.role,
+          updated.cccCode,
+          updated.name,
+          updated.agencies.join(","),
+          updated.subscriptionStatus || "active",
+          updated.subscriptionExpiresAt || "",
+          updated.bypassSubscription ? "TRUE" : "FALSE"
+        ]],
       },
     })
     this.invalidateCache()

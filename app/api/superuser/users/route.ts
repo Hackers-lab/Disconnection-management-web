@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
   try {
-    const { username, password, role, cccCode, name, agencies } = await request.json()
+    const { username, password, role, cccCode, name, agencies, subscriptionStatus, subscriptionExpiresAt, bypassSubscription } = await request.json()
     if (!username || !password || !role || !cccCode) {
       return NextResponse.json({ error: "Required fields missing" }, { status: 400 })
     }
@@ -34,7 +34,10 @@ export async function POST(request: NextRequest) {
       role: role.trim(),
       cccCode: cccCode.trim().toUpperCase(),
       name: name?.trim() || "",
-      agencies: Array.isArray(agencies) ? agencies : []
+      agencies: Array.isArray(agencies) ? agencies : [],
+      subscriptionStatus: subscriptionStatus || "active",
+      subscriptionExpiresAt: subscriptionExpiresAt || "",
+      bypassSubscription: !!bypassSubscription
     })
 
     return NextResponse.json({ success: true, user: newUser })

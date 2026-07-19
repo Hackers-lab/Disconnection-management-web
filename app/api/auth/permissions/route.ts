@@ -52,12 +52,16 @@ export const GET = withTenant(async function GET(req: NextRequest) {
           meter_replacement: [],
           material: [],
         },
+        isSubscribed: session.isSubscribed,
+        subscriptionExpiresAt: session.subscriptionExpiresAt,
       })
     }
 
     return NextResponse.json({
       role: session.role,
       permissions,
+      isSubscribed: session.isSubscribed,
+      subscriptionExpiresAt: session.subscriptionExpiresAt,
     })
   } catch (error) {
     console.error("Error in permissions API:", error)
