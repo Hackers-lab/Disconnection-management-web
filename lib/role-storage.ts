@@ -125,12 +125,13 @@ const DEFAULT_ROLES: RolePermissions[] = [
   },
 ]
 
-type CachedRoles = { roles: RolePermissions[]; timestamp: number }
+
 
 export class RoleStorage {
   static instance: RoleStorage
-  private _cache: Record<string, CachedRoles> = {}
-  private readonly _CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes
+  // Infinite in-memory cache per spreadsheet — never expires by time.
+  // Only cleared when a role is saved/deleted (write-invalidated).
+  private _cache: Record<string, RolePermissions[]> = {}
 
   static getInstance() {
     if (!RoleStorage.instance) RoleStorage.instance = new RoleStorage()
@@ -246,9 +247,9 @@ export class RoleStorage {
   }
 
   async getRoles(spreadsheetId: string = getSpreadsheetId()): Promise<RolePermissions[]> {
-    const cached = this._cache[spreadsheetId]
-    if (cached && Date.now() - cached.timestamp < this._CACHE_TTL_MS) {
-      return cached.roles
+    // Serve from infinite cache — only cleared when a role is written
+    if (this._cache[spreadsheetId]) {
+      return this._cache[spreadsheetId]
     }
     const sheets = await getSheetsClient()
     await this._ensureTab(sheets, spreadsheetId)
@@ -279,7 +280,8 @@ export class RoleStorage {
       return this.getRoles(spreadsheetId)
     }
 
-    this._cache[spreadsheetId] = { roles, timestamp: Date.now() }
+    // Cache indefinitely until a write invalidates it
+    this._cache[spreadsheetId] = roles
     return roles
   }
 

@@ -4,14 +4,18 @@ import { getTenantContext } from "./tenant-context"
 const SHEET_ID = process.env.MASTER_CONFIG_SHEET!
 const AGENCY_SHEET_NAME = "Agencies"
 
-interface CacheEntry {
-  data: any[]
-  timestamp: number
-}
+// Infinite in-memory cache per CCC — never expires by time.
+// Invalidated immediately on any add / update / delete so all users
+// see the new agency list on their very next request.
+let agenciesCache: Record<string, any[]> = {}
 
-// In-memory cache per CCC subdivision to support multi-tenancy
-let agenciesCache: Record<string, CacheEntry> = {}
-const CACHE_TTL = 5 * 60 * 1000 // 5 minutes
+export function invalidateAgencyCache(cccCode?: string) {
+  if (cccCode) {
+    delete agenciesCache[cccCode]
+  } else {
+    agenciesCache = {}
+  }
+}
 
 async function getSheetsClient() {
   const auth = new google.auth.GoogleAuth({
@@ -56,10 +60,9 @@ export async function getAgencies() {
   const context = getTenantContext()
   const cccCode = context?.cccCode || "SYSTEM"
 
-  // Return cached data if valid
-  const cached = agenciesCache[cccCode]
-  if (cached && (Date.now() - cached.timestamp < CACHE_TTL)) {
-    return cached.data
+  // Serve from infinite in-memory cache — only cleared by writes
+  if (agenciesCache[cccCode]) {
+    return agenciesCache[cccCode]
   }
 
   await ensureTab()
@@ -91,8 +94,8 @@ export async function getAgencies() {
   // Filter to keep only the agencies belonging to the active CCC subdivision
   const tenantAgencies = processed.filter(a => a && a.cccCode === cccCode)
 
-  // Update cache
-  agenciesCache[cccCode] = { data: tenantAgencies, timestamp: Date.now() }
+  // Cache indefinitely until a write invalidates it
+  agenciesCache[cccCode] = tenantAgencies
   return tenantAgencies
 }
 
@@ -119,8 +122,8 @@ export async function addAgency({ name, description, isActive }: { name: string;
     },
   })
   
-  // Invalidate cache for this tenant
-  delete agenciesCache[cccCode]
+  // Bust the server cache — every user's next request gets the new list
+  invalidateAgencyCache(cccCode)
   return { id: newId, name, description, isActive }
 }
 
@@ -155,8 +158,8 @@ export async function updateAgency({ id, name, description, isActive }: { id: st
     },
   })
   
-  // Invalidate cache for this tenant
-  delete agenciesCache[cccCode]
+  // Bust the server cache — every user's next request gets the new list
+  invalidateAgencyCache(cccCode)
   return { id, name, description, isActive }
 }
 
@@ -194,7 +197,7 @@ export async function deleteAgency(id: string) {
     range: `${AGENCY_SHEET_NAME}!A${sheetRow}:E${sheetRow}`,
   })
   
-  // Invalidate cache for this tenant
-  delete agenciesCache[cccCode]
+  // Bust the server cache — every user's next request gets the new list
+  invalidateAgencyCache(cccCode)
   return agency
 }

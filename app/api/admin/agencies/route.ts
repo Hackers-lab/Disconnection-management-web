@@ -13,7 +13,10 @@ export const GET = withTenant(async function GET(request: NextRequest) {
   }
   const agencies = await getAgencies()
   return NextResponse.json(agencies, {
-    headers: { 'Cache-Control': 'private, max-age=86400, stale-while-revalidate=3600' },
+    // no-store: browser never caches — every user always hits the server.
+    // The server holds agencies in memory (write-invalidated) so this is
+    // near-zero cost and guarantees instant propagation to ALL users.
+    headers: { 'Cache-Control': 'no-store' },
   })
 })
 
