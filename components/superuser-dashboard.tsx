@@ -11,6 +11,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { logout } from "@/app/actions/auth"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { 
   Building2, 
   Users, 
@@ -18,6 +26,7 @@ import {
   LogOut, 
   Plus, 
   Trash2, 
+  Pencil, 
   Loader2, 
   CheckCircle2, 
   AlertCircle, 
@@ -76,6 +85,46 @@ export function SuperuserDashboard() {
     subscriptionExpiresAt: "",
     bypassSubscription: false
   })
+
+  const [searchTerm, setSearchTerm] = useState("")
+  const [searchSupplyCode, setSearchSupplyCode] = useState("")
+  const [editingUser, setEditingUser] = useState<User | null>(null)
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [editForm, setEditForm] = useState({
+    id: "",
+    username: "",
+    name: "",
+    password: "",
+    role: "",
+    cccCode: "",
+    agencies: "",
+    subscriptionStatus: "active",
+    subscriptionExpiresAt: "",
+    bypassSubscription: false
+  })
+
+  const getOneMonthExpiry = () => {
+    const d = new Date()
+    d.setDate(d.getDate() + 30)
+    return d.toISOString().split("T")[0]
+  }
+
+  useEffect(() => {
+    if (newUser.role === "admin") {
+      setNewUser(prev => ({
+        ...prev,
+        subscriptionStatus: "active",
+        subscriptionExpiresAt: getOneMonthExpiry()
+      }))
+    } else if (newUser.role === "superuser" || newUser.role === "monitor") {
+      setNewUser(prev => ({
+        ...prev,
+        subscriptionStatus: "active",
+        subscriptionExpiresAt: "",
+        bypassSubscription: true
+      }))
+    }
+  }, [newUser.role])
 
   const fetchTenants = async () => {
     setLoadingTenants(true)
@@ -194,6 +243,55 @@ export function SuperuserDashboard() {
       }
     } catch (e) {
       console.error(e)
+    }
+  }
+
+  const startEditUser = (u: any) => {
+    setEditingUser(u)
+    setEditForm({
+      id: u.id,
+      username: u.username,
+      name: u.name || "",
+      password: "",
+      role: u.role,
+      cccCode: u.cccCode,
+      agencies: Array.isArray(u.agencies) ? u.agencies.join(", ") : "",
+      subscriptionStatus: u.subscriptionStatus || "active",
+      subscriptionExpiresAt: u.subscriptionExpiresAt || "",
+      bypassSubscription: !!u.bypassSubscription
+    })
+    setShowEditModal(true)
+  }
+
+  const handleEditUserSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!editForm.username.trim() || !editForm.role || !editForm.cccCode) {
+      alert("Required fields are missing")
+      return
+    }
+    try {
+      const payload = {
+        ...editForm,
+        agencies: editForm.agencies ? editForm.agencies.split(",").map(a => a.trim()).filter(Boolean) : []
+      }
+      if (!editForm.password) {
+        delete (payload as any).password
+      }
+      const res = await fetch("/api/superuser/users", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      })
+      const data = await res.json()
+      if (res.ok && data.success) {
+        setShowEditModal(false)
+        setEditingUser(null)
+        await fetchUsers()
+      } else {
+        alert(data.error || "Failed to update user")
+      }
+    } catch (err: any) {
+      alert(err?.message || "Failed to update user")
     }
   }
 
@@ -514,47 +612,63 @@ export function SuperuserDashboard() {
                         className="bg-slate-900 border-slate-700 text-slate-100"
                       />
                     </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs text-slate-400 font-medium">Subscription Status</Label>
-                      <Select
-                        value={newUser.subscriptionStatus}
-                        onValueChange={val => setNewUser({...newUser, subscriptionStatus: val})}
-                      >
-                        <SelectTrigger className="bg-slate-900 border-slate-700 text-slate-100">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent className="bg-slate-800 border-slate-700 text-slate-100">
-                          <SelectItem value="active">Active</SelectItem>
-                          <SelectItem value="expired">Expired</SelectItem>
-                          <SelectItem value="pending">Pending</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-1">
-                      <Label htmlFor="subExpires" className="text-xs text-slate-400 font-medium">Subscription Expiry Date</Label>
-                      <Input
-                        id="subExpires"
-                        type="date"
-                        value={newUser.subscriptionExpiresAt}
-                        onChange={e => setNewUser({...newUser, subscriptionExpiresAt: e.target.value})}
-                        className="bg-slate-900 border-slate-700 text-slate-100"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs text-slate-400 font-medium">Bypass Subscription (Free Pass)</Label>
-                      <Select
-                        value={newUser.bypassSubscription ? "true" : "false"}
-                        onValueChange={val => setNewUser({...newUser, bypassSubscription: val === "true"})}
-                      >
-                        <SelectTrigger className="bg-slate-900 border-slate-700 text-slate-100">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent className="bg-slate-800 border-slate-700 text-slate-100">
-                          <SelectItem value="false">No (Follow Billing Rules)</SelectItem>
-                          <SelectItem value="true">Yes (Superadmin Granted Free Pass)</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
+                    {newUser.role === "admin" && (
+                      <div className="space-y-1">
+                        <Label htmlFor="trialExpires" className="text-xs text-slate-400 font-medium">Subdivision Trial Expiry Date</Label>
+                        <Input
+                          id="trialExpires"
+                          type="date"
+                          value={newUser.subscriptionExpiresAt}
+                          onChange={e => setNewUser({...newUser, subscriptionExpiresAt: e.target.value})}
+                          className="bg-slate-900 border-slate-700 text-slate-100"
+                        />
+                      </div>
+                    )}
+                    {(newUser.role === "executive" || newUser.role === "viewer") && (
+                      <>
+                        <div className="space-y-1">
+                          <Label className="text-xs text-slate-400 font-medium">Subscription Status</Label>
+                          <Select
+                            value={newUser.subscriptionStatus}
+                            onValueChange={val => setNewUser({...newUser, subscriptionStatus: val})}
+                          >
+                            <SelectTrigger className="bg-slate-900 border-slate-700 text-slate-100">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent className="bg-slate-800 border-slate-700 text-slate-100">
+                              <SelectItem value="active">Active</SelectItem>
+                              <SelectItem value="expired">Expired</SelectItem>
+                              <SelectItem value="pending">Pending</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-1">
+                          <Label htmlFor="subExpires" className="text-xs text-slate-400 font-medium">Subscription Expiry Date</Label>
+                          <Input
+                            id="subExpires"
+                            type="date"
+                            value={newUser.subscriptionExpiresAt}
+                            onChange={e => setNewUser({...newUser, subscriptionExpiresAt: e.target.value})}
+                            className="bg-slate-900 border-slate-700 text-slate-100"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs text-slate-400 font-medium">Bypass Subscription (Free Pass)</Label>
+                          <Select
+                            value={newUser.bypassSubscription ? "true" : "false"}
+                            onValueChange={val => setNewUser({...newUser, bypassSubscription: val === "true"})}
+                          >
+                            <SelectTrigger className="bg-slate-900 border-slate-700 text-slate-100">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent className="bg-slate-800 border-slate-700 text-slate-100">
+                              <SelectItem value="false">No (Follow Billing Rules)</SelectItem>
+                              <SelectItem value="true">Yes (Superadmin Granted Free Pass)</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </>
+                    )}
                     <Button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium" disabled={submittingUser}>
                       {submittingUser ? (
                         <>
@@ -574,6 +688,28 @@ export function SuperuserDashboard() {
 
               {/* Table list */}
               <div className="lg:col-span-2 space-y-4">
+                {/* Search Panel */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-800/10 border border-slate-800 p-4 rounded-xl">
+                  <div className="space-y-1">
+                    <Label className="text-xs text-slate-400 font-medium">Search User (Name / Username)</Label>
+                    <Input
+                      placeholder="Search name, username..."
+                      value={searchTerm}
+                      onChange={e => setSearchTerm(e.target.value)}
+                      className="bg-slate-900 border-slate-700 text-slate-100 placeholder-slate-500 text-xs"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs text-slate-400 font-medium">Filter by Subdivision / CCC Code</Label>
+                    <Input
+                      placeholder="Search CCC code..."
+                      value={searchSupplyCode}
+                      onChange={e => setSearchSupplyCode(e.target.value)}
+                      className="bg-slate-900 border-slate-700 text-slate-100 placeholder-slate-500 text-xs"
+                    />
+                  </div>
+                </div>
+
                 <Card className="bg-slate-800/30 border-slate-700/50 overflow-hidden">
                   <CardHeader className="pb-3">
                     <CardTitle className="text-lg">Registered Access Credentials</CardTitle>
@@ -583,77 +719,107 @@ export function SuperuserDashboard() {
                       <div className="flex justify-center items-center py-16">
                         <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
                       </div>
-                    ) : users.length === 0 ? (
-                      <p className="text-center py-12 text-slate-500 text-sm">No credential records found.</p>
-                    ) : (
-                      <Table>
-                        <TableHeader className="bg-slate-900/50 border-slate-800">
-                          <TableRow className="border-slate-800 hover:bg-transparent">
-                            <TableHead className="text-slate-400 font-semibold">User Details</TableHead>
-                            <TableHead className="text-slate-400 font-semibold">Subdivision</TableHead>
-                            <TableHead className="text-slate-400 font-semibold">Role</TableHead>
-                            <TableHead className="w-[100px] text-slate-400 font-semibold text-right">Actions</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {users.map(u => (
-                            <TableRow key={u.id} className="border-slate-800 hover:bg-slate-800/40">
-                              <TableCell>
-                                <div>
-                                  <div className="font-semibold text-slate-200">{u.name || "N/A"}</div>
-                                  <div className="text-xs text-slate-500 font-mono">{u.username}</div>
-                                  <div className="flex gap-1.5 mt-1.5 items-center flex-wrap">
-                                    <Badge 
-                                      className={`text-[9px] px-1.5 py-0 h-4.5 uppercase font-medium ${
-                                        u.role === "superuser" || u.role === "admin" || u.role === "monitor" || u.bypassSubscription
-                                          ? "bg-slate-800 text-slate-400 border-slate-700" 
+                    ) : (() => {
+                      const filteredUsers = users.filter(u => {
+                        const matchesSearch = 
+                          u.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          (u.name || "").toLowerCase().includes(searchTerm.toLowerCase());
+                        
+                        const matchesSupply = 
+                          !searchSupplyCode || 
+                          u.cccCode.toLowerCase().includes(searchSupplyCode.toLowerCase());
+                        
+                        return matchesSearch && matchesSupply;
+                      })
+
+                      if (filteredUsers.length === 0) {
+                        return <p className="text-center py-12 text-slate-500 text-sm">No credential records found matching filters.</p>
+                      }
+
+                      return (
+                        <Table>
+                          <TableHeader className="bg-slate-900/50 border-slate-800">
+                            <TableRow className="border-slate-800 hover:bg-transparent">
+                              <TableHead className="text-slate-400 font-semibold">User Details</TableHead>
+                              <TableHead className="text-slate-400 font-semibold">Subdivision</TableHead>
+                              <TableHead className="text-slate-400 font-semibold">Role</TableHead>
+                              <TableHead className="w-[120px] text-slate-400 font-semibold text-right">Actions</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {filteredUsers.map(u => (
+                              <TableRow key={u.id} className="border-slate-800 hover:bg-slate-800/40">
+                                <TableCell>
+                                  <div>
+                                    <div className="font-semibold text-slate-200">{u.name || "N/A"}</div>
+                                    <div className="text-xs text-slate-500 font-mono">{u.username}</div>
+                                    <div className="flex gap-1.5 mt-1.5 items-center flex-wrap">
+                                      <Badge 
+                                        className={`text-[9px] px-1.5 py-0 h-4.5 uppercase font-medium ${
+                                          u.role === "superuser" || u.role === "admin" || u.role === "monitor" || u.bypassSubscription
+                                            ? "bg-slate-800 text-slate-400 border-slate-700" 
+                                            : u.subscriptionStatus === "active" 
+                                              ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" 
+                                              : "bg-red-500/10 text-red-400 border-red-500/20"
+                                        }`}
+                                        variant="outline"
+                                      >
+                                        {u.role === "superuser" || u.role === "admin" || u.role === "monitor" || u.bypassSubscription
+                                          ? "Bypassed / Free" 
                                           : u.subscriptionStatus === "active" 
-                                            ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" 
-                                            : "bg-red-500/10 text-red-400 border-red-500/20"
-                                      }`}
-                                      variant="outline"
-                                    >
-                                      {u.role === "superuser" || u.role === "admin" || u.role === "monitor" || u.bypassSubscription
-                                        ? "Bypassed / Free" 
-                                        : u.subscriptionStatus === "active" 
-                                          ? "Subscribed" 
-                                          : "Inactive / Unpaid"}
-                                    </Badge>
-                                    {u.subscriptionExpiresAt && !u.bypassSubscription && (
-                                      <span className="text-[10px] text-slate-500">
-                                        Exp: {u.subscriptionExpiresAt}
-                                      </span>
+                                            ? "Subscribed" 
+                                            : "Inactive / Unpaid"}
+                                      </Badge>
+                                      {u.subscriptionExpiresAt && !u.bypassSubscription && (
+                                        <span className="text-[10px] text-slate-500">
+                                          Exp: {u.subscriptionExpiresAt}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                </TableCell>
+                                <TableCell>
+                                  <span className="font-mono px-2 py-0.5 rounded text-xs bg-slate-900 border border-slate-800 text-blue-400 font-semibold">
+                                    {u.cccCode || "SYSTEM"}
+                                  </span>
+                                </TableCell>
+                                <TableCell>
+                                  <Badge variant={u.role === "superuser" ? "default" : "secondary"} className="capitalize font-semibold text-[10px]">
+                                    {u.role}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  <div className="flex items-center justify-end gap-1.5">
+                                    {u.role !== "superuser" && (
+                                      <>
+                                        <Button 
+                                          variant="ghost" 
+                                          size="icon" 
+                                          onClick={() => startEditUser(u)}
+                                          className="text-blue-400 hover:text-blue-200 hover:bg-blue-500/10 h-8 w-8"
+                                          title="Edit User Settings"
+                                        >
+                                          <Pencil className="h-4 w-4" />
+                                        </Button>
+                                        <Button 
+                                          variant="ghost" 
+                                          size="icon" 
+                                          onClick={() => handleDeleteUser(u.id, u.username)}
+                                          className="text-red-400 hover:text-red-200 hover:bg-red-500/10 h-8 w-8"
+                                          title="Delete User Account"
+                                        >
+                                          <Trash2 className="h-4 w-4" />
+                                        </Button>
+                                      </>
                                     )}
                                   </div>
-                                </div>
-                              </TableCell>
-                              <TableCell>
-                                <span className="font-mono px-2 py-0.5 rounded text-xs bg-slate-900 border border-slate-800 text-blue-400 font-semibold">
-                                  {u.cccCode || "SYSTEM"}
-                                </span>
-                              </TableCell>
-                              <TableCell>
-                                <Badge variant={u.role === "superuser" ? "default" : "secondary"} className="capitalize font-semibold text-[10px]">
-                                  {u.role}
-                                </Badge>
-                              </TableCell>
-                              <TableCell className="text-right">
-                                {u.role !== "superuser" && (
-                                  <Button 
-                                    variant="ghost" 
-                                    size="icon" 
-                                    onClick={() => handleDeleteUser(u.id, u.username)}
-                                    className="text-red-400 hover:text-red-200 hover:bg-red-500/10 h-8 w-8"
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                  </Button>
-                                )}
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    )}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      )
+                    })()}
                   </CardContent>
                 </Card>
               </div>
@@ -661,6 +827,137 @@ export function SuperuserDashboard() {
           </TabsContent>
         </Tabs>
       </main>
+
+      {/* Edit User Dialog */}
+      <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
+        <DialogContent className="sm:max-w-md bg-slate-900 border-slate-800 text-slate-100 dark">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Pencil className="h-5 w-5 text-blue-400" />
+              Edit Account Access
+            </DialogTitle>
+            <DialogDescription className="text-slate-400 text-xs">
+              Modify credentials and subscription status for '{editForm.username}'.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleEditUserSubmit} className="space-y-4 py-2">
+            <div className="space-y-1">
+              <Label className="text-xs text-slate-400 font-medium">Name</Label>
+              <Input
+                value={editForm.name}
+                onChange={e => setEditForm({...editForm, name: e.target.value})}
+                className="bg-slate-950 border-slate-700 text-slate-100"
+                required
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs text-slate-400 font-medium">Password (Leave blank to keep current)</Label>
+              <Input
+                type="password"
+                placeholder="••••••••"
+                value={editForm.password}
+                onChange={e => setEditForm({...editForm, password: e.target.value})}
+                className="bg-slate-950 border-slate-700 text-slate-100"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs text-slate-400 font-medium">CCC Center Code</Label>
+              <Select
+                value={editForm.cccCode}
+                onValueChange={val => setEditForm({...editForm, cccCode: val})}
+              >
+                <SelectTrigger className="bg-slate-950 border-slate-700 text-slate-100">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-slate-800 border-slate-700 text-slate-100">
+                  <SelectItem value="SYSTEM">SYSTEM (Superuser Global)</SelectItem>
+                  {tenants.map(t => (
+                    <SelectItem key={t.cccCode} value={t.cccCode}>
+                      {t.cccCode} - {t.cccName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs text-slate-400 font-medium">Allowed Agencies (Optional)</Label>
+              <Input
+                placeholder="e.g. AGENCY_A, AGENCY_B"
+                value={editForm.agencies}
+                onChange={e => setEditForm({...editForm, agencies: e.target.value})}
+                className="bg-slate-950 border-slate-700 text-slate-100"
+              />
+            </div>
+
+            {/* Conditionally render subscription edit inputs */}
+            {editForm.role === "admin" && (
+              <div className="space-y-1">
+                <Label className="text-xs text-slate-400 font-medium">Subdivision Trial Expiry Date</Label>
+                <Input
+                  type="date"
+                  value={editForm.subscriptionExpiresAt}
+                  onChange={e => setEditForm({...editForm, subscriptionExpiresAt: e.target.value})}
+                  className="bg-slate-950 border-slate-700 text-slate-100"
+                />
+              </div>
+            )}
+
+            {(editForm.role === "executive" || editForm.role === "viewer") && (
+              <>
+                <div className="space-y-1">
+                  <Label className="text-xs text-slate-400 font-medium">Subscription Status</Label>
+                  <Select
+                    value={editForm.subscriptionStatus}
+                    onValueChange={val => setEditForm({...editForm, subscriptionStatus: val})}
+                  >
+                    <SelectTrigger className="bg-slate-950 border-slate-700 text-slate-100">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-slate-800 border-slate-700 text-slate-100">
+                      <SelectItem value="active">Active</SelectItem>
+                      <SelectItem value="expired">Expired</SelectItem>
+                      <SelectItem value="pending">Pending</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs text-slate-400 font-medium">Subscription Expiry Date</Label>
+                  <Input
+                    type="date"
+                    value={editForm.subscriptionExpiresAt}
+                    onChange={e => setEditForm({...editForm, subscriptionExpiresAt: e.target.value})}
+                    className="bg-slate-950 border-slate-700 text-slate-100"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs text-slate-400 font-medium">Bypass Subscription (Free Pass)</Label>
+                  <Select
+                    value={editForm.bypassSubscription ? "true" : "false"}
+                    onValueChange={val => setEditForm({...editForm, bypassSubscription: val === "true"})}
+                  >
+                    <SelectTrigger className="bg-slate-950 border-slate-700 text-slate-100">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-slate-800 border-slate-700 text-slate-100">
+                      <SelectItem value="false">No (Follow Billing Rules)</SelectItem>
+                      <SelectItem value="true">Yes (Superadmin Granted Free Pass)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </>
+            )}
+
+            <DialogFooter className="mt-4 flex gap-2">
+              <Button type="button" variant="outline" className="border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-white" onClick={() => setShowEditModal(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white font-medium">
+                Save Changes
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

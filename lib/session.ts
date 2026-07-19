@@ -101,6 +101,19 @@ export async function verifySession() {
         } else {
           isSubscribed = false
         }
+
+        // Inheritance Fallback: Check if the Admin of this subdivision (cccCode) has an active trial/subscription
+        if (!isSubscribed && user.cccCode) {
+          const adminUser = users.find(u => u.cccCode?.toUpperCase() === user.cccCode.toUpperCase() && u.role.toLowerCase() === "admin")
+          if (adminUser && adminUser.subscriptionStatus === "active" && adminUser.subscriptionExpiresAt) {
+            const adminExpiry = new Date(adminUser.subscriptionExpiresAt)
+            adminExpiry.setHours(23, 59, 59, 999)
+            if (Date.now() <= adminExpiry.getTime()) {
+              isSubscribed = true
+              subscriptionExpiresAt = `Derived from Admin Trial (Expires: ${adminUser.subscriptionExpiresAt})`
+            }
+          }
+        }
       }
     } else {
       // User not found in storage, check role from session payload as fallback
