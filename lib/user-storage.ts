@@ -30,8 +30,10 @@ export interface MasterUser {
 
 export class UserStorage {
   static instance: UserStorage
-  // Infinite in-memory cache — only cleared by user writes (add/update/delete)
+  // In-memory cache with TTL (5 minutes) to pick up direct sheet edits
   private _cache: MasterUser[] | null = null
+  private _cacheTimestamp: number = 0
+  private readonly CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes cache TTL
 
   static getInstance() {
     if (!UserStorage.instance) UserStorage.instance = new UserStorage()
@@ -57,29 +59,69 @@ export class UserStorage {
 
   invalidateCache() {
     this._cache = null
+    this._cacheTimestamp = 0
   }
 
   async getUsers(): Promise<MasterUser[]> {
     if (!SHEET_ID) {
       throw new Error("MASTER_CONFIG_SHEET environment variable is not defined")
     }
-    if (this._cache) {
+    
+    const now = Date.now()
+    if (this._cache && (now - this._cacheTimestamp < this.CACHE_TTL_MS)) {
       return this._cache
     }
-    const sheets = await getSheetsClient()
-    const res = await sheets.spreadsheets.values.get({
-      spreadsheetId: SHEET_ID,
-      range: `${SHEET_NAME}!A2:J`,
-    })
-    const rows = res.data.values || []
-    const users = this._parseRows(rows)
-    this._cache = users
-    return users
+
+    try {
+      const sheets = await getSheetsClient()
+      const res = await sheets.spreadsheets.values.get({
+        spreadsheetId: SHEET_ID,
+        range: `${SHEET_NAME}!A2:J`,
+      })
+      const rows = res.data.values || []
+      const users = this._parseRows(rows)
+      this._cache = users
+      this._cacheTimestamp = now
+      return users
+    } catch (error) {
+      console.error("Error fetching users from Master_Credentials sheet:", error)
+      // Fallback to cache if available
+      if (this._cache) {
+        return this._cache
+      }
+      throw error
+    }
   }
 
   async findUserByCredentials(username: string, password: string): Promise<MasterUser | null> {
     const users = await this.getUsers()
-    return users.find(u => u.username === username && u.password === password) || null
+    let user = users.find(u => u.username === username && u.password === password) || null
+
+    // If not found in cache, invalidate cache and fetch fresh users once
+    if (!user) {
+      this.invalidateCache()
+      const freshUsers = await this.getUsers()
+      user = freshUsers.find(u => u.username === username && u.password === password) || null
+    }
+
+    // Dynamic fallback for divisional credentials (e.g., 6612000 / 6612000 or 6634000 / 6634000)
+    if (!user && /^\d{4}000$/.test(username) && password === username) {
+      const divPrefix = username.slice(0, 4)
+      user = {
+        id: `div-${username}`,
+        username,
+        password,
+        role: "division_viewer",
+        cccCode: username,
+        name: `Division ${divPrefix} View Account`,
+        agencies: [],
+        subscriptionStatus: "active",
+        subscriptionExpiresAt: "",
+        bypassSubscription: true,
+      }
+    }
+
+    return user
   }
 
   async addUser(user: Omit<MasterUser, "id">): Promise<MasterUser> {

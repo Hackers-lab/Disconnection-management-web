@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react"
 import dynamic from "next/dynamic"
-import { getFromCache, saveToCache } from "@/lib/indexed-db"
+import { getFromCache, saveToCache, getCccPrefix } from "@/lib/indexed-db"
 import { logout } from "@/app/actions/auth"
 import { DashboardShell } from "@/components/dashboard-shell"
 import { ViewType } from "@/components/app-sidebar"
@@ -26,6 +26,7 @@ const DTRList = dynamic(() => import("@/components/dtr-list").then(m => ({ defau
 const DTRPaintingList = dynamic(() => import("@/components/dtr-painting-list").then(m => ({ default: m.DTRPaintingList })), { ssr: false })
 const MeterReplacementList = dynamic(() => import("@/components/meter-replacement-list").then(m => ({ default: m.MeterReplacementList })), { ssr: false })
 const MaterialList = dynamic(() => import("@/components/material-list").then(m => ({ default: m.MaterialList })), { ssr: false })
+const DivisionalDashboard = dynamic(() => import("@/components/divisional-dashboard").then(m => ({ default: m.DivisionalDashboard })), { ssr: false })
 
 import { Loader2, AlertTriangle, KeyRound, CheckCircle2, User, ArrowLeft } from "lucide-react"
 
@@ -68,7 +69,11 @@ export default function DashboardClient({ role, agencies }: DashboardClientProps
     if (role !== "admin") return
     const checkTenantStatus = async () => {
       try {
-        const res = await fetch("/api/admin/tenant-status")
+        const params = new URLSearchParams(window.location.search)
+        const isSuccess = params.get("success") === "true"
+        const url = isSuccess ? "/api/admin/tenant-status?bypassCache=true" : "/api/admin/tenant-status"
+        
+        const res = await fetch(url)
         if (res.ok) {
           const status = await res.json()
           if (status && status.linked === false) {
@@ -202,6 +207,12 @@ export default function DashboardClient({ role, agencies }: DashboardClientProps
             setProfileName(data.name || "")
             setBypassSubscription(!!data.bypassSubscription)
             setProfileCccCode(data.cccCode || "")
+            try {
+              localStorage.setItem("user_ccc_code", data.cccCode || "")
+              sessionStorage.setItem("user_ccc_code", data.cccCode || "")
+            } catch (e) {
+              console.error("Failed to save cccCode to storage", e)
+            }
           }
         }
       })
@@ -239,9 +250,10 @@ export default function DashboardClient({ role, agencies }: DashboardClientProps
 
   // Background prefetch: warm up IndexedDB as soon as user is on dashboard
   useEffect(() => {
+    const prefix = getCccPrefix() ? `${getCccPrefix()}_` : ""
     const CACHE_KEY = "consumers_data_cache"
-    const ROW_COUNT_KEY = "consumer_row_count"
-    const CONSUMER_VERSION_KEY = "consumer_version_hash"
+    const ROW_COUNT_KEY = `${prefix}consumer_row_count`
+    const CONSUMER_VERSION_KEY = `${prefix}consumer_version_hash`
     const BASE_DATE_KEY = "consumers_base_date"
 
     async function prefetch() {
@@ -1191,9 +1203,11 @@ export default function DashboardClient({ role, agencies }: DashboardClientProps
 
         {/* VIEW SWITCHING LOGIC */}
         
-        {activeView === "home" && (
+        {role === "division_viewer" ? (
+          <DivisionalDashboard userRole={role} username={profileCccCode || role} cccCode={profileCccCode} />
+        ) : activeView === "home" ? (
           <DashboardMenu onSelect={setActiveView} userRole={role} userAgencies={agencies} permissions={permissions} />
-        )}
+        ) : null}
 
         {activeView === "disconnection" && (
           <ConsumerList
@@ -1206,6 +1220,7 @@ export default function DashboardClient({ role, agencies }: DashboardClientProps
             onDownload={downloadPDF}
             onDownloadDefaulters={openDownloadDialog}
             onGoToReconnection={() => setActiveView("reconnection")}
+            permissions={permissions}
           />
         )}
 
@@ -1263,7 +1278,7 @@ export default function DashboardClient({ role, agencies }: DashboardClientProps
           />
         )}
 
-        {activeView === "agency-updates" && (role === "admin" || role === "executive" || role === "viewer") && (
+        {activeView === "agency-updates" && (
           <AgencyUpdatesReport userRole={role} />
         )}
 
