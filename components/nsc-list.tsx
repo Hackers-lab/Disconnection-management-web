@@ -84,12 +84,16 @@ interface Props {
   userAgencies: string[]
   username:     string
   agencies:     string[]
+  permissions?: Record<string, string[]>
 }
 
-export function NscList({ userRole, userAgencies, username, agencies }: Props) {
+export function NscList({ userRole, userAgencies, username, agencies, permissions }: Props) {
   const { toast } = useToast()
   const isAdmin  = userRole === "admin" || userRole === "executive"
-  const isAgency = userRole === "agency"
+  const isAgency = userRole === "agency" || (userRole !== "admin" && userRole !== "executive" && !!(userAgencies && userAgencies.length > 0))
+  const canCreate = userRole === "admin" || userRole === "executive" || !!(permissions && permissions.nsc?.includes("create"))
+  const canInspect = userRole === "admin" || userRole === "executive" || userRole === "agency" || !!(permissions && permissions.nsc?.includes("inspect"))
+  const canProcess = userRole === "admin" || userRole === "executive" || !!(permissions && permissions.nsc?.includes("process"))
 
   const [apps, setApps]         = useState<NSCApplication[]>([])
   const [syncState, setSyncState] = useState<SyncState>("loading")
@@ -614,22 +618,22 @@ export function NscList({ userRole, userAgencies, username, agencies }: Props) {
                     <Eye className="h-3.5 w-3.5" /> View
                   </button>
 
-                  {/* Agency: inspect pending */}
-                  {isAgency && app.status === "pending" && (
+                  {/* Agency / Inspector / Custom Role: inspect pending */}
+                  {canInspect && app.status === "pending" && (
                     <Button size="sm" className="flex-1 bg-slate-950 hover:bg-slate-900 text-white text-xs font-semibold h-9 rounded-lg shadow-sm transition-colors"
                       onClick={() => { setSelected(app); setView("inspect") }}>
                       Start Inspection
                     </Button>
                   )}
-                  {/* Agency: inspection submitted */}
-                  {isAgency && app.status !== "pending" && (
+                  {/* Agency / Inspector: inspection submitted */}
+                  {!canInspect && app.status !== "pending" && (
                     <p className="text-xs text-gray-500 flex items-center gap-1">
                       <Check className="h-3 w-3 text-green-600" /> Inspection submitted
                     </p>
                   )}
 
-                  {/* Admin: process inspected */}
-                  {isAdmin && app.status === "inspected" && (
+                  {/* Admin / Staff / Custom Role: process inspected */}
+                  {canProcess && app.status === "inspected" && (
                     <Button size="sm" className="flex-1 bg-slate-950 hover:bg-slate-900 text-white text-xs font-semibold h-9 rounded-lg shadow-sm transition-colors"
                       onClick={() => { setSelected(app); setView("process") }}>
                       Process
@@ -723,7 +727,7 @@ export function NscList({ userRole, userAgencies, username, agencies }: Props) {
       <NscViewDialog app={viewApp} open={!!viewApp} onClose={() => setViewApp(null)} />
 
       {/* Sticky bottom — Add NSC */}
-      {isAdmin && (
+      {canCreate && (
         <div className="fixed bottom-0 left-0 right-0 z-40 p-4 pointer-events-none">
           <div className="max-w-xl mx-auto pointer-events-auto">
             <Button

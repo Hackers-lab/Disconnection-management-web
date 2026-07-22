@@ -35,6 +35,7 @@ interface Props {
   userAgencies: string[]
   username: string
   agencies: string[]
+  permissions?: Record<string, string[]>
 }
 
 type Tab = "pending" | "reconnected" | "door_locked" | "overdue" | "all" | "reports"
@@ -78,7 +79,7 @@ function StatusBadge({ status, effectiveStatus }: { status: ReconnectionRequest[
   )
 }
 
-export function ReconnectionList({ userRole, userAgencies, username, agencies }: Props) {
+export function ReconnectionList({ userRole, userAgencies, username, agencies, permissions }: Props) {
   const { toast } = useToast()
   const [records, setRecords] = useState<ReconnectionRequest[]>([])
   const [syncState, setSyncState] = useState<SyncState>("loading")
@@ -89,6 +90,7 @@ export function ReconnectionList({ userRole, userAgencies, username, agencies }:
   const [selected, setSelected] = useState<ReconnectionRequest | null>(null)
 
   const isAdmin = userRole === "admin" || userRole === "executive"
+  const canCreate = userRole === "admin" || userRole === "executive" || !!(permissions && permissions.reconnection?.includes("create"))
   const PAGE_SIZE = 15
 
   const load = async (silent = false) => {
@@ -350,7 +352,9 @@ export function ReconnectionList({ userRole, userAgencies, username, agencies }:
   const canUpdate = (r: ReconnectionRequest & { effectiveStatus?: string }) => {
     const statusToCheck = r.effectiveStatus || r.status
     if (statusToCheck !== "pending") return false
-    if (isAdmin) return true
+    const hasUpdatePerm = userRole === "admin" || (permissions && permissions.reconnection?.includes("update"))
+    if (!hasUpdatePerm) return false
+    if (userRole === "admin") return true
     return userAgencies.map(a => a.toUpperCase()).includes(r.agency.toUpperCase())
   }
 
@@ -642,14 +646,14 @@ export function ReconnectionList({ userRole, userAgencies, username, agencies }:
           </Button>
         </div>
       )}
-      {/* Sticky bottom — Add Consumer */}
-      {isAdmin && (
+      {/* Sticky bottom — Add Reconnection */}
+      {canCreate && (
         <div className="fixed bottom-0 left-0 right-0 z-40 p-4 pointer-events-none">
           <div className="max-w-xl mx-auto pointer-events-auto">
             <Button
               className="w-full h-13 bg-blue-600 hover:bg-blue-700 text-white shadow-lg rounded-2xl text-base font-semibold flex items-center justify-center gap-2 py-3"
               onClick={() => setView("create")}>
-              <Plus className="h-5 w-5" /> Add Consumer
+              <Plus className="h-5 w-5" /> Add Reconnection
             </Button>
           </div>
         </div>

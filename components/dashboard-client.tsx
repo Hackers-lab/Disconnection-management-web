@@ -1215,6 +1215,7 @@ export default function DashboardClient({ role, agencies }: DashboardClientProps
             userAgencies={agencies}
             username={(agencies[0] || role)}
             agencies={agencies}
+            permissions={permissions}
           />
         )}
 
@@ -1239,7 +1240,7 @@ export default function DashboardClient({ role, agencies }: DashboardClientProps
         )}
 
         {activeView === "deemed" && (
-           <DDList userRole={role} userAgencies={agencies} />
+           <DDList userRole={role} userAgencies={agencies} permissions={permissions} />
         )}
 
         {activeView === "meter" && (
@@ -1248,6 +1249,7 @@ export default function DashboardClient({ role, agencies }: DashboardClientProps
             userAgencies={agencies}
             username={agencies[0] || role}
             agencies={agencies}
+            permissions={permissions}
           />
         )}
 
@@ -1257,6 +1259,7 @@ export default function DashboardClient({ role, agencies }: DashboardClientProps
             userAgencies={agencies}
             username={agencies[0] || role}
             agencies={agencies}
+            permissions={permissions}
           />
         )}
 
@@ -1264,8 +1267,8 @@ export default function DashboardClient({ role, agencies }: DashboardClientProps
           <AgencyUpdatesReport userRole={role} />
         )}
 
-        {activeView === "consumer-master" && (role === "admin" || role === "executive" || role === "agency") && (
-          <ConsumerMaster role={role} />
+        {activeView === "consumer-master" && (
+          <ConsumerMaster role={role} permissions={permissions} />
         )}
 
         {activeView === "meter-replacement" && (

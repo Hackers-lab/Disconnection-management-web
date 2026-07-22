@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback, useEffect, useRef } from "react"
+import { useState, useCallback, useEffect, useRef, useMemo } from "react"
 import Papa from "papaparse"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -9,10 +9,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useToast } from "@/components/ui/use-toast"
-import { getFromCache, saveToCache, getCacheAgeMs } from "@/lib/indexed-db"
-import { Search, X, User, MapPin, Phone, Monitor, Map, ChevronDown, ChevronUp, Upload, ExternalLink } from "lucide-react"
+import { getFromCache, saveToCache, getCacheAgeMs, getCccPrefix } from "@/lib/indexed-db"
+import { Search, X, User, MapPin, Phone, Monitor, Map, ChevronDown, ChevronUp, Upload, ExternalLink, Database, Smartphone, Gauge, ShieldCheck, AlertTriangle, Layers, Activity, ChevronRight } from "lucide-react"
+import dynamic from "next/dynamic"
 
-// ── Types ─────────────────────────────────────────────────────────────────────
+const NearbyConsumerMap = dynamic(
+  () => import("./nearby-consumer-map").then((mod) => mod.NearbyConsumerMap),
+  { ssr: false }
+)
+
 export interface ConsumerMasterRow {
   consumerId: string
   name:       string
@@ -44,73 +49,79 @@ const FIELD_LABELS: Record<keyof ConsumerMasterRow, string> = {
 
 const REQUIRED_FIELDS: (keyof ConsumerMasterRow)[] = ["consumerId", "name"]
 
-// ── Lookup widget (used by other components as a picker) ──────────────────────
-// ── Chunked Fetch Helper ──────────────────────────────────────────────────────
 export async function fetchMasterInChunks(options?: {
   refresh?: boolean
   onProgress?: (loaded: number, total: number) => void
 }): Promise<ConsumerMasterRow[]> {
   const refresh = options?.refresh ?? false
   const limit = 10000
-  let offset = 0
+
+  if (!refresh) {
+    const cached = await getFromCache<ConsumerMasterRow[]>(CACHE_KEY)
+    if (cached && cached.length > 0) return cached
+  }
+
+  const countRes = await fetch("/api/system/row-count?type=master", { cache: "no-store" })
+  if (!countRes.ok) throw new Error(`Row count check failed (${countRes.status})`)
+  const { count: totalCount } = await countRes.json()
+
+  if (!totalCount || totalCount === 0) return []
+
   let allRows: ConsumerMasterRow[] = []
-  let total = 0
+  let offset = 0
 
-  while (true) {
-    const url = `/api/consumer-master?offset=${offset}&limit=${limit}${refresh && offset === 0 ? "&refresh=true" : ""}`
-    const res = await fetch(url)
-    if (!res.ok) {
-      throw new Error(`Failed to fetch chunk at offset ${offset}`)
-    }
-    
-    const totalHeader = res.headers.get("x-total-count") || res.headers.get("X-Total-Count")
-    if (totalHeader) {
-      total = parseInt(totalHeader, 10)
-    }
+  while (offset < totalCount) {
+    const chunkRes = await fetch(`/api/consumer-master?offset=${offset}&limit=${limit}`, { cache: "no-store" })
+    if (!chunkRes.ok) throw new Error(`Failed to fetch chunk at offset ${offset}`)
+    const chunk: ConsumerMasterRow[] = await chunkRes.json()
 
-    const chunk: ConsumerMasterRow[] = await res.json()
+    if (!Array.isArray(chunk) || chunk.length === 0) break
+
     allRows = allRows.concat(chunk)
+    offset += chunk.length
 
     if (options?.onProgress) {
-      options.onProgress(allRows.length, total || allRows.length)
+      options.onProgress(allRows.length, totalCount)
     }
 
-    if (chunk.length < limit || (total > 0 && allRows.length >= total)) {
-      break
-    }
-    offset += limit
+    if (chunk.length < limit) break
+  }
+
+  if (allRows.length > 0) {
+    await saveToCache(CACHE_KEY, allRows)
   }
 
   return allRows
 }
 
-interface LookupProps {
-  onSelect: (row: ConsumerMasterRow) => void
+export function ConsumerMasterPicker({
+  onSelect,
+  placeholder = "Search by Consumer ID or Name...",
+}: {
+  onSelect: (c: ConsumerMasterRow) => void
   placeholder?: string
-}
-
-export function ConsumerMasterLookup({ onSelect, placeholder = "Search by consumer ID or name…" }: LookupProps) {
-  const [query, setQuery]       = useState("")
-  const [results, setResults]   = useState<ConsumerMasterRow[]>([])
-  const [data, setData]         = useState<ConsumerMasterRow[]>([])
-  const [loading, setLoading]   = useState(false)
+}) {
+  const { toast } = useToast()
+  const [data, setData] = useState<ConsumerMasterRow[]>([])
+  const [query, setQuery] = useState("")
+  const [results, setResults] = useState<ConsumerMasterRow[]>([])
+  const [loading, setLoading] = useState(false)
   const [loadingProgress, setLoadingProgress] = useState("")
-  const [fetched, setFetched]   = useState(false)
-  const { toast }               = useToast()
+  const [fetched, setFetched] = useState(false)
 
-  // Lazy-load from cache, then server
   useEffect(() => {
     if (fetched) return
     ;(async () => {
       setLoading(true)
       try {
         const cached = await getFromCache<ConsumerMasterRow[]>(CACHE_KEY)
-        const age    = await getCacheAgeMs(CACHE_KEY)
-        if (cached && Array.isArray(cached) && cached.length > 0 && typeof age === "number" && age < CACHE_TTL) {
+        if (cached && cached.length > 0) {
           setData(cached)
           setFetched(true)
+          setLoading(false)
           return
         }
+
         const fresh = await fetchMasterInChunks({
           onProgress: (loaded, total) => {
             setLoadingProgress(`Syncing: ${loaded.toLocaleString()} / ${total.toLocaleString()}`)
@@ -128,7 +139,6 @@ export function ConsumerMasterLookup({ onSelect, placeholder = "Search by consum
     })()
   }, [fetched, toast])
 
-  // Debounced search
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const handleQuery = (q: string) => {
     setQuery(q)
@@ -178,199 +188,192 @@ export function ConsumerMasterLookup({ onSelect, placeholder = "Search by consum
   )
 }
 
-// ── Main consumer master page (admin upload + stats) ─────────────────────────
 interface ConsumerMasterProps {
   role: string
+  permissions?: Record<string, string[]>
 }
 
 type ColumnMapping = Partial<Record<keyof ConsumerMasterRow, number>>
 
-export function ConsumerMaster({ role }: ConsumerMasterProps) {
+export function ConsumerMaster({ role, permissions }: ConsumerMasterProps) {
   const { toast } = useToast()
-  const isAdmin   = role === "admin"
+  const isAdmin   = role === "admin" || !!(permissions && (permissions.consumer_master?.includes("create") || permissions.consumer_master?.includes("update")))
 
-  // Upload state
   const [csvHeaders, setCsvHeaders]       = useState<string[]>([])
   const [csvRows, setCsvRows]             = useState<string[][]>([])
   const [fileName, setFileName]           = useState("")
   const [mapping, setMapping]             = useState<ColumnMapping>({})
   const [uploading, setUploading]         = useState(false)
-  const [uploadProgress, setUploadProgress] = useState("") // e.g. "5000 / 15000"
+  const [uploadProgress, setUploadProgress] = useState("")
   const [uploadResult, setUploadResult]   = useState<{ count: number } | null>(null)
 
-  // Stats state
   const [count, setCount]                 = useState<number | null>(null)
   const [cacheAge, setCacheAge]           = useState<number | null>(null)
   const [loadingStats, setLoadingStats]   = useState(false)
   const [syncProgress, setSyncProgress]   = useState("")
 
-  // Search / browse state (for non-admin or after upload)
   const [query, setQuery]                 = useState("")
   const [results, setResults]             = useState<ConsumerMasterRow[]>([])
   const [allData, setAllData]             = useState<ConsumerMasterRow[]>([])
   const [dataLoaded, setDataLoaded]       = useState(false)
   const [selectedConsumer, setSelectedConsumer] = useState<ConsumerMasterRow | null>(null)
   const [showUpload, setShowUpload]       = useState(false)
+  const [showNearbyMap, setShowNearbyMap] = useState(false)
   const timerRef                          = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  useEffect(() => {
-    loadMasterData(false)
-  }, [])
+  const consumersToMap = query.trim() ? results : allData
+  const mappedConsumers = useMemo(() => {
+    return consumersToMap.map(r => ({
+      consumerId: r.consumerId,
+      name: r.name,
+      address: r.address,
+      mobileNumber: r.mobile,
+      latitude: r.latitude,
+      longitude: r.longitude,
+      baseClass: r.baseClass,
+      class: r.baseClass,
+      disconStatus: "Master Record",
+      d2NetOS: "0",
+      mru: r.zone,
+      agency: r.zone,
+    }))
+  }, [consumersToMap])
 
-  async function loadMasterData(force = false) {
+  const loadStats = useCallback(async () => {
     setLoadingStats(true)
     try {
+      const cached = await getFromCache<ConsumerMasterRow[]>(CACHE_KEY)
+      if (cached && cached.length > 0) {
+        setCount(cached.length)
+        setAllData(cached)
+        setDataLoaded(true)
+      } else {
+        const res = await fetch("/api/system/row-count?type=master", { cache: "no-store" })
+        if (res.ok) {
+          const data = await res.json()
+          setCount(data.count ?? null)
+        }
+      }
+
       const age = await getCacheAgeMs(CACHE_KEY)
-      setCacheAge(typeof age === "number" ? age : null)
-      
-      if (!force) {
-        const cached = await getFromCache<ConsumerMasterRow[]>(CACHE_KEY)
-        if (cached && Array.isArray(cached) && cached.length > 0) {
-          setCount(cached.length)
-          setAllData(cached)
-          setDataLoaded(true)
-          setLoadingStats(false)
-          return
-        }
-      }
+      setCacheAge(age)
+    } catch { /* silent */ }
+    finally { setLoadingStats(false) }
+  }, [])
 
-      setDataLoaded(false)
-      const data = await fetchMasterInChunks({
-        refresh: force,
-        onProgress: (loaded, total) => {
-          setSyncProgress(`Syncing: ${loaded.toLocaleString()} / ${total.toLocaleString()}`)
-        }
-      })
-      await saveToCache(CACHE_KEY, data)
-      setCount(data.length)
-      setAllData(data)
-      setDataLoaded(true)
-    } catch (e: any) {
-      toast({ title: "Sync failed", description: e.message, variant: "destructive" })
-    } finally {
-      setLoadingStats(false)
-      setSyncProgress("")
-    }
-  }
+  useEffect(() => { loadStats() }, [loadStats])
 
-  const handleSearch = (q: string) => {
-    setQuery(q)
-    if (timerRef.current) clearTimeout(timerRef.current)
-    timerRef.current = setTimeout(() => {
-      if (!q.trim()) { setResults([]); return }
-      const lower = q.toLowerCase()
-      setResults(
-        allData.filter(r =>
-          r.consumerId.toLowerCase().includes(lower) ||
-          r.name.toLowerCase().includes(lower) ||
-          r.meterNo.toLowerCase().includes(lower)
-        ).slice(0, 100)
-      )
-    }, 200)
-  }
-
-  // ── CSV upload flow ─────────────────────────────────────────────────────────
-  const handleFileDrop = useCallback((file: File) => {
-    Papa.parse<string[]>(file, {
-      header: false,
-      skipEmptyLines: true,
-      complete: (res: Papa.ParseResult<string[]>) => {
-        const rows = res.data as string[][]
-        if (rows.length < 2) { toast({ title: "File has no data rows", variant: "destructive" }); return }
-        const headers = rows[0].map(h => String(h).trim())
-        const data    = rows.slice(1)
-        setCsvHeaders(headers)
-        setCsvRows(data)
-        setFileName(file.name)
-        setMapping({})
-        setUploadResult(null)
-        // Auto-detect common column names
-        const auto: ColumnMapping = {}
-        headers.forEach((h, i) => {
-          const lower = h.toLowerCase().replace(/[\s_-]/g, "")
-          if (lower.includes("consumerid") || lower === "id" || lower === "slno" || lower === "accountno") auto.consumerId = i
-          else if (lower === "name" || lower.includes("consumername")) auto.name = i
-          else if (lower.includes("co") || lower.includes("careof") || lower.includes("fathername")) auto.careOf = i
-          else if (lower.includes("address")) auto.address = i
-          else if (lower.includes("class") || lower.includes("category") || lower.includes("tariff")) auto.baseClass = i
-          else if (lower.includes("meterno") || lower.includes("meter")) auto.meterNo = i
-          else if (lower.includes("zone") || lower.includes("divison") || lower.includes("division")) auto.zone = i
-          else if (lower.includes("mobile") || lower.includes("phone") || lower.includes("contact")) auto.mobile = i
-          else if (lower.includes("lat")) auto.latitude = i
-          else if (lower.includes("lon") || lower.includes("lng")) auto.longitude = i
-        })
-        setMapping(auto)
-      },
-    })
-  }, [toast])
-
-  const handleUpload = async () => {
-    const missing = REQUIRED_FIELDS.filter(f => mapping[f] === undefined)
-    if (missing.length > 0) {
-      toast({ title: `Map required fields: ${missing.map(f => FIELD_LABELS[f]).join(", ")}`, variant: "destructive" })
-      return
-    }
-    setUploading(true)
-    setUploadProgress("")
+  const forceResync = async () => {
+    setSyncProgress("Starting resync…")
     try {
-      const rows: ConsumerMasterRow[] = csvRows.map(r => ({
-        consumerId: String(r[mapping.consumerId!] ?? "").trim(),
-        name:       String(r[mapping.name!]       ?? "").trim(),
-        careOf:     String(r[mapping.careOf   ?? -1] ?? "").trim(),
-        address:    String(r[mapping.address  ?? -1] ?? "").trim(),
-        baseClass:  String(r[mapping.baseClass ?? -1] ?? "").trim(),
-        meterNo:    String(r[mapping.meterNo  ?? -1] ?? "").trim(),
-        zone:       String(r[mapping.zone     ?? -1] ?? "").trim(),
-        mobile:     String(r[mapping.mobile   ?? -1] ?? "").trim(),
-        latitude:   String(r[mapping.latitude ?? -1] ?? "").trim(),
-        longitude:  String(r[mapping.longitude ?? -1] ?? "").trim(),
-      })).filter(r => r.consumerId && r.name)
-
-      // Upload in chunks of 5000 to match server batch size and reduce
-      // round-trips. Each POST call writes its chunk to the sheet.
-      const CHUNK = 5000
-      let serverConfirmed = 0
-      for (let i = 0; i < rows.length; i += CHUNK) {
-        const chunk = rows.slice(i, i + CHUNK)
-        setUploadProgress(`${Math.min(i + chunk.length, rows.length).toLocaleString()} / ${rows.length.toLocaleString()}`)
-        const res = await fetch("/api/consumer-master", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            rows: chunk,
-            clearExisting: i === 0,
-          }),
-        })
-        if (!res.ok) { const e = await res.json(); throw new Error(e.error || "Upload failed") }
-        const result = await res.json()
-        // Use the server-confirmed count (actual rows written to sheet)
-        serverConfirmed += result.count ?? chunk.length
-      }
-      setUploadResult({ count: serverConfirmed })
-      setCount(serverConfirmed)
-      // Refresh IndexedDB cache
-      setUploadProgress("Refreshing cache…")
       const fresh = await fetchMasterInChunks({
         refresh: true,
-        onProgress: (loaded, total) => {
-          setUploadProgress(`Refreshing cache: ${loaded.toLocaleString()} / ${total.toLocaleString()}`)
-        }
+        onProgress: (loaded, total) => setSyncProgress(`Syncing: ${loaded.toLocaleString()} / ${total.toLocaleString()}`)
       })
-      await saveToCache(CACHE_KEY, fresh)
+      setCount(fresh.length)
       setAllData(fresh)
       setDataLoaded(true)
+      const age = await getCacheAgeMs(CACHE_KEY)
+      setCacheAge(age)
+      toast({ title: "Master resynced", description: `${fresh.length.toLocaleString()} rows cached.` })
+    } catch (e: any) {
+      toast({ title: "Resync failed", description: e.message, variant: "destructive" })
+    } finally { setSyncProgress("") }
+  }
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setFileName(file.name)
+    setUploadResult(null)
+
+    Papa.parse<string[]>(file, {
+      skipEmptyLines: true,
+      complete: (res) => {
+        if (res.data.length < 2) {
+          toast({ title: "Invalid CSV", description: "File must contain a header row and at least one data row.", variant: "destructive" })
+          return
+        }
+        const headers = res.data[0].map(h => h.trim())
+        const rows    = res.data.slice(1)
+        setCsvHeaders(headers)
+        setCsvRows(rows)
+
+        const autoMap: ColumnMapping = {}
+        headers.forEach((h, colIdx) => {
+          const lower = h.toLowerCase().replace(/[^a-z0-9]/g, "")
+          if (lower.includes("consumerid") || lower === "id" || lower === "accountno" || lower === "conid" || lower === "consumer") autoMap.consumerId = colIdx
+          else if (lower === "name" || lower.includes("consumername") || lower.includes("custname")) autoMap.name = colIdx
+          else if (lower.includes("careof") || lower === "co" || lower === "fathername") autoMap.careOf = colIdx
+          else if (lower.includes("address") || lower === "addr") autoMap.address = colIdx
+          else if (lower === "class" || lower.includes("baseclass") || lower === "category") autoMap.baseClass = colIdx
+          else if (lower.includes("meter") || lower.includes("deviceno") || lower.includes("serialno")) autoMap.meterNo = colIdx
+          else if (lower === "zone" || lower.includes("subdivision") || lower.includes("mru")) autoMap.zone = colIdx
+          else if (lower.includes("mobile") || lower.includes("phone") || lower.includes("contact")) autoMap.mobile = colIdx
+          else if (lower.includes("lat")) autoMap.latitude = colIdx
+          else if (lower.includes("long") || lower.includes("lng")) autoMap.longitude = colIdx
+        })
+        setMapping(autoMap)
+      },
+      error: (err) => {
+        toast({ title: "Failed to parse CSV", description: err.message, variant: "destructive" })
+      }
+    })
+  }
+
+  const handleUpload = async () => {
+    if (!mapping.consumerId === undefined || mapping.name === undefined) {
+      toast({ title: "Missing required mappings", description: "Consumer ID and Name must be mapped.", variant: "destructive" })
+      return
+    }
+
+    setUploading(true)
+    setUploadProgress("Preparing data…")
+
+    try {
+      const records: ConsumerMasterRow[] = csvRows.map(row => {
+        const getVal = (key: keyof ConsumerMasterRow) => {
+          const colIdx = mapping[key]
+          return colIdx !== undefined ? (row[colIdx] || "").trim() : ""
+        }
+        return {
+          consumerId: getVal("consumerId"),
+          name:       getVal("name"),
+          careOf:     getVal("careOf"),
+          address:    getVal("address"),
+          baseClass:  getVal("baseClass"),
+          meterNo:    getVal("meterNo"),
+          zone:       getVal("zone"),
+          mobile:     getVal("mobile"),
+          latitude:   getVal("latitude"),
+          longitude:  getVal("longitude"),
+        }
+      }).filter(r => r.consumerId && r.name)
+
+      const total = records.length
+      setUploadProgress(`Uploading 0 / ${total.toLocaleString()}…`)
+
+      const res = await fetch("/api/consumer-master", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ records }),
+      })
+
+      if (!res.ok) {
+        const err = await res.json()
+        throw new Error(err.error || "Upload failed")
+      }
+
+      const result = await res.json()
+      setUploadResult({ count: result.count })
+      toast({ title: "Consumer master updated", description: `${result.count.toLocaleString()} records uploaded successfully.` })
+
       setCsvHeaders([])
       setCsvRows([])
       setFileName("")
-      if (serverConfirmed < rows.length) {
-        toast({
-          title: `Partial upload: ${serverConfirmed.toLocaleString()} of ${rows.length.toLocaleString()} written`,
-          description: "Some batches may have failed due to rate limiting. Try uploading the remaining rows again.",
-          variant: "destructive",
-        })
-      } else {
-        toast({ title: `Uploaded ${serverConfirmed.toLocaleString()} consumers successfully` })
-      }
+      setShowUpload(false)
+
+      await forceResync()
     } catch (e: any) {
       toast({ title: "Upload failed", description: e.message, variant: "destructive" })
     } finally {
@@ -379,288 +382,298 @@ export function ConsumerMaster({ role }: ConsumerMasterProps) {
     }
   }
 
-  const formatAge = (ms: number) => {
-    const h = Math.floor(ms / 3600000)
-    const m = Math.floor((ms % 3600000) / 60000)
-    if (h > 0) return `${h}h ${m}m ago`
-    return `${m}m ago`
+  const ensureDataLoaded = async () => {
+    if (dataLoaded) return allData
+    const data = await fetchMasterInChunks()
+    setAllData(data)
+    setDataLoaded(true)
+    return data
+  }
+
+  const handleSearch = async (q: string) => {
+    setQuery(q)
+    if (timerRef.current) clearTimeout(timerRef.current)
+    if (!q.trim()) { setResults([]); return }
+
+    timerRef.current = setTimeout(async () => {
+      const master = await ensureDataLoaded()
+      const lower = q.toLowerCase()
+      setResults(
+        master.filter(r =>
+          r.consumerId.toLowerCase().includes(lower) ||
+          r.name.toLowerCase().includes(lower)        ||
+          r.meterNo.toLowerCase().includes(lower)     ||
+          r.address.toLowerCase().includes(lower)    ||
+          r.mobile.includes(lower)
+        ).slice(0, 100)
+      )
+    }, 200)
+  }
+
+  const formatAge = (ms: number | null) => {
+    if (ms === null) return "Not cached"
+    const mins = Math.floor(ms / 60000)
+    if (mins < 60) return `${mins} min ago`
+    const hours = Math.floor(mins / 60)
+    if (hours < 24) return `${hours} hrs ago`
+    return `${Math.floor(hours / 24)} days ago`
   }
 
   return (
-    <div className="space-y-4">
-      {/* Header + stats */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border shadow-sm">
         <div>
-          <h2 className="text-xl font-bold">Consumer Master</h2>
-          <p className="text-sm text-muted-foreground">
-            {loadingStats 
-              ? (syncProgress || "Loading…")
-              : count !== null ? `${count.toLocaleString()} consumers loaded${cacheAge !== null ? " · cached " + formatAge(cacheAge) : ""}`
-              : "No data yet"}
+          <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+            <Database className="h-5 w-5 text-blue-600" /> Consumer Master Database
+          </h2>
+          <p className="text-xs text-slate-500 mt-1">
+            Central repository of all consumers for account lookups, meter verification, and GIS pole coordinates
           </p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={() => { loadMasterData(true) }} disabled={loadingStats}>
-            Refresh Cache
+        
+        <div className="flex items-center gap-2 flex-wrap">
+          {isAdmin && (
+            <Button
+              onClick={() => setShowUpload(!showUpload)}
+              className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs h-9 rounded-xl px-4 flex items-center gap-2 shadow-sm"
+            >
+              <Upload className="h-4 w-4" /> {showUpload ? "Close Upload" : "Upload Bulk Master"}
+            </Button>
+          )}
+
+          <Button
+            variant="outline"
+            onClick={forceResync}
+            disabled={!!syncProgress}
+            className="text-xs h-9 rounded-xl border-slate-200 hover:bg-slate-50 font-semibold text-slate-700"
+          >
+            <Activity className={`h-4 w-4 mr-1.5 ${syncProgress ? "animate-spin text-blue-600" : "text-slate-500"}`} />
+            {syncProgress || "Resync Local Cache"}
           </Button>
         </div>
       </div>
 
-      {/* Search section — always on top */}
-      <div className="bg-white rounded-xl shadow-sm border p-4 space-y-3">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 h-4 w-4" />
-          <Input
-            placeholder="Search by consumer ID, name, or meter number…"
-            value={query}
-            onChange={e => handleSearch(e.target.value)}
-            className="pl-10 pr-8 rounded-xl h-11 text-base"
-          />
-          {query && <X className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-red-500 cursor-pointer" onClick={() => { setQuery(""); setResults([]) }} />}
-        </div>
-        {results.length > 0 && (
-          <div className="space-y-2 max-h-[60vh] overflow-y-auto">
-            {results.map((r, i) => (
-              <div key={i}
-                className="border rounded-xl p-3 cursor-pointer hover:shadow-md hover:border-blue-200 transition-all duration-200 bg-white"
-                onClick={() => setSelectedConsumer(r)}
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <User className="h-4 w-4 text-gray-400 shrink-0" />
-                      <span className="font-semibold text-gray-900 truncate">{r.name}</span>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5 ml-6">
-                      <span className="text-xs font-mono text-gray-500">{r.consumerId}</span>
-                      {r.meterNo && (
-                        <span className="text-xs text-gray-500 flex items-center gap-1">
-                          <Monitor className="h-3 w-3" />{r.meterNo}
-                        </span>
-                      )}
-                      {r.mobile && (
-                        <span className="text-xs text-blue-600 flex items-center gap-1">
-                          <Phone className="h-3 w-3" />{r.mobile}
-                        </span>
-                      )}
-                    </div>
-                    {r.address && (
-                      <div className="flex items-start gap-1.5 mt-1 ml-6">
-                        <MapPin className="h-3 w-3 text-gray-400 mt-0.5 shrink-0" />
-                        <span className="text-xs text-gray-500 line-clamp-1">{r.address}</span>
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex flex-col items-end gap-1 shrink-0">
-                    {r.baseClass && <Badge variant="outline" className="text-[10px] rounded-full">{r.baseClass}</Badge>}
-                    {r.zone && <Badge variant="secondary" className="text-[10px] rounded-full">{r.zone}</Badge>}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-        {query && results.length === 0 && dataLoaded && (
-          <p className="text-sm text-muted-foreground text-center py-4">No consumers matched &quot;{query}&quot;.</p>
-        )}
-        {!dataLoaded && (
-          <p className="text-sm text-muted-foreground text-center py-2">Loading data…</p>
-        )}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <Card className="bg-white border-slate-200/80 shadow-sm rounded-2xl">
+          <CardContent className="p-4 flex items-center justify-between">
+            <div>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Master Records</p>
+              <h3 className="text-2xl font-black text-slate-900 mt-0.5">
+                {count !== null ? count.toLocaleString() : "—"}
+              </h3>
+            </div>
+            <div className="h-10 w-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
+              <Database className="h-5 w-5" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-white border-slate-200/80 shadow-sm rounded-2xl">
+          <CardContent className="p-4 flex items-center justify-between">
+            <div>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Local IndexedDB Cache</p>
+              <h3 className="text-sm font-bold text-slate-700 mt-1">
+                {formatAge(cacheAge)}
+              </h3>
+            </div>
+            <div className="h-10 w-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
+              <ShieldCheck className="h-5 w-5" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-white border-slate-200/80 shadow-sm rounded-2xl">
+          <CardContent className="p-4 flex items-center justify-between">
+            <div>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Storage Sync Status</p>
+              <h3 className="text-xs font-bold text-emerald-700 mt-1 flex items-center gap-1">
+                <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" /> Active & Optimized
+              </h3>
+            </div>
+            <div className="h-10 w-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center font-bold">
+              <Layers className="h-5 w-5" />
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
-      {/* Upload section (admin only) — collapsible */}
-      {isAdmin && (
-        <div className="border rounded-xl overflow-hidden">
-          <button
-            className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100 transition-colors text-sm font-medium text-gray-700"
-            onClick={() => setShowUpload(!showUpload)}
-          >
-            <span className="flex items-center gap-2"><Upload className="h-4 w-4" />Upload Consumer Data (CSV)</span>
-            {showUpload ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-          </button>
-          {showUpload && (
-            <div className="p-4 space-y-4 border-t bg-white">
-              <div className="flex justify-end">
-                <Button
-                  size="sm" variant="outline"
-                  onClick={() => {
-                    const headers = ["Consumer ID", "Name", "C/O", "Address", "Class", "Meter No", "Zone", "Mobile", "Latitude", "Longitude"]
-                    const sample  = ["100000001", "John Doe", "Father Name", "Village / Ward / Block / District", "LT Domestic", "OLDMTR001", "Zone A", "9876543210", "25.123456", "88.654321"]
-                    const csv     = [headers, sample].map(r => r.join(",")).join("\n")
-                    const blob    = new Blob([csv], { type: "text/csv" })
-                    const url     = URL.createObjectURL(blob)
-                    const a       = document.createElement("a")
-                    a.href        = url
-                    a.download    = "consumer_master_template.csv"
-                    a.click()
-                    URL.revokeObjectURL(url)
-                  }}
-                >
-                  Download Template
-                </Button>
-              </div>
-              <div
-                className="border-2 border-dashed rounded-lg p-6 text-center cursor-pointer hover:border-primary transition-colors"
-                onClick={() => document.getElementById("cm-file-input")?.click()}
-                onDragOver={e => e.preventDefault()}
-                onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) handleFileDrop(f) }}
-              >
-                <input
-                  id="cm-file-input"
-                  type="file"
-                  accept=".csv"
-                  className="hidden"
-                  onChange={e => { const f = e.target.files?.[0]; if (f) handleFileDrop(f) }}
-                />
-                {fileName
-                  ? <p className="font-medium">{fileName} <span className="text-muted-foreground text-sm">— {csvRows.length.toLocaleString()} rows</span></p>
-                  : <p className="text-muted-foreground">Drop a CSV here or click to choose</p>}
-              </div>
+      {showUpload && isAdmin && (
+        <Card className="bg-white border-blue-200 shadow-md rounded-2xl overflow-hidden">
+          <CardHeader className="bg-blue-50/50 border-b border-blue-100 pb-3">
+            <CardTitle className="text-base font-bold text-slate-900 flex items-center gap-2">
+              <Upload className="h-4 w-4 text-blue-600" /> Upload Master CSV / Excel Export
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-5 space-y-4">
+            <div className="space-y-2">
+              <Label className="text-xs font-bold text-slate-600">Select File (.csv)</Label>
+              <Input
+                type="file"
+                accept=".csv"
+                onChange={handleFileChange}
+                disabled={uploading}
+                className="h-10 rounded-xl border-slate-200 text-xs"
+              />
+              {fileName && <p className="text-xs text-slate-500 font-mono">Selected: {fileName} ({csvRows.length.toLocaleString()} rows)</p>}
+            </div>
 
-              {/* Column mapping */}
-              {csvHeaders.length > 0 && (
-                <div className="space-y-3">
-                  <p className="text-sm font-medium">Map CSV columns to fields (<span className="text-red-500">*</span> required)</p>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                    {(Object.keys(FIELD_LABELS) as (keyof ConsumerMasterRow)[]).map(field => (
-                      <div key={field} className="space-y-1">
-                        <Label className="text-xs">
-                          {FIELD_LABELS[field]}
-                          {REQUIRED_FIELDS.includes(field) && <span className="text-red-500 ml-1">*</span>}
-                        </Label>
-                        <Select
-                          value={mapping[field] !== undefined ? String(mapping[field]) : "__none"}
-                          onValueChange={v => setMapping(prev => {
-                            const next = { ...prev }
-                            if (v === "__none") delete next[field]
-                            else next[field] = Number(v)
-                            return next
-                          })}
-                        >
-                          <SelectTrigger className="h-8 text-xs">
-                            <SelectValue placeholder="— skip —" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="__none">— skip —</SelectItem>
-                            {csvHeaders.map((h, i) => (
-                              <SelectItem key={i} value={String(i)}>{h}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Preview */}
-                  {csvRows.length > 0 && mapping.consumerId !== undefined && mapping.name !== undefined && (
-                    <div className="text-xs border rounded p-2 bg-muted space-y-1">
-                      <p className="font-medium">Preview (first 3 rows):</p>
-                      {csvRows.slice(0, 3).map((r, i) => (
-                        <p key={i} className="text-muted-foreground truncate">
-                          {String(r[mapping.consumerId!] ?? "").trim()} — {String(r[mapping.name!] ?? "").trim()}
-                          {mapping.address !== undefined && ` — ${String(r[mapping.address] ?? "").trim()}`}
-                        </p>
-                      ))}
+            {csvHeaders.length > 0 && (
+              <div className="space-y-3 pt-2">
+                <p className="text-xs font-bold text-slate-800 uppercase tracking-wider">Map CSV Columns to Fields</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 bg-slate-50 p-4 rounded-xl border border-slate-200">
+                  {(Object.keys(FIELD_LABELS) as (keyof ConsumerMasterRow)[]).map((field) => (
+                    <div key={field} className="space-y-1">
+                      <Label className="text-[11px] font-semibold text-slate-700">
+                        {FIELD_LABELS[field]} {REQUIRED_FIELDS.includes(field) && <span className="text-red-500">*</span>}
+                      </Label>
+                      <Select
+                        value={mapping[field] !== undefined ? String(mapping[field]) : "unmapped"}
+                        onValueChange={(val) => setMapping(prev => ({ ...prev, [field]: val === "unmapped" ? undefined : Number(val) }))}
+                      >
+                        <SelectTrigger className="h-8 rounded-lg text-xs bg-white border-slate-200">
+                          <SelectValue placeholder="-- Select --" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="unmapped" className="text-xs text-slate-400">-- Ignore --</SelectItem>
+                          {csvHeaders.map((h, colIdx) => (
+                            <SelectItem key={colIdx} value={String(colIdx)} className="text-xs">
+                              Col {colIdx + 1}: {h}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
-                  )}
-
-                  <div className="flex items-center gap-3">
-                    <Button onClick={handleUpload} disabled={uploading}>
-                      {uploading
-                        ? (uploadProgress ? `Uploading ${uploadProgress}…` : "Preparing…")
-                        : `Upload ${csvRows.length.toLocaleString()} rows`}
-                    </Button>
-                    {uploadResult && (
-                      <Badge variant="default">{uploadResult.count.toLocaleString()} uploaded</Badge>
-                    )}
-                    <p className="text-xs text-muted-foreground">This replaces all existing consumer data.</p>
-                  </div>
+                  ))}
                 </div>
-              )}
+
+                <div className="flex justify-end gap-2 pt-2">
+                  <Button
+                    onClick={handleUpload}
+                    disabled={uploading}
+                    className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs h-10 px-6 rounded-xl shadow-sm"
+                  >
+                    {uploading ? uploadProgress || "Uploading…" : "Start Master Import"}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      <Card className="bg-white border-slate-200/80 shadow-sm rounded-2xl overflow-hidden">
+        <CardHeader className="border-b border-slate-100 pb-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <CardTitle className="text-base font-bold text-slate-900">
+              Search Consumer Master Records
+            </CardTitle>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={async () => {
+                await ensureDataLoaded()
+                setShowNearbyMap(v => !v)
+              }}
+              className="h-8 rounded-xl border-blue-200 text-blue-700 bg-blue-50/50 hover:bg-blue-100 text-xs font-bold gap-1.5"
+            >
+              <MapPin className="h-3.5 w-3.5" />
+              {showNearbyMap ? "Hide Radar Map" : "Open GIS Pole Map"}
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="p-5 space-y-4">
+          <div className="relative">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 h-4 w-4" />
+            <Input
+              placeholder="Search by Consumer ID, Name, Meter No, Address, or Mobile..."
+              value={query}
+              onChange={(e) => handleSearch(e.target.value)}
+              className="pl-10 pr-10 h-11 rounded-xl border-slate-200 text-sm font-medium focus-visible:ring-blue-600"
+            />
+            {query && (
+              <X
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 h-4 w-4 cursor-pointer"
+                onClick={() => handleSearch("")}
+              />
+            )}
+          </div>
+
+          {showNearbyMap && (
+            <div className="space-y-2 border border-slate-200 rounded-2xl p-2 bg-slate-50">
+              <p className="text-xs font-bold text-slate-700 px-2 py-1 flex items-center justify-between">
+                <span>GIS Consumer Radar ({mappedConsumers.length.toLocaleString()} locations)</span>
+                <span className="text-[10px] text-slate-400 font-normal">Tap markers to inspect consumer details</span>
+              </p>
+              <NearbyConsumerMap consumers={mappedConsumers as any} onClose={() => setShowNearbyMap(false)} />
             </div>
           )}
-        </div>
-      )}
 
-      {/* ── Consumer detail popup ─────────────────────────────────────── */}
-      {selectedConsumer && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center" onClick={() => setSelectedConsumer(null)}>
-          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
-          <div className="relative bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-lg max-h-[85vh] overflow-y-auto shadow-2xl animate-in slide-in-from-bottom duration-200 m-0 sm:m-4"
-            onClick={e => e.stopPropagation()}>
-            {/* Close button */}
-            <button className="absolute top-3 right-3 z-10 h-8 w-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center transition-colors"
-              onClick={() => setSelectedConsumer(null)}>
-              <X className="h-4 w-4 text-gray-600" />
-            </button>
-
-            {/* Header */}
-            <div className="bg-gradient-to-br from-blue-600 to-blue-700 text-white p-5 rounded-t-2xl">
-              <p className="text-lg font-bold">{selectedConsumer.name}</p>
-              {selectedConsumer.careOf && <p className="text-blue-200 text-sm mt-0.5">C/O {selectedConsumer.careOf}</p>}
-              <p className="text-blue-200 text-xs font-mono mt-1">{selectedConsumer.consumerId}</p>
+          {query.trim() && (
+            <div className="text-xs font-bold text-slate-500">
+              Found {results.length} matching records {results.length >= 100 && "(Showing top 100)"}
             </div>
+          )}
 
-            {/* Details */}
-            <div className="p-5 space-y-4">
-              {/* Quick action buttons */}
-              <div className="flex gap-2">
-                {selectedConsumer.mobile && (
-                  <a href={`tel:${selectedConsumer.mobile}`}
-                    className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-green-50 text-green-700 rounded-xl text-sm font-semibold border border-green-200 hover:bg-green-100 transition-colors">
-                    <Phone className="h-4 w-4" /> Call
-                  </a>
-                )}
-                {selectedConsumer.latitude && selectedConsumer.longitude && (
-                  <a href={`https://www.google.com/maps?q=${selectedConsumer.latitude},${selectedConsumer.longitude}`}
-                    target="_blank" rel="noopener noreferrer"
-                    className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-blue-50 text-blue-700 rounded-xl text-sm font-semibold border border-blue-200 hover:bg-blue-100 transition-colors">
-                    <Map className="h-4 w-4" /> Map
-                  </a>
-                )}
-              </div>
-
-              {/* Info rows */}
-              <div className="space-y-3">
-                {[
-                  { icon: <MapPin className="h-4 w-4" />, label: "Address", value: selectedConsumer.address },
-                  { icon: <Monitor className="h-4 w-4" />, label: "Meter No", value: selectedConsumer.meterNo },
-                  { icon: <Phone className="h-4 w-4" />, label: "Mobile", value: selectedConsumer.mobile },
-                ].filter(row => row.value).map(row => (
-                  <div key={row.label} className="flex items-start gap-3 py-2 border-b border-gray-50 last:border-0">
-                    <div className="h-8 w-8 rounded-lg bg-gray-100 flex items-center justify-center text-gray-500 shrink-0">{row.icon}</div>
-                    <div className="min-w-0">
-                      <p className="text-[10px] uppercase tracking-wider text-gray-400 font-semibold">{row.label}</p>
-                      <p className="text-sm text-gray-900 font-medium break-words">{row.value}</p>
+          {results.length > 0 && (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 pt-1">
+              {results.map((c) => (
+                <Card key={c.consumerId} className="border border-slate-200/90 shadow-none hover:shadow-md transition-all rounded-xl overflow-hidden bg-slate-50/40 hover:bg-white">
+                  <CardContent className="p-4 space-y-2.5">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <span className="font-mono text-[11px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md">
+                          {c.consumerId}
+                        </span>
+                        <h4 className="font-bold text-slate-900 text-sm mt-1 leading-snug">{c.name}</h4>
+                        {c.careOf && <p className="text-xs text-slate-500">C/O {c.careOf}</p>}
+                      </div>
+                      {c.baseClass && (
+                        <Badge variant="outline" className="text-[10px] uppercase font-bold text-slate-600 border-slate-200">
+                          {c.baseClass}
+                        </Badge>
+                      )}
                     </div>
-                  </div>
-                ))}
-                {/* Badges row */}
-                <div className="flex flex-wrap gap-2 pt-1">
-                  {selectedConsumer.baseClass && <Badge variant="outline" className="rounded-full">{selectedConsumer.baseClass}</Badge>}
-                  {selectedConsumer.zone && <Badge variant="secondary" className="rounded-full">{selectedConsumer.zone}</Badge>}
-                </div>
-                {/* Lat/Long */}
-                {selectedConsumer.latitude && selectedConsumer.longitude && (
-                  <div className="flex items-start gap-3 py-2">
-                    <div className="h-8 w-8 rounded-lg bg-gray-100 flex items-center justify-center text-gray-500 shrink-0"><Map className="h-4 w-4" /></div>
-                    <div>
-                      <p className="text-[10px] uppercase tracking-wider text-gray-400 font-semibold">Coordinates</p>
-                      <p className="text-sm text-gray-900 font-mono">{selectedConsumer.latitude}, {selectedConsumer.longitude}</p>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
 
-            {/* Bottom close */}
-            <div className="p-4 border-t">
-              <Button variant="outline" className="w-full rounded-xl" onClick={() => setSelectedConsumer(null)}>Close</Button>
+                    <div className="text-xs text-slate-600 space-y-1">
+                      <div className="flex items-start gap-1.5">
+                        <MapPin className="h-3.5 w-3.5 text-slate-400 shrink-0 mt-0.5" />
+                        <span className="line-clamp-2">{c.address}</span>
+                      </div>
+                      {c.mobile && (
+                        <div className="flex items-center gap-1.5 text-blue-600 font-mono font-semibold">
+                          <Smartphone className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                          <a href={`tel:${c.mobile}`} className="hover:underline">{c.mobile}</a>
+                        </div>
+                      )}
+                      {c.meterNo && (
+                        <div className="flex items-center gap-1.5 text-purple-700 font-mono font-semibold">
+                          <Gauge className="h-3.5 w-3.5 text-purple-400 shrink-0" />
+                          Meter: {c.meterNo}
+                        </div>
+                      )}
+                    </div>
+
+                    {c.latitude && c.longitude && (
+                      <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px]">
+                        <span className="font-mono text-slate-400 font-medium">GPS: {c.latitude}, {c.longitude}</span>
+                        <a
+                          href={`https://www.google.com/maps?q=${c.latitude},${c.longitude}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-600 font-bold hover:underline inline-flex items-center gap-1"
+                        >
+                          Maps <ExternalLink className="h-3 w-3" />
+                        </a>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              ))}
             </div>
-          </div>
-        </div>
-      )}
+          )}
+        </CardContent>
+      </Card>
     </div>
   )
 }
-

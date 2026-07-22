@@ -9,9 +9,93 @@ export interface AuthResult {
   session?: any
 }
 
+// Module key normalizer to handle aliases (e.g. meter_replacement -> meter, dtr_painting -> dtr)
+function getModulePermKeys(module: string): string[] {
+  const norm = module.toLowerCase().trim().replace(/-/g, "_")
+  const keys = [norm]
+
+  if (norm === "meter_replacement" || norm === "meter") {
+    keys.push("meter_replacement", "meter")
+  }
+  if (norm === "dtr_painting" || norm === "dtr") {
+    keys.push("dtr_painting", "dtr")
+  }
+  if (norm === "disconnection" || norm === "consumer_master") {
+    keys.push("disconnection", "consumer_master")
+  }
+
+  return Array.from(new Set(keys))
+}
+
+/**
+ * Automatically expands legacy "update" permissions into site vs. office sub-actions
+ * so existing 200+ users across 58 CCCs experience zero disruption.
+ */
+export function expandRolePermissions(roleName: string, perms: Record<string, string[]> | null): Record<string, string[]> {
+  if (!perms) return {}
+  const roleLower = (roleName || "").toLowerCase()
+  const isAgency = roleLower === "agency" || roleLower.includes("agency")
+  const isAdminOrExec = roleLower === "admin" || roleLower === "executive" || roleLower === "superuser"
+
+  const expanded: Record<string, string[]> = {}
+
+  for (const [mod, list] of Object.entries(perms)) {
+    const actSet = new Set(list || [])
+
+    // NSC Auto-Expansion
+    if (mod === "nsc") {
+      if (actSet.has("update")) {
+        if (isAgency) {
+          actSet.add("inspect")
+          actSet.add("agency_complete")
+        } else {
+          actSet.add("inspect")
+          actSet.add("process")
+          actSet.add("project_create")
+          actSet.add("po_entry")
+          actSet.add("admin_approve")
+        }
+      }
+      if (isAdminOrExec) {
+        actSet.add("inspect")
+        actSet.add("process")
+        actSet.add("project_create")
+        actSet.add("po_entry")
+        actSet.add("admin_approve")
+      }
+    }
+
+    // Meter Replacement Auto-Expansion
+    if (mod === "meter" || mod === "meter_replacement") {
+      if (actSet.has("update")) {
+        if (isAgency) {
+          actSet.add("install")
+        } else {
+          actSet.add("create")
+          actSet.add("issue")
+          actSet.add("install")
+          actSet.add("return")
+          actSet.add("finalize")
+        }
+      }
+      if (isAdminOrExec) {
+        actSet.add("create")
+        actSet.add("issue")
+        actSet.add("install")
+        actSet.add("return")
+        actSet.add("finalize")
+      }
+    }
+
+    expanded[mod] = Array.from(actSet)
+  }
+
+  return expanded
+}
+
 /**
  * Verifies if the active session has the requested module permission.
- * Admins bypass all checks.
+ * Admins & Superusers bypass all checks.
  */
 export async function checkApiPermission(module: string, action: string | string[]): Promise<AuthResult> {
   const session = await verifySession()
@@ -24,20 +108,29 @@ export async function checkApiPermission(module: string, action: string | string
     return { authorized: false, error: "Subscription required", status: 402, session }
   }
 
-  // Admin bypass
-  if (session.role === "admin") {
+  const userRoleLower = (session.role || "").toLowerCase()
+  // Admin & Superuser bypass
+  if (userRoleLower === "admin" || userRoleLower === "superuser") {
     return { authorized: true, session }
   }
 
   try {
     const tenantConfig = await getTenantConfig(session.cccCode)
     // Load permissions for session role
-    const permissions = await roleStorage.getPermissionsForRole(session.role, tenantConfig.spreadsheetId)
-    if (!permissions) {
+    const rawPermissions = await roleStorage.getPermissionsForRole(session.role, tenantConfig.spreadsheetId)
+    if (!rawPermissions) {
       return { authorized: false, error: `Forbidden: Role '${session.role}' not configured`, status: 403, session }
     }
+    const permissions = expandRolePermissions(session.role, rawPermissions)
 
-    const modulePerms = permissions[module] || permissions[module.replace(/-/g, "_")] || []
+    const possibleKeys = getModulePermKeys(module)
+    let modulePerms: string[] = []
+    for (const key of possibleKeys) {
+      if (permissions[key] && permissions[key].length > 0) {
+        modulePerms = [...modulePerms, ...permissions[key]]
+      }
+    }
+
     const actions = Array.isArray(action) ? action : [action]
     const hasAccess = actions.some(act => modulePerms.includes(act))
 
@@ -57,7 +150,8 @@ export async function checkApiPermission(module: string, action: string | string
  */
 export function isAgencyScopeRestricted(session: any, recordAgency: string | undefined): boolean {
   if (!session) return true
-  if (session.role === "admin") return false // Admins are never restricted
+  const roleLower = (session.role || "").toLowerCase()
+  if (roleLower === "admin" || roleLower === "superuser") return false // Admins are never restricted
 
   // If user has assigned agencies (e.g. Agency, Executive roles), enforce they can only see/update theirs
   if (session.agencies && session.agencies.length > 0) {
@@ -69,7 +163,7 @@ export function isAgencyScopeRestricted(session: any, recordAgency: string | und
   }
 
   // If the user has no assigned agencies but has a role like agency, it should restrict them by default
-  if (session.role === "agency") {
+  if (roleLower === "agency") {
     return true
   }
 

@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea"
 import {
   ArrowLeft, Upload, Camera, MapPin, Power, Clock, CircleX, Check, RotateCcw,
   Smartphone, IndianRupee, Box, Monitor, AlertCircle, Calendar, Loader2, History,
-  PlusCircle, PowerOff, Wallet, Footprints, Trash2, Image as ImageIcon
+  PlusCircle, PowerOff, Wallet, Footprints, Trash2, Image as ImageIcon, Lock
 } from "lucide-react"
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
@@ -27,9 +27,14 @@ interface ConsumerFormProps {
   onCancel: () => void
   userRole: string
   availableAgencies: string[]
+  permissions?: Record<string, string[]>
 }
 
-export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAgencies }: ConsumerFormProps) {
+export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAgencies, permissions }: ConsumerFormProps) {
+  const isReadOnly = permissions
+    ? !(permissions.disconnection?.includes("update") || permissions.consumer_master?.includes("update"))
+    : (userRole === "viewer" || userRole === "reader")
+
   const [formData, setFormData] = useState({
     ...consumer,
     notes: consumer.notes || "",
@@ -147,16 +152,15 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
 
   // --- 2. UPLOAD TO SERVER ---
   const handleUpload = async (file: File) => {
+    if (isReadOnly) return
     // Create immediate preview
-    const objectUrl = URL.createObjectURL(file)
-    setPreviewUrl(objectUrl)
-
+    const localUrl = URL.createObjectURL(file)
+    setPreviewUrl(localUrl)
     setUploading(true)
+
     try {
-      // Process: Watermark -> Compress
       const processedFile = await processImage(file)
-      
-      setFormData(prev => ({ ...prev, image: processedFile })) // Save file to state for immediate UI feedback
+      setFormData(prev => ({ ...prev, image: processedFile }))
 
       const uploadData = new FormData()
       uploadData.append("file", processedFile)
@@ -165,13 +169,16 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
       const response = await fetch("/api/upload-image", { method: "POST", body: uploadData })
       const result = await response.json()
 
-      if (result.success) {
+      if (result.success || result.url) {
         setFormData(prev => ({ ...prev, imageUrl: result.url }))
-        // Keep local previewUrl active for immediate feedback
+      } else {
+        alert("Upload failed. Please try again.")
+        setPreviewUrl(null)
       }
     } catch (error) {
       console.error("Upload failed", error)
       alert("Image upload failed. Please try again.")
+      setPreviewUrl(null)
     } finally {
       setUploading(false)
     }
@@ -179,18 +186,14 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
 
   // --- 3. CAMERA LOGIC ---
   const startCamera = async () => {
-    if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
+    if (isReadOnly) return
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "environment" }, // Use back camera
+        video: { facingMode: "environment" },
       })
-
-      // store stream and activate camera UI first, then attach the stream to the video
       mediaStreamRef.current = stream
       setCameraActive(true)
 
-      // Wait for the video element to mount, then attach stream
-      // use requestAnimationFrame to schedule attachment on next paint
       requestAnimationFrame(() => {
         if (videoRef.current) videoRef.current.srcObject = stream
       })
@@ -201,6 +204,7 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
   }
 
   const capturePhoto = () => {
+    if (isReadOnly) return
     if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
     const video = videoRef.current
     if (!video) return
@@ -235,12 +239,14 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
   }
 
   const handleStatusUpdate = (status: string) => {
+    if (isReadOnly) return
     if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
     const now = new Date();
     const formattedDate = now.toLocaleDateString("en-GB").replace(/\//g, "-");
     setFormData((prev) => ({ ...prev, disconStatus: status, disconDate: formattedDate }));
     setStatusChanged(true);
   }
+
   const getStatusChipStyle = (status: string, isActive: boolean) => {
     const base = "h-11 rounded-xl text-xs font-bold transition-all duration-200 border-2 flex items-center justify-center gap-1.5 flex-1"
     if (!isActive) {
@@ -266,6 +272,7 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
+    if (isReadOnly) return
     if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
     e.preventDefault();
 
@@ -299,17 +306,46 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
   return (
     <div className="max-w-3xl mx-auto px-4 py-4 md:px-6 space-y-5 pb-28 min-w-0 overflow-x-hidden bg-[#F8FAFC]">
       
-      {/* Header */}
-      <div className="flex items-center gap-2 mb-2">
-        <Button variant="ghost" size="icon" onClick={() => {
-          if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
-          onCancel()
-        }} className="rounded-full hover:bg-slate-100 h-9 w-9">
+      {/* Hidden File Input */}
+      <input 
+        type="file" 
+        ref={fileInputRef} 
+        className="hidden" 
+        accept="image/*"
+        onChange={(e) => {
+          const file = e.target.files?.[0]
+          if (file) handleUpload(file)
+        }}
+      />
+
+      {/* --- HEADER --- */}
+      <div className="flex items-center justify-between">
+        <Button 
+          variant="ghost" 
+          size="sm" 
+          onClick={() => {
+            if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
+            onCancel()
+          }}
+          className="rounded-full hover:bg-slate-100 h-9 w-9 p-0"
+        >
           <ArrowLeft className="h-5 w-5 text-slate-700" />
         </Button>
-        <h1 className="text-xl font-bold text-slate-900 flex-1">Update Consumer</h1>
-        <Button type="button" variant="outline" size="sm" onClick={loadHistory}
-          className="flex items-center gap-1.5 text-xs font-bold rounded-xl border-slate-200 hover:bg-slate-50">
+        <div className="flex items-center gap-2">
+          <h1 className="text-xl font-bold text-slate-900">Update Consumer</h1>
+          {isReadOnly && (
+            <Badge variant="outline" className="bg-amber-50 text-amber-800 border-amber-300 gap-1 text-[11px]">
+              <Lock className="h-3 w-3" /> Read Only Mode
+            </Badge>
+          )}
+        </div>
+        <Button 
+          type="button" 
+          variant="outline" 
+          size="sm" 
+          onClick={loadHistory}
+          className="flex items-center gap-1.5 text-xs font-bold rounded-xl border-slate-200 hover:bg-slate-50"
+        >
           <History className="h-3.5 w-3.5" />
           History
         </Button>
@@ -331,56 +367,29 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
           )}
           {!historyLoading && historyEntries.length > 0 && (
             <div className="mt-2 relative pl-5">
-              {/* vertical timeline rail */}
               <span className="absolute left-[9px] top-1 bottom-1 w-px bg-gray-200" aria-hidden />
               <div className="space-y-3">
                 {historyEntries.map((h, i) => {
                   const meta = eventMeta(h)
                   const Icon = meta.Icon
                   return (
-                    <div key={i} className="relative border rounded-lg p-3 space-y-2 bg-gray-50 text-slate-800">
-                      {/* timeline node */}
-                      <span className={`absolute -left-[18px] top-3 h-5 w-5 rounded-full flex items-center justify-center ${meta.ring}`}>
-                        <Icon className={`h-3 w-3 ${meta.color}`} />
+                    <div key={i} className="relative flex items-start gap-3 text-xs">
+                      <span className={`absolute -left-5 top-0.5 w-4 h-4 rounded-full ${meta.ring} flex items-center justify-center`}>
+                        <Icon className={`w-2.5 h-2.5 ${meta.color}`} />
                       </span>
-                      <div className="flex items-center justify-between gap-2 flex-wrap">
-                        <span className={`text-xs font-semibold ${meta.color}`}>{meta.label}</span>
-                        <span className="text-[10px] font-mono text-slate-400">{h.timestamp}</span>
-                      </div>
-                      <div className="flex items-center gap-2 text-xs flex-wrap">
-                        {h.oldStatus && (
-                          <span className="bg-red-100 text-red-700 px-2 py-0.5 rounded-full">{h.oldStatus}</span>
-                        )}
-                        {h.newStatus && h.newStatus !== h.oldStatus && (
-                          <>
-                            <span className="text-gray-400">→</span>
-                            <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded-full">{h.newStatus}</span>
-                          </>
-                        )}
-                        {h.amount && Number(h.amount) > 0 && (
-                          <span className="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-medium">₹{Number(h.amount).toLocaleString("en-IN")}</span>
-                        )}
-                        {h.oldOsd && (
-                          <span className="text-slate-500 font-medium">OSD: ₹{Number(h.oldOsd).toLocaleString("en-IN")}</span>
-                        )}
-                        {h.eventDate && <span className="text-slate-455">on {h.eventDate}</span>}
-                      </div>
-                      {h.oldNotes && (
-                        <p className="text-xs text-slate-600 italic">Remarks: {h.oldNotes}</p>
-                      )}
-                      <div className="flex items-center justify-between mt-1">
-                        {h.oldImageUrl ? (
-                          <a
-                            href={getValidUrl(h.oldImageUrl)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center space-x-1.5 text-xs font-semibold text-blue-600 hover:text-blue-800 hover:underline transition-colors cursor-pointer"
-                          >
-                            <ImageIcon className="h-3.5 w-3.5" />
-                            <span>View Uploaded Image</span>
-                          </a>
-                        ) : <span />}
-                        <span className="text-[10px] text-slate-450 font-medium">by {h.changedBy}</span>
+                      <div className="flex-1 bg-gray-50 rounded-xl p-2.5 border border-gray-100">
+                        <div className="flex justify-between items-center text-gray-400 font-mono text-[10px] mb-1">
+                          <span>{h.timestamp ? new Date(h.timestamp).toLocaleString("en-IN") : "—"}</span>
+                          {h.changedBy && <span className="text-gray-500 font-semibold">{h.changedBy}</span>}
+                        </div>
+                        <div className="font-semibold text-gray-800 flex items-center gap-1.5">
+                          <span className={meta.color}>{meta.label}</span>
+                          {h.oldStatus && h.newStatus && h.oldStatus !== h.newStatus && (
+                            <span className="text-[10px] text-gray-400 font-normal">({h.oldStatus} → {h.newStatus})</span>
+                          )}
+                        </div>
+                        {h.amount && <div className="text-emerald-700 font-bold mt-0.5">Amount: ₹{Number(h.amount).toLocaleString("en-IN")}</div>}
+                        {h.oldNotes && <div className="text-gray-500 italic mt-0.5">"{h.oldNotes}"</div>}
                       </div>
                     </div>
                   )
@@ -391,64 +400,51 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
         </DialogContent>
       </Dialog>
 
-      {/* --- 1. DETAILS CARD --- */}
+      {/* --- 1. CONSUMER SUMMARY CARD --- */}
       <Card className="bg-white border-slate-100 shadow-sm rounded-2xl overflow-hidden">
         <CardContent className="p-5 space-y-4">
-          <div className="flex justify-between items-start gap-4">
-            <div className="space-y-1 min-w-0">
-              <h2 className="text-lg font-extrabold text-slate-900 leading-tight truncate" title={consumer.name}>{consumer.name}</h2>
-              <div className="flex items-start gap-1.5 text-xs text-slate-500 mt-1.5 max-w-md">
-                <MapPin className="h-3.5 w-3.5 mt-0.5 text-blue-500 shrink-0" />
-                <span className="leading-snug break-words">{consumer.address}</span>
-              </div>
-            </div>
-            <div className="shrink-0 flex flex-col items-end">
-              <span className="bg-red-50 text-red-700 border border-red-100 rounded-full px-3 py-1 font-extrabold text-sm flex items-center gap-0.5 shadow-sm">
-                <IndianRupee className="h-4 w-4 shrink-0" />
-                {Number(consumer.d2NetOS).toLocaleString("en-IN")}
+          <div className="flex items-start justify-between">
+            <div className="space-y-1 min-w-0 flex-1 pr-3">
+              <span className="text-[11px] font-bold text-slate-400 font-mono uppercase tracking-wider block">
+                {consumer.consumerId}
               </span>
-              <span className="text-[9px] font-bold text-red-500 uppercase tracking-widest mt-1 mr-1">Outstanding</span>
+              <h2 className="text-lg font-bold text-slate-900 leading-tight">
+                {consumer.name}
+              </h2>
+              <p className="text-xs text-slate-500 font-medium">
+                {consumer.address}
+              </p>
+            </div>
+            <div className="text-right shrink-0">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">Outstanding</span>
+              <span className="text-xl font-extrabold text-red-600">
+                ₹{Number(consumer.d2NetOS || 0).toLocaleString("en-IN")}
+              </span>
             </div>
           </div>
 
-          <div className="h-px bg-slate-100 w-full" />
-
-          {/* Metadata Grid */}
-          <div className="grid grid-cols-2 gap-4 pt-1">
-            <div className="space-y-0.5">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Consumer ID</span>
-              <span className="text-sm font-semibold text-slate-800 font-mono">{consumer.consumerId}</span>
-            </div>
-            <div className="space-y-0.5">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">MRU Section</span>
-              <span className="text-sm font-semibold text-slate-800 uppercase font-mono">{consumer.mru || "—"}</span>
-            </div>
-            <div className="space-y-0.5">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Base Class</span>
-              <span className="text-sm font-semibold text-slate-800">{consumer.baseClass || "—"}</span>
-            </div>
-            <div className="space-y-0.5">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Device Type</span>
-              <span className="text-sm font-semibold text-slate-800">{consumer.device || "—"}</span>
-            </div>
-            <div className="space-y-0.5">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Mobile Number</span>
-              {consumer.mobileNumber ? (
-                <a href={`tel:${consumer.mobileNumber}`} className="text-sm font-semibold text-blue-600 hover:underline flex items-center gap-1">
-                  <Smartphone className="h-3.5 w-3.5 text-slate-400" />
+          {/* Quick info bar */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-3 border-t border-slate-100 text-xs">
+            {consumer.mobileNumber && (
+              <div className="flex items-center gap-1.5 text-slate-600">
+                <Smartphone className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                <a href={`tel:${consumer.mobileNumber}`} className="font-semibold text-blue-600 hover:underline">
                   {consumer.mobileNumber}
                 </a>
-              ) : (
-                <span className="text-sm text-slate-400 font-semibold">N/A</span>
-              )}
-            </div>
-            <div className="space-y-0.5">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Due Date Range</span>
-              <span className="text-sm font-semibold text-slate-800 flex items-center gap-1">
-                <Calendar className="h-3.5 w-3.5 text-slate-400" />
-                {consumer.osDuedateRange || "—"}
-              </span>
-            </div>
+              </div>
+            )}
+            {consumer.mru && (
+              <div className="flex items-center gap-1.5 text-slate-600">
+                <Box className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                <span>MRU: <strong>{consumer.mru}</strong></span>
+              </div>
+            )}
+            {consumer.device && (
+              <div className="flex items-center gap-1.5 text-slate-600">
+                <Monitor className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                <span>Meter: <strong>{consumer.device}</strong></span>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -488,7 +484,7 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
                     value={formData.nextPaymentDate || ""}
                     onChange={(e) => setFormData(prev => ({ ...prev, nextPaymentDate: e.target.value }))}
                     className="h-9 mt-1 bg-white rounded-xl border-slate-200 focus-visible:ring-emerald-500"
-                    disabled={userRole === "viewer"}
+                    disabled={isReadOnly}
                   />
                 </div>
               )}
@@ -507,7 +503,8 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
               <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
                 <button
                   type="button"
-                  className={getStatusChipStyle("disconnected", formData.disconStatus === "disconnected")}
+                  disabled={isReadOnly}
+                  className={`${getStatusChipStyle("disconnected", formData.disconStatus === "disconnected")} ${isReadOnly ? "opacity-60 cursor-not-allowed" : ""}`}
                   onClick={() => handleStatusUpdate("disconnected")}
                 >
                   <Power className="h-4 w-4 shrink-0" />
@@ -516,7 +513,8 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
 
                 <button
                   type="button"
-                  className={getStatusChipStyle("bill dispute", formData.disconStatus === "bill dispute")}
+                  disabled={isReadOnly}
+                  className={`${getStatusChipStyle("bill dispute", formData.disconStatus === "bill dispute")} ${isReadOnly ? "opacity-60 cursor-not-allowed" : ""}`}
                   onClick={() => handleStatusUpdate("bill dispute")}
                 >
                   <AlertCircle className="h-4 w-4 shrink-0" />
@@ -525,7 +523,8 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
 
                 <button
                   type="button"
-                  className={getStatusChipStyle("office team", formData.disconStatus === "office team")}
+                  disabled={isReadOnly}
+                  className={`${getStatusChipStyle("office team", formData.disconStatus === "office team")} ${isReadOnly ? "opacity-60 cursor-not-allowed" : ""}`}
                   onClick={() => handleStatusUpdate("office team")}
                 >
                   <Clock className="h-4 w-4 shrink-0" />
@@ -534,7 +533,8 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
 
                 <button
                   type="button"
-                  className={getStatusChipStyle("agency paid", formData.disconStatus === "agency paid")}
+                  disabled={isReadOnly}
+                  className={`${getStatusChipStyle("agency paid", formData.disconStatus === "agency paid")} ${isReadOnly ? "opacity-60 cursor-not-allowed" : ""}`}
                   onClick={() => handleStatusUpdate("agency paid")}
                 >
                   <Check className="h-4 w-4 shrink-0" />
@@ -543,7 +543,8 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
 
                 <button
                   type="button"
-                  className={getStatusChipStyle("not found", formData.disconStatus === "not found")}
+                  disabled={isReadOnly}
+                  className={`${getStatusChipStyle("not found", formData.disconStatus === "not found")} ${isReadOnly ? "opacity-60 cursor-not-allowed" : ""}`}
                   onClick={() => handleStatusUpdate("not found")}
                 >
                   <CircleX className="h-4 w-4 shrink-0" />
@@ -553,7 +554,8 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
                 {userRole === "admin" && (
                   <button
                     type="button"
-                    className={getStatusChipStyle("connected", formData.disconStatus === "connected")}
+                    disabled={isReadOnly}
+                    className={`${getStatusChipStyle("connected", formData.disconStatus === "connected")} ${isReadOnly ? "opacity-60 cursor-not-allowed" : ""}`}
                     onClick={() => handleStatusUpdate("connected")}
                   >
                     <RotateCcw className="h-4 w-4 shrink-0" />
@@ -569,63 +571,10 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
               )}
             </div>
 
-            {/* Admin Options */}
-            {userRole === "admin" && (
-              <div className="space-y-4 pt-4 border-t border-slate-100">
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-bold text-slate-500 uppercase tracking-wide">Assign Agency</Label>
-                  <select
-                    value={formData.agency}
-                    onChange={(e) => setFormData({...formData, agency: e.target.value})}
-                    className="w-full p-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-1 focus:ring-blue-600 bg-white"
-                  >
-                    <option value="">Select Agency</option>
-                    {availableAgencies.map(a => <option key={a} value={a}>{a}</option>)}
-                  </select>
-                </div>
-                {/* Urgent flag */}
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-bold text-slate-500 uppercase tracking-wide">Priority</Label>
-                  <Button
-                    type="button"
-                    variant={formData.priority === "urgent" ? "destructive" : "outline"}
-                    className={`w-full h-11 border rounded-xl font-bold text-xs transition-all duration-200 ${
-                      formData.priority === "urgent"
-                        ? "bg-red-600 hover:bg-red-700 text-white border-red-650"
-                        : "border-slate-200 text-slate-650 hover:border-red-400 hover:text-red-600"
-                    }`}
-                    onClick={() =>
-                      setFormData(prev => ({
-                        ...prev,
-                        priority: prev.priority === "urgent" ? "" : "urgent",
-                      }))
-                    }
-                  >
-                    {formData.priority === "urgent" ? "🔴 URGENT — Click to remove" : "Mark as URGENT"}
-                  </Button>
-                </div>
-              </div>
-            )}
-
-            {/* Image Evidence */}
-            <div className="space-y-3 pt-4 border-t border-slate-100">
-                <Label className="text-xs font-bold text-slate-500 uppercase tracking-wide block">
-                  Evidence (Auto-Watermarked) {userRole !== "admin" && formData.disconStatus !== "agency paid" && <span className="text-red-500 font-bold">*</span>}
-                  {userRole !== "admin" && formData.disconStatus === "agency paid" && <span className="text-slate-400 normal-case ml-1 font-semibold">(optional)</span>}
-                </Label>
+            {/* Photo Capture Section */}
+            <div className="space-y-2 pt-2 border-t border-slate-100">
+                <Label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Photo Evidence</Label>
                 
-                {/* Hidden File Input */}
-                <input 
-                    ref={fileInputRef}
-                    type="file" 
-                    accept="image/*" 
-                    className="hidden" 
-                    onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) handleUpload(file);
-                    }}
-                />
-
                 {!cameraActive ? (
                     <div className="grid grid-cols-2 gap-3">
                         <Button 
@@ -633,9 +582,9 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
                             variant="outline"
                             className="h-11 rounded-xl border border-slate-200 text-slate-650 hover:text-slate-900 hover:border-slate-400 hover:bg-slate-50/50 flex items-center justify-center gap-2 font-bold text-xs transition-all duration-200"
                             onClick={startCamera}
-                            disabled={uploading}
+                            disabled={uploading || isReadOnly}
                         >
-                            <Camera className="h-4.5 w-4.5 text-slate-505" />
+                            <Camera className="h-4.5 w-4.5 text-slate-500" />
                             <span>Camera (Live)</span>
                         </Button>
                         <Button 
@@ -646,9 +595,9 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
                                 if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
                                 fileInputRef.current?.click()
                             }}
-                            disabled={uploading}
+                            disabled={uploading || isReadOnly}
                         >
-                            <Upload className="h-4.5 w-4.5 text-slate-505" />
+                            <Upload className="h-4.5 w-4.5 text-slate-500" />
                             <span>Gallery</span>
                         </Button>
                     </div>
@@ -663,7 +612,7 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
                             />
                         </div>
                         <div className="flex gap-3">
-                            <Button className="flex-1 bg-white text-black hover:bg-gray-200 rounded-xl text-xs font-bold h-10" onClick={capturePhoto}>
+                            <Button className="flex-1 bg-white text-black hover:bg-gray-200 rounded-xl text-xs font-bold h-10" onClick={capturePhoto} disabled={isReadOnly}>
                                 Capture Photo
                             </Button>
                             <Button variant="destructive" className="rounded-xl text-xs font-bold h-10" onClick={stopCamera}>
@@ -712,6 +661,7 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
                     value={formData.reading} 
                     onChange={e => setFormData({...formData, reading: e.target.value})}
                     className="h-10 rounded-xl border-slate-200 focus-visible:ring-blue-600 text-sm font-semibold"
+                    disabled={isReadOnly}
                 />
             </div>
             <div className="space-y-1.5">
@@ -723,6 +673,7 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
                     value={formData.notes} 
                     onChange={e => setFormData({...formData, notes: e.target.value})}
                     className="min-h-24 rounded-xl border-slate-200 focus-visible:ring-blue-600 text-sm font-medium"
+                    disabled={isReadOnly}
                 />
             </div>
         </CardContent>
@@ -766,23 +717,38 @@ export function ConsumerForm({ consumer, onSave, onCancel, userRole, availableAg
           can break its viewport-fixed positioning. */}
       {typeof window !== "undefined" && createPortal(
         <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-gray-200 z-[60] flex gap-3 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)]">
-          <Button
+          {isReadOnly ? (
+            <Button
               variant="outline"
-              className="flex-1 h-12 border-gray-300 text-gray-700"
+              className="w-full h-12 border-gray-300 text-gray-700 font-bold text-base"
               onClick={() => {
+                if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
+                onCancel()
+              }}
+            >
+              Close (Read-Only Mode)
+            </Button>
+          ) : (
+            <>
+              <Button
+                variant="outline"
+                className="flex-1 h-12 border-gray-300 text-gray-700"
+                onClick={() => {
                   if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
                   onCancel()
-              }}
-          >
-              Cancel
-          </Button>
-          <Button
-              className="flex-[2] h-12 text-lg shadow-sm bg-blue-600 hover:bg-blue-700 text-white"
-              onClick={handleSubmit}
-              disabled={uploading}
-          >
-              {uploading ? "Uploading..." : "Save Update"}
-          </Button>
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                className="flex-[2] h-12 text-lg shadow-sm bg-blue-600 hover:bg-blue-700 text-white"
+                onClick={handleSubmit}
+                disabled={uploading}
+              >
+                {uploading ? "Uploading..." : "Save Update"}
+              </Button>
+            </>
+          )}
         </div>,
         document.body
       )}

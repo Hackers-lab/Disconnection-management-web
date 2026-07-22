@@ -46,10 +46,10 @@ const DEFAULT_ROLES: RolePermissions[] = [
     deemed: ["read", "create", "update", "delete"],
     dtr: ["read", "create", "update", "delete"],
     meter: ["read", "create", "update", "delete"],
-    nsc: ["read", "create", "update", "delete"],
+    nsc: ["read", "create", "update", "delete", "inspect", "process", "project_create", "po_entry", "agency_complete", "admin_approve"],
     consumer_master: ["read", "create", "update", "delete"],
     admin: ["read", "create", "update", "delete"],
-    meter_replacement: ["read", "create", "update", "delete"],
+    meter_replacement: ["read", "create", "update", "delete", "issue", "install", "return", "finalize"],
     dtr_painting: ["read", "create", "update", "delete"],
     material: ["read", "create", "update", "delete", "receive", "issue", "stock", "settings"],
   },
@@ -74,10 +74,10 @@ const DEFAULT_ROLES: RolePermissions[] = [
     deemed: ["read", "update"],
     dtr: ["read", "update"],
     meter: ["read", "update"],
-    nsc: ["read", "update"],
+    nsc: ["read", "inspect", "agency_complete"],
     consumer_master: ["read"],
     admin: [],
-    meter_replacement: ["read", "update"],
+    meter_replacement: ["read", "install"],
     dtr_painting: ["read", "update"],
     material: ["read", "update", "receive", "issue", "stock"],
   },
@@ -116,10 +116,10 @@ const DEFAULT_ROLES: RolePermissions[] = [
     deemed: ["read", "create", "update", "delete"],
     dtr: ["read", "create", "update", "delete"],
     meter: ["read", "create", "update", "delete"],
-    nsc: ["read", "create", "update", "delete"],
+    nsc: ["read", "create", "update", "delete", "inspect", "process", "project_create", "po_entry", "admin_approve"],
     consumer_master: ["read", "create", "update", "delete"],
     admin: [],
-    meter_replacement: ["read", "create", "update", "delete"],
+    meter_replacement: ["read", "create", "update", "delete", "issue", "install", "return", "finalize"],
     dtr_painting: ["read", "create", "update", "delete"],
     material: ["read", "create", "update", "delete", "receive", "issue", "stock", "settings"],
   },
@@ -129,9 +129,10 @@ const DEFAULT_ROLES: RolePermissions[] = [
 
 export class RoleStorage {
   static instance: RoleStorage
-  // Infinite in-memory cache per spreadsheet — never expires by time.
-  // Only cleared when a role is saved/deleted (write-invalidated).
+  // In-memory cache per spreadsheet with 5-minute TTL
   private _cache: Record<string, RolePermissions[]> = {}
+  private _cacheTimestamp: Record<string, number> = {}
+  private readonly CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes cache TTL
 
   static getInstance() {
     if (!RoleStorage.instance) RoleStorage.instance = new RoleStorage()
@@ -141,8 +142,10 @@ export class RoleStorage {
   invalidateCache(spreadsheetId?: string) {
     if (spreadsheetId) {
       delete this._cache[spreadsheetId]
+      delete this._cacheTimestamp[spreadsheetId]
     } else {
       this._cache = {}
+      this._cacheTimestamp = {}
     }
   }
 
@@ -247,8 +250,8 @@ export class RoleStorage {
   }
 
   async getRoles(spreadsheetId: string = getSpreadsheetId()): Promise<RolePermissions[]> {
-    // Serve from infinite cache — only cleared when a role is written
-    if (this._cache[spreadsheetId]) {
+    const now = Date.now()
+    if (this._cache[spreadsheetId] && (now - (this._cacheTimestamp[spreadsheetId] || 0) < this.CACHE_TTL_MS)) {
       return this._cache[spreadsheetId]
     }
     const sheets = await getSheetsClient()
@@ -280,8 +283,8 @@ export class RoleStorage {
       return this.getRoles(spreadsheetId)
     }
 
-    // Cache indefinitely until a write invalidates it
     this._cache[spreadsheetId] = roles
+    this._cacheTimestamp[spreadsheetId] = now
     return roles
   }
 

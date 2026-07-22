@@ -10,10 +10,10 @@ import {
   Search, MapPin, Phone, IndianRupee, RefreshCw, AlertCircle, X, Filter,
   CheckCircle2, Power, Clock, HelpCircle, Edit, LayoutGrid, List,
   ChevronLeft, ChevronRight, Calendar as CalendarIcon, UserX, Image as ImageIcon,
-  Check, Loader2, DownloadCloud, Activity,
+  Check, Loader2, DownloadCloud, Activity, Eye,
 } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { getFromCache, saveToCache, clearAllCache } from "@/lib/indexed-db"
+import { getFromCache, saveToCache, clearAllCache, getCccPrefix } from "@/lib/indexed-db"
 import type { DeemedVisitData } from "@/lib/dd-service"
 import { DDStats } from "./dd-stats"
 import { DDForm } from "./dd-form"
@@ -50,9 +50,10 @@ function useBackNavigation(isOpen: boolean, onClose: () => void) {
 interface DDListProps {
   userRole: string
   userAgencies: string[]
+  permissions?: Record<string, string[]>
 }
 
-export function DDList({ userRole, userAgencies }: DDListProps) {
+export function DDList({ userRole, userAgencies, permissions }: DDListProps) {
   const { toast } = useToast()
   const [consumers, setConsumers] = useState<DeemedVisitData[]>([])
   const [loading, setLoading] = useState(true)
@@ -91,10 +92,11 @@ export function DDList({ userRole, userAgencies }: DDListProps) {
 
   // --- Data Loading ---
   useEffect(() => {
+    const prefix = getCccPrefix() ? `${getCccPrefix()}_` : ""
     const CACHE_KEY = "dd_data_cache"
     const BASE_DATE_KEY = "dd_base_date"
-    const ROW_COUNT_KEY = "dd_row_count"
-    const VERSION_KEY = "dd_version_hash"
+    const ROW_COUNT_KEY = `${prefix}dd_row_count`
+    const VERSION_KEY = `${prefix}dd_version_hash`
 
     async function loadData() {
       let finalStatus = 'idle'
@@ -327,8 +329,9 @@ export function DDList({ userRole, userAgencies }: DDListProps) {
   const handleManualRefresh = async () => {
     if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10)
     await clearAllCache()
-    localStorage.removeItem("dd_row_count")
-    localStorage.removeItem("dd_version_hash")
+    const prefix = getCccPrefix() ? `${getCccPrefix()}_` : ""
+    localStorage.removeItem(`${prefix}dd_row_count`)
+    localStorage.removeItem(`${prefix}dd_version_hash`)
     setLoading(true)
     setRefreshKey(k => k + 1)
   }
@@ -618,15 +621,33 @@ export function DDList({ userRole, userAgencies }: DDListProps) {
                   </div>
                 )}
 
-                <Button
-                  className="w-full mt-2"
-                  size="sm"
-                  disabled={isRowLocked(consumer)}
-                  onClick={() => setSelectedConsumer(consumer)}
-                >
-                  <Edit className="h-4 w-4 mr-2" />
-                  {isRowLocked(consumer) ? "Locked" : "Update Status"}
-                </Button>
+                {(() => {
+                  const isReadOnlyMode = permissions ? !permissions.deemed?.includes("update") : (userRole === "viewer" || userRole === "reader")
+                  return (
+                    <Button
+                      className={`w-full mt-2 ${
+                        isReadOnlyMode
+                          ? "bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 font-semibold"
+                          : ""
+                      }`}
+                      size="sm"
+                      disabled={!isReadOnlyMode && isRowLocked(consumer)}
+                      onClick={() => setSelectedConsumer(consumer)}
+                    >
+                      {isReadOnlyMode ? (
+                        <>
+                          <Eye className="h-4 w-4 mr-2 text-slate-600" />
+                          View Details
+                        </>
+                      ) : (
+                        <>
+                          <Edit className="h-4 w-4 mr-2" />
+                          {isRowLocked(consumer) ? "Locked" : "Update Status"}
+                        </>
+                      )}
+                    </Button>
+                  )
+                })()}
               </CardContent>
             </Card>
           ))}
